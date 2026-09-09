@@ -1,12 +1,12 @@
 import { Routes, Route } from "react-router-dom"
 import MainLayout from '@/layout/mainlayout.jsx'
 
-import Dashboard from "@/features/dashboard/pages/Dashboard.jsx"
-import Fly from "@/features/fly/pages/Fly.jsx"
+import Dashboard from "@/features/dashboard/pages/dashboard.jsx"
+import Fly from "@/features/fly/pages/fly.jsx"
 import Mession from "@/features/mession/pages/MissionPage.jsx"
 import Plan from "@/features/plan/pages/Plan.jsx"
 import Waypts from "@/features/waypts/pages/Waypts.jsx"
-import Logs from "@/features/logs/pages/Logs.jsx"
+import Logs from "@/features/logs/pages/logs.jsx"
 import Landing from "@/features/landing/pages/landingPage.jsx"
 import Login from "@/features/auth/pages/Login.jsx"
 
