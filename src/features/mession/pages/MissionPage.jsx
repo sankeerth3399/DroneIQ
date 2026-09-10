@@ -63,6 +63,7 @@ const MissionPage = () => {
     updateStickInputs,
     simMode,
     setSimMode,
+    isLive,
   } = useDroneTelemetry()
 
   // Capture toast notification state
