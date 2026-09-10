@@ -115,7 +115,7 @@ const MissionPage = () => {
       {/* MAP LAYER (Full screen or PiP) */}
       <div className={mapIsLarge ? fullClass : pipClass}>
         <div className={`relative ${mapIsLarge ? "h-full w-full" : "min-h-0 flex-1"}`}>
-          <MapLoad mapStyle={mapStyle} />
+          <MapLoad mapStyle={mapStyle} telemetry={telemetry} />
           {!mapIsLarge && (
             <button
               type="button"
