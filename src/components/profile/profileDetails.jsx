@@ -22,7 +22,7 @@ const ProfileDropdown = () => {
     const { user, logout } = useAuth()
     const [open, setOpen] = useState(false)
     const containerRef = useRef(null)
-    const { firstName, role, fullName, initials } = getLoggedInUser(user)
+    const { firstName, lastName, role, fullName, initials } = getLoggedInUser(user)
 
     useEffect(() => {
         const handleClickOutside = (event) => {
@@ -46,15 +46,15 @@ const ProfileDropdown = () => {
             <button
                 type="button"
                 onClick={() => setOpen((prev) => !prev)}
-                className="flex justify-center items-center w-9 h-9 xl:w-[34px] xl:h-[34px] bg-[#171F27] rounded-[8px] hover:bg-[#E8EDF3] transition"
+                className="flex justify-center items-center w-8 h-8 sm:w-9 sm:h-9 bg-[#171F27] border border-[#223240] rounded-[8px] hover:bg-[#202B36] transition"
                 aria-label="Open profile"
                 aria-expanded={open}
             >
-                <img src={UserBold} alt="userIcon" className="w-5 h-5" />
+                <img src={UserBold} alt="userIcon" className="w-4 h-4 sm:w-5 sm:h-5" />
             </button>
 
             {open && (
-                <div className="absolute right-0 top-[calc(100%+8px)] z-50 w-[240px] rounded-[10px] border border-[#E5E7EB] bg-white shadow-[0_8px_24px_rgba(17,23,38,0.12)] overflow-hidden">
+                <div className="absolute right-0 top-[calc(100%+8px)] z-50 w-[240px] max-w-[calc(100vw-24px)] rounded-[10px] border border-[#E5E7EB] bg-white shadow-[0_8px_24px_rgba(17,23,38,0.12)] overflow-hidden">
                     <div className="flex items-center gap-3 px-4 py-3 border-b border-[#F1F2F5]">
                         <div className="flex justify-center items-center w-10 h-10 shrink-0 rounded-full bg-[#059EB2] text-white text-[13px] font-semibold">
                             {initials}

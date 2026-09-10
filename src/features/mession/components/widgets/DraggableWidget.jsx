@@ -68,7 +68,7 @@ export const DraggableWidget = ({
     }
   }, [])
 
-  // Keep widget inside viewport if window resizes
+  // Keep widget inside viewport if window resizes or on initial mount
   useEffect(() => {
     const handleResize = () => {
       setPosition((prev) => {
@@ -84,8 +84,14 @@ export const DraggableWidget = ({
         return prev
       })
     }
+
+    // Immediate clamp on initial mount after DOM layout
+    const timer = setTimeout(handleResize, 60)
     window.addEventListener("resize", handleResize)
-    return () => window.removeEventListener("resize", handleResize)
+    return () => {
+      clearTimeout(timer)
+      window.removeEventListener("resize", handleResize)
+    }
   }, [clampPosition, storageKey])
 
   // Drag handling with pointer events

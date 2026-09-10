@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react"
 import { Compass, Gauge } from "lucide-react"
 import DraggableWidget from "./DraggableWidget.jsx"
 import AttitudeIndicator from "../instruments/AttitudeIndicator.jsx"
@@ -24,6 +25,19 @@ export const FlightInstrumentsWidget = ({
   },
   defaultPosition = { x: 20, y: 20 },
 }) => {
+  // Dynamic instrument sizing (84px on mobile phones, 112px on desktop)
+  const [instrumentSize, setInstrumentSize] = useState(() =>
+    typeof window !== "undefined" && window.innerWidth < 640 ? 84 : 112
+  )
+
+  useEffect(() => {
+    const handleResize = () => {
+      setInstrumentSize(window.innerWidth < 640 ? 84 : 112)
+    }
+    window.addEventListener("resize", handleResize)
+    return () => window.removeEventListener("resize", handleResize)
+  }, [])
+
   // Cardinal direction calculation
   const getCardinal = (deg) => {
     const directions = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
@@ -33,9 +47,6 @@ export const FlightInstrumentsWidget = ({
 
   const cardinal = getCardinal(telemetry.heading)
   const headingText = `${String(Math.round(telemetry.heading)).padStart(3, "0")}° ${cardinal}`
-
-  // Compact dimensions for the two separate circular instruments
-  const instrumentSize = 112
 
   return (
     <DraggableWidget

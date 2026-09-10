@@ -408,14 +408,14 @@ const MapContainer = ({ mapStyle = "normal", telemetry: propTelemetry }) => {
       )}
 
       {/* Real-time Map Coordinates Chip */}
-      <div className="absolute bottom-3 left-3 z-10 pointer-events-none hidden sm:flex items-center gap-2 px-2.5 py-1 rounded bg-[#080C14D9] border border-[#1E293B] text-[10px] font-mono text-[#8E9EAA] shadow-lg backdrop-blur">
-        <span>LAT: <strong className="text-[#35E0FF]">{lat.toFixed(6)}</strong></span>
+      <div className="absolute bottom-2.5 sm:bottom-3 left-2.5 sm:left-3 z-10 pointer-events-none flex items-center gap-1.5 sm:gap-2 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded bg-[#080C14D9] border border-[#1E293B] text-[8.5px] sm:text-[10px] font-mono text-[#8E9EAA] shadow-lg backdrop-blur">
+        <span>LAT: <strong className="text-[#35E0FF]">{lat.toFixed(5)}</strong></span>
         <span className="text-[#253342]">|</span>
-        <span>LNG: <strong className="text-[#35E0FF]">{lng.toFixed(6)}</strong></span>
-        <span className="text-[#253342]">|</span>
-        <span>ALT: <strong className="text-[#2FE089]">{telemetry.altitude || 0}m</strong></span>
-        <span className="text-[#253342]">|</span>
-        <span>HDG: <strong className="text-[#35E0FF]">{Math.round(heading)}°</strong></span>
+        <span>LNG: <strong className="text-[#35E0FF]">{lng.toFixed(5)}</strong></span>
+        <span className="text-[#253342] hidden xs:inline">|</span>
+        <span className="hidden xs:inline">ALT: <strong className="text-[#2FE089]">{telemetry.altitude || 0}m</strong></span>
+        <span className="text-[#253342] hidden sm:inline">|</span>
+        <span className="hidden sm:inline">HDG: <strong className="text-[#35E0FF]">{Math.round(heading)}°</strong></span>
       </div>
     </div>
   );

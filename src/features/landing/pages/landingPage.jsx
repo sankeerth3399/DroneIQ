@@ -6,6 +6,8 @@ import {
     CircleDot,
     Settings,
     LayoutGrid,
+    Menu,
+    X,
 } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 import DashboardImg from "@/assets/images/sampleImg.png"
@@ -82,20 +84,21 @@ const sectionClass =
     "scroll-mt-16 w-full border-b border-white/10"
 
 const sectionInnerClass =
-    "mx-auto flex w-full max-w-6xl flex-col items-center px-6 py-20 md:py-16"
+    "mx-auto flex w-full max-w-6xl flex-col items-center px-4 sm:px-6 py-16 md:py-20"
 
 const Landing = () => {
     const navigate = useNavigate()
     const [isLoginOpen, setIsLoginOpen] = useState(false)
+    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
 
     return (
         <div className="w-full min-h-screen bg-black">
-            <header className="sticky top-0 z-50 relative flex items-center justify-between gap-4 px-6 md:px-10 lg:px-16 py-4 border-b border-white/20 bg-black/90 backdrop-blur-sm">
-                <a href="#platform" className="shrink-0 flex items-center gap-2.5 text-2xl font-bold tracking-tight text-white hover:opacity-95 transition-opacity">
-                    <AeroLogo className="w-6 h-6 text-cyan-400" size={24} />
+            <header className="sticky top-0 z-50 relative flex items-center justify-between gap-4 px-4 sm:px-6 md:px-10 lg:px-16 py-3 sm:py-4 border-b border-white/20 bg-black/90 backdrop-blur-sm">
+                <a href="#platform" className="shrink-0 flex items-center gap-2 sm:gap-2.5 text-xl sm:text-2xl font-bold tracking-tight text-white hover:opacity-95 transition-opacity">
+                    <AeroLogo className="w-5 h-5 sm:w-6 sm:h-6 text-cyan-400" size={24} />
                     <span>AeroNexus</span>
                 </a>
-                <nav className="absolute left-1/2 hidden -translate-x-1/2 md:flex items-center gap-10 text-sm">
+                <nav className="absolute left-1/2 hidden -translate-x-1/2 md:flex items-center gap-6 lg:gap-10 text-sm">
                     {navItems.map((item) => (
                         <a
                             key={item.id}
@@ -106,76 +109,121 @@ const Landing = () => {
                         </a>
                     ))}
                 </nav>
-                <div className="flex shrink-0 items-center gap-3">
+                <div className="flex shrink-0 items-center gap-2 sm:gap-3">
                     <button
                         type="button"
                         onClick={() => setIsLoginOpen(true)}
-                        className="h-9 whitespace-nowrap px-4 text-sm font-medium text-gray-300 hover:text-white border border-cyan-400 rounded-[6px] transition-colors"
+                        className="h-8 sm:h-9 whitespace-nowrap px-3 sm:px-4 text-xs sm:text-sm font-medium text-gray-300 hover:text-white border border-cyan-400 rounded-[6px] transition-colors"
                     >
                         Sign in
                     </button>
                     <button
                         type="button"
-                        className="h-9 whitespace-nowrap px-4 text-sm font-semibold rounded-[6px] bg-cyan-400 text-black hover:bg-cyan-300 transition-colors"
+                        className="hidden sm:inline-flex items-center justify-center h-8 sm:h-9 whitespace-nowrap px-3 sm:px-4 text-xs sm:text-sm font-semibold rounded-[6px] bg-cyan-400 text-black hover:bg-cyan-300 transition-colors"
                     >
                         Request Demo
                     </button>
+                    <button
+                        type="button"
+                        onClick={() => setIsMobileMenuOpen((prev) => !prev)}
+                        className="flex md:hidden items-center justify-center w-8 h-8 rounded-md bg-[#121A24] border border-[#1E2E3E] text-cyan-400 hover:bg-[#1A2634] transition"
+                        aria-label="Toggle navigation menu"
+                    >
+                        {isMobileMenuOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+                    </button>
                 </div>
             </header>
+
+            {/* Mobile Navigation Drawer */}
+            {isMobileMenuOpen && (
+                <div className="fixed inset-x-0 top-[53px] sm:top-[65px] z-40 bg-black/95 border-b border-cyan-400/30 p-5 md:hidden backdrop-blur-md shadow-2xl">
+                    <nav className="flex flex-col gap-4">
+                        {navItems.map((item) => (
+                            <a
+                                key={item.id}
+                                href={`#${item.id}`}
+                                onClick={() => setIsMobileMenuOpen(false)}
+                                className="text-base font-medium text-white/80 hover:text-cyan-400 py-1 transition-colors"
+                            >
+                                {item.label}
+                            </a>
+                        ))}
+                        <div className="pt-3 border-t border-white/10 flex flex-col gap-2.5">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setIsMobileMenuOpen(false)
+                                    setIsLoginOpen(true)
+                                }}
+                                className="w-full py-2.5 text-center text-sm font-semibold rounded-[6px] border border-cyan-400 text-white hover:bg-cyan-400/10 transition"
+                            >
+                                Sign In to GCS
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setIsMobileMenuOpen(false)}
+                                className="w-full py-2.5 text-center text-sm font-semibold rounded-[6px] bg-cyan-400 text-black hover:bg-cyan-300 transition"
+                            >
+                                Request Demo
+                            </button>
+                        </div>
+                    </nav>
+                </div>
+            )}
 
             <main className="w-full">
                 <section
                     id="platform"
                     className="scroll-mt-24 w-full border-b border-white/10"
                 >
-                    <div className="mx-auto flex w-full max-w-6xl flex-col items-center px-6 pt-16 pb-16 text-center">
-                        <h1 className="text-5xl md:text-7xl font-bold tracking-tight leading-[1.05] text-white">
+                    <div className="mx-auto flex w-full max-w-6xl flex-col items-center px-4 sm:px-6 pt-12 sm:pt-16 pb-12 sm:pb-16 text-center">
+                        <h1 className="text-4xl sm:text-5xl md:text-7xl font-bold tracking-tight leading-[1.08] text-white">
                             Ground Control.
                             <br />
                             <span className="text-cyan-400">Redefined.</span>
                         </h1>
 
-                        <p className="mt-6 max-w-2xl text-lg md:text-xl text-white/70 leading-relaxed">
+                        <p className="mt-4 sm:mt-6 max-w-2xl text-base sm:text-lg md:text-xl text-white/70 leading-relaxed px-2">
                             Enterprise UAV fleet operations, real time
                         </p>
 
-                        <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
+                        <div className="mt-8 sm:mt-10 flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4 w-full sm:w-auto px-4">
                             <button
                                 type="button"
                                 onClick={() => setIsLoginOpen(true)}
-                                className="px-5 py-2.5 text-sm font-semibold text-black bg-cyan-400 rounded-[6px] hover:bg-cyan-300 transition-colors"
+                                className="w-full sm:w-auto px-5 py-2.5 text-sm font-semibold text-black bg-cyan-400 rounded-[6px] hover:bg-cyan-300 transition-colors"
                             >
                                 Launch platform
                             </button>
                             <a
                                 href="#capabilities"
-                                className="px-5 py-2.5 text-sm font-semibold rounded-[6px] text-white border border-cyan-400 hover:bg-cyan-400/10 transition-colors"
+                                className="w-full sm:w-auto px-5 py-2.5 text-sm font-semibold rounded-[6px] text-white border border-cyan-400 hover:bg-cyan-400/10 transition-colors text-center"
                             >
                                 Explore capabilities
                             </a>
                         </div>
 
-                        <div className="mt-16 grid w-full max-w-3xl grid-cols-2 md:grid-cols-4 border border-[#1e3038] bg-[rgba(7,14,18,0.88)]">
+                        <div className="mt-12 sm:mt-16 grid w-full max-w-3xl grid-cols-2 md:grid-cols-4 border border-[#1e3038] bg-[rgba(7,14,18,0.88)]">
                             {stats.map((stat, index) => (
                                 <div
                                     key={stat.label}
-                                    className={`px-4 py-5 ${index < stats.length - 1
+                                    className={`px-3 sm:px-4 py-4 sm:py-5 ${index < stats.length - 1
                                             ? "md:border-r md:border-[#1e3038]"
                                             : ""
                                         } ${index % 2 === 0 ? "max-md:border-r max-md:border-[#1e3038]" : ""} ${index < 2 ? "max-md:border-b max-md:border-[#1e3038]" : ""
                                         }`}
                                 >
-                                    <strong className="block font-mono text-[15px] font-bold text-cyan-400">
+                                    <strong className="block font-mono text-[14px] sm:text-[15px] font-bold text-cyan-400">
                                         {stat.value}
                                     </strong>
-                                    <span className="mt-1.5 block text-[9px] uppercase tracking-[0.06em] text-[#526873]">
+                                    <span className="mt-1 block text-[8.5px] sm:text-[9px] uppercase tracking-[0.06em] text-[#526873]">
                                         {stat.label}
                                     </span>
                                 </div>
                             ))}
                         </div>
 
-                        <div className="mt-16 w-full max-w-5xl">
+                        <div className="mt-12 sm:mt-16 w-full max-w-5xl">
                             <img
                                 src={DashboardImg}
                                 alt="Dashboard preview"

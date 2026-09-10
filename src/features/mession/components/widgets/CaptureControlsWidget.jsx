@@ -210,14 +210,14 @@ export const CaptureControlsWidget = ({
         </div>
       }
     >
-      <div className="flex flex-col gap-1.5 select-none min-w-[280px]">
+      <div className="flex flex-col gap-1.5 select-none w-full min-w-[210px] sm:min-w-[260px]">
         {/* HORIZONTALLY ALIGNED CONTROLS WITH EQUAL SPACING */}
-        <div className="grid grid-cols-3 gap-2 w-full">
+        <div className="grid grid-cols-3 gap-1.5 sm:gap-2 w-full">
           {/* 1. RECORD BUTTON (LIVE DRONE FEED) */}
           <button
             type="button"
             onClick={handleToggleRecord}
-            className={`flex flex-col items-center justify-center py-2.5 px-2 rounded-lg border transition ${
+            className={`flex flex-col items-center justify-center py-2 sm:py-2.5 px-1 sm:px-2 rounded-lg border transition ${
               isRecording
                 ? "bg-[#FF414126] border-[#FF4141] text-[#FF8585] shadow-[0_0_14px_rgba(255,65,65,0.4)]"
                 : "bg-[#101824] border-[#1F2E3E] text-[#E2E8F0] hover:border-[#FF4141] hover:text-[#FF8585] active:scale-95"
@@ -225,18 +225,18 @@ export const CaptureControlsWidget = ({
             title={isRecording ? "Stop Drone Feed Recording" : "Record Live Drone Feed"}
           >
             {isRecording ? (
-              <Square className="w-4 h-4 fill-current text-[#FF4141]" />
+              <Square className="w-3.5 h-3.5 sm:w-4 sm:h-4 fill-current text-[#FF4141]" />
             ) : (
               <div className="relative flex items-center justify-center">
-                <Video className="w-4 h-4 text-[#FF4141]" />
+                <Video className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#FF4141]" />
                 <div className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-[#FF4141] animate-ping" />
               </div>
             )}
-            <span className="text-[10px] font-mono font-semibold mt-1.5 tracking-tight whitespace-nowrap">
+            <span className="text-[9px] sm:text-[10px] font-mono font-semibold mt-1 sm:mt-1.5 tracking-tight whitespace-nowrap">
               {isRecording ? "Stop" : "Record"}
             </span>
-            <span className="text-[8px] font-mono text-[#8E9EAA] leading-none mt-0.5">
-              {isRecording ? formatTimer(recordSeconds) : "Drone Video"}
+            <span className="text-[7.5px] sm:text-[8px] font-mono text-[#8E9EAA] leading-none mt-0.5">
+              {isRecording ? formatTimer(recordSeconds) : "Video"}
             </span>
           </button>
 
@@ -244,14 +244,14 @@ export const CaptureControlsWidget = ({
           <button
             type="button"
             onClick={handleDronePhoto}
-            className="flex flex-col items-center justify-center py-2.5 px-2 rounded-lg bg-[#101824] border border-[#1F2E3E] text-[#E2E8F0] hover:border-[#35E0FF] hover:text-[#35E0FF] active:scale-95 transition"
+            className="flex flex-col items-center justify-center py-2 sm:py-2.5 px-1 sm:px-2 rounded-lg bg-[#101824] border border-[#1F2E3E] text-[#E2E8F0] hover:border-[#35E0FF] hover:text-[#35E0FF] active:scale-95 transition"
             title="Capture Still Image from Live Drone Stream"
           >
-            <Camera className="w-4 h-4 text-[#35E0FF]" />
-            <span className="text-[10px] font-mono font-semibold mt-1.5 tracking-tight whitespace-nowrap">
-              Drone Photo
+            <Camera className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#35E0FF]" />
+            <span className="text-[9px] sm:text-[10px] font-mono font-semibold mt-1 sm:mt-1.5 tracking-tight whitespace-nowrap">
+              Photo
             </span>
-            <span className="text-[8px] font-mono text-[#8E9EAA] leading-none mt-0.5">
+            <span className="text-[7.5px] sm:text-[8px] font-mono text-[#8E9EAA] leading-none mt-0.5">
               Still Frame
             </span>
           </button>
@@ -260,15 +260,15 @@ export const CaptureControlsWidget = ({
           <button
             type="button"
             onClick={handleScreenshot}
-            className="flex flex-col items-center justify-center py-2.5 px-2 rounded-lg bg-[#101824] border border-[#1F2E3E] text-[#E2E8F0] hover:border-[#2FE089] hover:text-[#2FE089] active:scale-95 transition"
+            className="flex flex-col items-center justify-center py-2 sm:py-2.5 px-1 sm:px-2 rounded-lg bg-[#101824] border border-[#1F2E3E] text-[#E2E8F0] hover:border-[#2FE089] hover:text-[#2FE089] active:scale-95 transition"
             title="Capture Entire Operator Screen/UI Display"
           >
-            <Monitor className="w-4 h-4 text-[#2FE089]" />
-            <span className="text-[10px] font-mono font-semibold mt-1.5 tracking-tight whitespace-nowrap">
-              Screenshot
+            <Monitor className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#2FE089]" />
+            <span className="text-[9px] sm:text-[10px] font-mono font-semibold mt-1 sm:mt-1.5 tracking-tight whitespace-nowrap">
+              Screen
             </span>
-            <span className="text-[8px] font-mono text-[#8E9EAA] leading-none mt-0.5">
-              Entire Screen
+            <span className="text-[7.5px] sm:text-[8px] font-mono text-[#8E9EAA] leading-none mt-0.5">
+              Full UI
             </span>
           </button>
         </div>

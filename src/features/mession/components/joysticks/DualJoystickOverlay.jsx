@@ -27,10 +27,12 @@ export const DualJoystickOverlay = ({
     const handleResize = () => {
       const width = window.innerWidth
       const height = window.innerHeight
-      if (width < 640 || height < 520) {
-        setResponsiveSize(136)
+      if (width < 440 || height < 440) {
+        setResponsiveSize(116)
+      } else if (width < 640 || height < 540) {
+        setResponsiveSize(132)
       } else if (width < 1024 || height < 720) {
-        setResponsiveSize(152)
+        setResponsiveSize(150)
       } else {
         setResponsiveSize(170)
       }
@@ -79,14 +81,14 @@ export const DualJoystickOverlay = ({
 
   if (!visible) {
     return (
-      <div className="absolute bottom-14 sm:bottom-16 md:bottom-[72px] left-3 sm:left-6 z-20 pointer-events-auto">
+      <div className="absolute bottom-12 sm:bottom-16 md:bottom-[72px] left-2.5 sm:left-6 z-20 pointer-events-auto">
         <button
           type="button"
           onClick={onToggleVisible}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0A0E16CC] border border-[#223240] text-[#35E0FF] text-xs font-medium backdrop-blur-md shadow-lg hover:border-[#35E0FF] hover:bg-[#0E1520] transition"
+          className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-[#0A0E16CC] border border-[#223240] text-[#35E0FF] text-[11px] sm:text-xs font-medium backdrop-blur-md shadow-lg hover:border-[#35E0FF] hover:bg-[#0E1520] transition"
           title="Show Virtual Joysticks"
         >
-          <Gamepad2 className="w-4 h-4" />
+          <Gamepad2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           <span>Show Joysticks</span>
         </button>
       </div>
@@ -94,11 +96,11 @@ export const DualJoystickOverlay = ({
   }
 
   return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-14 sm:bottom-16 md:bottom-[72px] z-20 px-3 sm:px-6">
+    <div className="pointer-events-none absolute inset-x-0 bottom-12 sm:bottom-16 md:bottom-[72px] z-20 px-2 sm:px-6">
       <div className="relative flex items-end justify-between w-full pointer-events-none">
-        {/* LEFT JOYSTICK: Throttle & Yaw (Safely elevated above the bottom coordinates bar) */}
+        {/* LEFT JOYSTICK: Throttle & Yaw */}
         <div className="pointer-events-auto">
-          <div className="relative p-2 rounded-xl bg-[#080C14CC] border border-[#1A2633] backdrop-blur-md shadow-2xl">
+          <div className="relative p-1.5 sm:p-2 rounded-xl bg-[#080C14CC] border border-[#1A2633] backdrop-blur-md shadow-2xl">
             <VirtualJoystick
               label="LEFT"
               subLabel="THR / YAW"
@@ -118,11 +120,11 @@ export const DualJoystickOverlay = ({
         </div>
 
         {/* BOTTOM-CENTER HUD UTILITY BAR */}
-        <div className="pointer-events-auto absolute left-1/2 -translate-x-1/2 bottom-[-44px] sm:bottom-0">
-          <div className="flex items-center gap-2 px-2.5 sm:px-3 py-1.5 rounded-lg bg-[#080C14D9] border border-[#1E293B] backdrop-blur-md shadow-xl text-[10px] sm:text-[11px] whitespace-nowrap">
+        <div className="pointer-events-auto absolute left-1/2 -translate-x-1/2 bottom-[-36px] sm:bottom-0">
+          <div className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg bg-[#080C14D9] border border-[#1E293B] backdrop-blur-md shadow-xl text-[9.5px] sm:text-[11px] whitespace-nowrap">
             {/* Mode 2 Badge with Active Stick Indicators */}
-            <div className="flex items-center gap-1.5 text-[#8E9EAA] font-mono">
-              <Gamepad2 className="w-3.5 h-3.5 text-[#35E0FF]" />
+            <div className="flex items-center gap-1 sm:gap-1.5 text-[#8E9EAA] font-mono">
+              <Gamepad2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-[#35E0FF]" />
               <span className="font-semibold text-[#EEF4F8]">MODE 2</span>
               <div className="flex items-center gap-1 ml-0.5">
                 <span
