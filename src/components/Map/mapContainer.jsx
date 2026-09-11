@@ -173,7 +173,69 @@ const buildDroneMarkerHtml = (callsign, initialHeading = 0) => {
   `;
 };
 
-const MapContainer = ({ mapStyle = "normal", telemetry: propTelemetry }) => {
+/**
+ * Builds custom AeroNexus circular target-style waypoint marker HTML
+ * Distinct color coding:
+ * - WAYPOINT: Neon Cyan (#35E0FF)
+ * - TAKEOFF: Emerald Green (#2FE089)
+ * - LAND: Amber / Orange (#F59E0B)
+ * - RTL: Soft Violet (#A78BFA)
+ * Includes active selected halo, sequential badge, and altitude label
+ */
+const buildWaypointMarkerHtml = (wp, isSelected) => {
+  const isTakeoff = wp.type === "TAKEOFF";
+  const isLand = wp.type === "LAND";
+  const isRtl = wp.type === "RTL";
+
+  let mainColor = "#35E0FF";
+  let bgGlow = "rgba(53, 224, 255, 0.4)";
+  let badgeText = wp.label || `WP${wp.seq || 1}`;
+
+  if (isTakeoff) {
+    mainColor = "#2FE089";
+    bgGlow = "rgba(47, 224, 137, 0.45)";
+  } else if (isLand) {
+    mainColor = "#F59E0B";
+    bgGlow = "rgba(245, 158, 11, 0.45)";
+  } else if (isRtl) {
+    mainColor = "#A78BFA";
+    bgGlow = "rgba(167, 139, 250, 0.45)";
+  }
+
+  const selectedRing = isSelected
+    ? `<div style="position: absolute; inset: -6px; border-radius: 9999px; border: 2px solid ${mainColor}; box-shadow: 0 0 16px ${mainColor}; animation: pulse 1.5s infinite;"></div>`
+    : "";
+
+  return `
+    <div class="waypoint-marker-shell" data-wp-id="${wp.id}" style="position: relative; width: 34px; height: 34px; cursor: pointer; user-select: none; z-index: ${isSelected ? 40 : 30};">
+      ${selectedRing}
+      <div style="position: relative; width: 34px; height: 34px; border-radius: 9999px; background: rgba(8, 12, 20, 0.94); border: 2px solid ${mainColor}; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 12px ${bgGlow}, 0 4px 10px rgba(0,0,0,0.85); transition: transform 0.15s ease;">
+        <span style="font-family: monospace; font-size: ${badgeText.length > 3 ? "8.5px" : "11px"}; font-weight: 800; color: ${mainColor}; letter-spacing: -0.02em;">
+          ${badgeText}
+        </span>
+      </div>
+      <!-- Altitude Tag -->
+      <div style="position: absolute; top: 36px; left: 50%; transform: translateX(-50%); white-space: nowrap; pointer-events: none;">
+        <span style="display: inline-block; font-family: monospace; font-size: 9px; font-weight: 700; color: #EEF4F8; background: rgba(8, 12, 20, 0.92); border: 1px solid rgba(255, 255, 255, 0.18); padding: 0.5px 4px; border-radius: 3px; box-shadow: 0 2px 6px rgba(0,0,0,0.7);">
+          ${wp.alt || 0}m
+        </span>
+      </div>
+    </div>
+  `;
+};
+
+const MapContainer = ({
+  mapStyle = "normal",
+  telemetry: propTelemetry,
+  waypoints = [],
+  selectedWaypointId = null,
+  onWaypointSelect,
+  onWaypointDrag,
+  onWaypointDragEnd,
+  onMapClick,
+  isPlacingWaypoint = false,
+  showMissionRoute = true,
+}) => {
   const mapRef = useRef(null);
   const containerRef = useRef(null);
   const markerRef = useRef(null);
@@ -210,6 +272,160 @@ const MapContainer = ({ mapStyle = "normal", telemetry: propTelemetry }) => {
     mapStyleRef.current = mapStyle;
     applyMapStyle(mapRef.current, mapStyle, polylineRef);
   }, [mapStyle]);
+
+  // Mission Planning Waypoint Refs & Dynamic Synchronization
+  const waypointMarkersRef = useRef(new Map());
+  const missionPolylineRef = useRef(null);
+  const onMapClickRef = useRef(onMapClick);
+  const onWaypointSelectRef = useRef(onWaypointSelect);
+  const onWaypointDragRef = useRef(onWaypointDrag);
+  const onWaypointDragEndRef = useRef(onWaypointDragEnd);
+
+  useEffect(() => {
+    onMapClickRef.current = onMapClick;
+    onWaypointSelectRef.current = onWaypointSelect;
+    onWaypointDragRef.current = onWaypointDrag;
+    onWaypointDragEndRef.current = onWaypointDragEnd;
+  }, [onMapClick, onWaypointSelect, onWaypointDrag, onWaypointDragEnd]);
+
+  // Synchronize Waypoint Markers & Mission Route on Map
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !window.mappls) return;
+
+    const currentMarkers = waypointMarkersRef.current;
+    const nextIds = new Set(waypoints.map((w) => w.id));
+
+    // 1. Remove deleted markers
+    for (const [id, markerObj] of currentMarkers.entries()) {
+      if (!nextIds.has(id)) {
+        try {
+          markerObj.marker?.remove?.();
+        } catch {
+          // Safe ignore
+        }
+        currentMarkers.delete(id);
+      }
+    }
+
+    // 2. Add or update active waypoint markers
+    waypoints.forEach((wp) => {
+      const isSelected = wp.id === selectedWaypointId;
+      const existing = currentMarkers.get(wp.id);
+
+      if (existing) {
+        try {
+          if (typeof existing.marker.setPosition === "function") {
+            existing.marker.setPosition({ lat: wp.lat, lng: wp.lng });
+          } else if (typeof existing.marker.setLngLat === "function") {
+            existing.marker.setLngLat([wp.lng, wp.lat]);
+          }
+
+          const newHtml = buildWaypointMarkerHtml(wp, isSelected);
+          if (existing.html !== newHtml) {
+            existing.html = newHtml;
+            const el = existing.marker.getElement?.();
+            if (el) el.innerHTML = newHtml;
+          }
+        } catch (err) {
+          console.debug("[MapContainer] Waypoint marker update note:", err.message);
+        }
+      } else {
+        try {
+          const markerHtml = buildWaypointMarkerHtml(wp, isSelected);
+          const marker = new window.mappls.Marker({
+            map,
+            position: { lat: wp.lat, lng: wp.lng },
+            html: markerHtml,
+            draggable: true,
+          });
+
+          const handleDrag = () => {
+            try {
+              const pos = marker.getPosition?.() || marker.getLngLat?.();
+              if (pos) {
+                const pLat = typeof pos.lat === "function" ? pos.lat() : pos.lat;
+                const pLng = typeof pos.lng === "function" ? pos.lng() : pos.lng;
+                onWaypointDragRef.current?.(wp.id, {
+                  lat: Number(Number(pLat).toFixed(6)),
+                  lng: Number(Number(pLng).toFixed(6)),
+                });
+              }
+            } catch (err) {
+              console.debug("[MapContainer] Drag note:", err.message);
+            }
+          };
+
+          const handleDragEnd = () => {
+            try {
+              const pos = marker.getPosition?.() || marker.getLngLat?.();
+              if (pos) {
+                const pLat = typeof pos.lat === "function" ? pos.lat() : pos.lat;
+                const pLng = typeof pos.lng === "function" ? pos.lng() : pos.lng;
+                onWaypointDragEndRef.current?.(wp.id, {
+                  lat: Number(Number(pLat).toFixed(6)),
+                  lng: Number(Number(pLng).toFixed(6)),
+                });
+              }
+            } catch (err) {
+              console.debug("[MapContainer] DragEnd note:", err.message);
+            }
+          };
+
+          if (typeof marker.addListener === "function") {
+            marker.addListener("drag", handleDrag);
+            marker.addListener("dragend", handleDragEnd);
+          } else if (typeof marker.on === "function") {
+            marker.on("drag", handleDrag);
+            marker.on("dragend", handleDragEnd);
+          }
+
+          setTimeout(() => {
+            const el = marker.getElement?.();
+            if (el) {
+              el.addEventListener("click", (evt) => {
+                evt.stopPropagation();
+                onWaypointSelectRef.current?.(wp.id);
+              });
+            }
+          }, 60);
+
+          currentMarkers.set(wp.id, { marker, html: markerHtml });
+        } catch (err) {
+          console.warn("[MapContainer] Waypoint marker creation note:", err.message);
+        }
+      }
+    });
+
+    // 3. Update Mission Route Polyline
+    if (showMissionRoute && waypoints.length >= 2) {
+      const path = waypoints.map((w) => ({ lat: w.lat, lng: w.lng }));
+      try {
+        if (missionPolylineRef.current && typeof missionPolylineRef.current.setPath === "function") {
+          missionPolylineRef.current.setPath(path);
+          missionPolylineRef.current.setTop?.();
+        } else if (!missionPolylineRef.current && window.mappls?.polyline) {
+          missionPolylineRef.current = new window.mappls.polyline({
+            map,
+            path,
+            strokeColor: "#35E0FF",
+            strokeWeight: 3.5,
+            strokeOpacity: 0.85,
+          });
+          missionPolylineRef.current.setTop?.();
+        }
+      } catch (err) {
+        console.debug("[MapContainer] Mission polyline update note:", err.message);
+      }
+    } else if (missionPolylineRef.current && waypoints.length < 2) {
+      try {
+        missionPolylineRef.current.remove?.();
+      } catch {
+        // Safe ignore
+      }
+      missionPolylineRef.current = null;
+    }
+  }, [waypoints, selectedWaypointId, showMissionRoute]);
 
   // Initialize Mappls Map with async SDK readiness polling & unique element ID
   useEffect(() => {
@@ -276,6 +492,22 @@ const MapContainer = ({ mapStyle = "normal", telemetry: propTelemetry }) => {
         }
 
         mapRef.current = map;
+
+        // Map Click Listener for Waypoint Placement Mode
+        map.on("click", (e) => {
+          if (!e || !e.lngLat) return;
+          const origTarget = e.originalEvent?.target;
+          if (
+            origTarget?.closest?.(".waypoint-marker-shell") ||
+            origTarget?.closest?.(".drone-marker-shell")
+          ) {
+            return;
+          }
+          onMapClickRef.current?.({
+            lat: Number(Number(e.lngLat.lat).toFixed(6)),
+            lng: Number(Number(e.lngLat.lng).toFixed(6)),
+          });
+        });
 
         const onMapReady = () => {
           if (cancelled) return;
@@ -396,6 +628,23 @@ const MapContainer = ({ mapStyle = "normal", telemetry: propTelemetry }) => {
             // Safe ignore
           }
         }
+        if (missionPolylineRef.current?.remove) {
+          try {
+            missionPolylineRef.current.remove();
+          } catch {
+            // Safe ignore
+          }
+        }
+        missionPolylineRef.current = null;
+
+        for (const [, obj] of waypointMarkersRef.current.entries()) {
+          try {
+            obj.marker?.remove?.();
+          } catch {
+            // Safe ignore
+          }
+        }
+        waypointMarkersRef.current.clear();
         if (markerRef.current?.remove) {
           try {
             markerRef.current.remove();
@@ -548,10 +797,15 @@ const MapContainer = ({ mapStyle = "normal", telemetry: propTelemetry }) => {
   }, []);
 
   return (
-    <div ref={containerRef} className="map-shell relative h-full w-full bg-[#070B10] overflow-hidden">
+    <div
+      ref={containerRef}
+      className={`map-shell relative h-full w-full bg-[#070B10] overflow-hidden ${
+        isPlacingWaypoint ? "cursor-crosshair" : ""
+      }`}
+    >
       <div
         id={mapId}
-        className="map-root h-full w-full"
+        className={`map-root h-full w-full ${isPlacingWaypoint ? "cursor-crosshair" : ""}`}
         style={{ width: "100%", height: "100%", position: "relative" }}
       />
 
