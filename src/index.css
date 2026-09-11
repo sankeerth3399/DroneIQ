@@ -46,3 +46,40 @@ body,
     max-width: 100% !important;
     max-height: 100% !important;
 }
+
+/* Remove full screen mode controls on maps */
+.map-shell .mapboxgl-ctrl-fullscreen,
+.map-shell .maplibregl-ctrl-fullscreen,
+.map-root .mapboxgl-ctrl-fullscreen,
+.map-root .maplibregl-ctrl-fullscreen,
+.mapboxgl-ctrl-fullscreen,
+.maplibregl-ctrl-fullscreen,
+.mappls-fullscreen-ctrl {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+}
+
+/* Remove/hide bottom-left "MAPPLS | MapmyIndia" attribution banner on maps */
+.cst-attrib-cont > a,
+.cst-attrib-cont [id^="watermark_logo"],
+.cst-attrib-cont img[src*="mappls_mmi"],
+[id^="watermark_logo"],
+img[src*="mappls_mmi"],
+.maplibregl-ctrl-bottom-left a[href*="mappls"],
+.mapboxgl-ctrl-bottom-left a[href*="mappls"],
+.maplibregl-ctrl-bottom-left .mapboxgl-ctrl-logo,
+.maplibregl-ctrl-bottom-left .maplibregl-ctrl-logo,
+.mapboxgl-ctrl-bottom-left .mapboxgl-ctrl-logo,
+.mapboxgl-ctrl-bottom-left .maplibregl-ctrl-logo,
+.mapboxgl-ctrl-logo,
+.maplibregl-ctrl-logo {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}

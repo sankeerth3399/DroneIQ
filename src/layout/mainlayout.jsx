@@ -65,7 +65,7 @@ const MainLayout = () => {
           />
         </header>
 
-        <main className="flex-1 min-h-0 overflow-auto relative">
+        <main className="flex-1 min-h-0 h-full flex flex-col overflow-hidden relative">
           <Outlet />
         </main>
       </div>

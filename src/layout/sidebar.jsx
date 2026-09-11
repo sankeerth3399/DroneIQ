@@ -12,7 +12,7 @@ import AeroLogo from "@/components/AeroLogo.jsx"
 const Tabs = [
     { label: "Dashboard", value: "/dashboard", Permission: "Dashboard", img: Dashboard },
     { label: "Fly", value: "/fly", Permission: "Fly", img: Fly },
-    { label: "Mission", value: "/mission", Permission: "Fleet Management", img: Target },
+    { label: "Missions", value: "/missions", Permission: "Fleet Management", img: Target },
     { label: "Plan", value: "/plan", Permission: "Geofencing", img: Plan },
     { label: "Waypts", value: "/waypts", Permission: "Alerts & Events", img: Waypts },
     { label: "Logs", value: "/logs", Permission: "Analytics", img: Logs },

@@ -1,28 +1,102 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useId } from "react";
 import { useTelemetry } from "@/context/TelemetryContext.jsx";
 
-const applyMapStyle = (map, mapStyle) => {
+const SATELLITE_SOURCE_ID = "aeronexus-satellite-source";
+const SATELLITE_LAYER_ID = "aeronexus-satellite-layer";
+
+const getUnderlyingMap = (map) => {
+  if (!map) return null;
+  if (typeof map.addSource === "function" && typeof map.addLayer === "function") {
+    return map;
+  }
+  if (map._map && typeof map._map.addSource === "function") {
+    return map._map;
+  }
+  if (map.map && typeof map.map.addSource === "function") {
+    return map.map;
+  }
+  return map;
+};
+
+const ensureSatelliteLayer = (mapInstance, onDone) => {
+  const map = getUnderlyingMap(mapInstance);
+  if (!map || typeof map.getSource !== "function" || typeof map.addSource !== "function") return;
+
+  const tryAdd = () => {
+    try {
+      if (!map.getSource(SATELLITE_SOURCE_ID)) {
+        map.addSource(SATELLITE_SOURCE_ID, {
+          type: "raster",
+          tiles: [
+            "https://mt0.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",
+            "https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",
+            "https://mt2.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",
+            "https://mt3.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",
+            "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+          ],
+          tileSize: 256,
+          maxzoom: 20
+        });
+      }
+
+      if (map.getSource(SATELLITE_SOURCE_ID) && !map.getLayer(SATELLITE_LAYER_ID)) {
+        // Place satellite layer on top of all vector fills (without beforeId)
+        map.addLayer({
+          id: SATELLITE_LAYER_ID,
+          type: "raster",
+          source: SATELLITE_SOURCE_ID,
+          layout: { visibility: "none" },
+          paint: {
+            "raster-opacity": 1,
+            "raster-fade-duration": 150
+          }
+        });
+      }
+
+      if (map.getLayer(SATELLITE_LAYER_ID)) {
+        try {
+          map.moveLayer(SATELLITE_LAYER_ID);
+        } catch {
+          // Safe ignore
+        }
+      }
+
+      if (onDone) onDone(map);
+    } catch (err) {
+      console.warn("[MapContainer] Satellite layer add note:", err.message);
+    }
+  };
+
+  if (typeof map.isStyleLoaded === "function" && map.isStyleLoaded()) {
+    tryAdd();
+  } else {
+    map.once?.("styledata", tryAdd);
+    map.once?.("idle", tryAdd);
+    map.once?.("load", tryAdd);
+  }
+};
+
+const applyMapStyle = (mapInstance, mapStyle) => {
+  if (!mapInstance) return;
+  const isSatellite = mapStyle === "satellite";
+  const map = getUnderlyingMap(mapInstance);
   if (!map) return;
 
-  const isSatellite = mapStyle === "satellite";
+  const updateVisibility = (m) => {
+    if (typeof m.setLayoutProperty === "function" && m.getLayer?.(SATELLITE_LAYER_ID)) {
+      try {
+        m.setLayoutProperty(SATELLITE_LAYER_ID, "visibility", isSatellite ? "visible" : "none");
+        if (isSatellite) {
+          m.moveLayer(SATELLITE_LAYER_ID);
+        }
+      } catch (err) {
+        console.debug("[MapContainer] Style visibility note:", err.message);
+      }
+    }
+  };
 
-  if (typeof map.setHybrid === "function") {
-    map.setHybrid(isSatellite);
-    return;
-  }
-
-  if (typeof map.setStyle === "function") {
-    const styles = window.mappls?.MapStyle;
-    const nextStyle = isSatellite
-      ? styles?.SATELLITE || "satellite"
-      : styles?.STANDARD || "standard";
-    map.setStyle(nextStyle);
-    return;
-  }
-
-  if (typeof map.setMapType === "function") {
-    map.setMapType(isSatellite ? 1 : 0);
-  }
+  ensureSatelliteLayer(map, updateVisibility);
+  updateVisibility(map);
 };
 
 /**
@@ -97,6 +171,8 @@ const MapContainer = ({ mapStyle = "normal", telemetry: propTelemetry }) => {
   const containerRef = useRef(null);
   const markerRef = useRef(null);
   const markerRotatorRef = useRef(null);
+  const autoId = useId();
+  const mapId = `mappls-map-${autoId.replace(/[^a-zA-Z0-9_-]/g, "")}`;
   const markerScalerRef = useRef(null);
   const polylineRef = useRef(null);
   const [sdkAvailable, setSdkAvailable] = useState(() => typeof window !== "undefined" && Boolean(window.mappls));
@@ -110,6 +186,8 @@ const MapContainer = ({ mapStyle = "normal", telemetry: propTelemetry }) => {
   const lng = typeof telemetry.longitude === "number" ? telemetry.longitude : 78.486700;
   const heading = typeof telemetry.heading === "number" ? telemetry.heading : 0;
 
+  const mapStyleRef = useRef(mapStyle);
+
   // Smoothing refs
   const currentPosRef = useRef({ lat, lng });
   const targetPosRef = useRef({ lat, lng });
@@ -121,79 +199,216 @@ const MapContainer = ({ mapStyle = "normal", telemetry: propTelemetry }) => {
     targetPosRef.current = { lat, lng };
   }, [lat, lng]);
 
-  // Initialize Mappls Map
   useEffect(() => {
-    if (!window.mappls) {
-      console.warn("[MapContainer] Mappls SDK is NOT loaded; running in fallback radar mode.");
-      return;
-    }
+    mapStyleRef.current = mapStyle;
+    applyMapStyle(mapRef.current, mapStyle);
+  }, [mapStyle]);
 
-    try {
-      const map = new window.mappls.Map("map", {
-        center: [lat, lng],
-        zoom: 15,
-        hybrid: mapStyle === "satellite",
-      });
+  // Initialize Mappls Map with async SDK readiness polling & unique element ID
+  useEffect(() => {
+    let cancelled = false;
+    let pollTimer = null;
 
-      mapRef.current = map;
+    const initMap = () => {
+      if (cancelled || mapRef.current || !window.mappls) return;
 
-      map.on("load", () => {
-        setSdkAvailable(true);
-        map.resize?.();
-        applyMapStyle(map, mapStyle);
+      // 1. Guard Mapbox/Mappls prototype remove against double destruction
+      if (typeof window !== "undefined" && window.mapplsgl?.Map?.prototype?.remove && !window.mapplsgl.Map.prototype._safePatched) {
+        window.mapplsgl.Map.prototype._safePatched = true;
+        const origProtoRemove = window.mapplsgl.Map.prototype.remove;
+        window.mapplsgl.Map.prototype.remove = function () {
+          if (!this.handlers) return;
+          try {
+            origProtoRemove.call(this);
+          } catch (e) {
+            console.debug("[MapContainer] Handled duplicate remove:", e.message);
+          }
+        };
+      }
 
-        // Initialize custom top-down drone marker on map
-        try {
-          if (typeof window.mappls.Marker === "function") {
-            markerRef.current = new window.mappls.Marker({
-              map,
-              position: { lat, lng },
-              html: buildDroneMarkerHtml(droneCallsign, heading),
-            });
-
-            // Cache reference to the inner rotating and scaling DOM nodes
-            setTimeout(() => {
-              const el = markerRef.current?.getElement?.();
-              if (el) {
-                markerRotatorRef.current = el.querySelector(".drone-marker-rotator");
-                markerScalerRef.current = el.querySelector(".drone-marker-scaler");
-              }
-            }, 60);
-
-            // Responsive zoom scaling listener
-            const handleZoom = () => {
-              if (markerScalerRef.current && typeof map.getZoom === "function") {
-                const z = map.getZoom();
-                const scale = z < 12 ? 0.82 : z > 16 ? 1.15 : 1.0;
-                markerScalerRef.current.style.transform = `scale(${scale})`;
+      // 2. Guard existing maps in map_o array
+      if (typeof window !== "undefined" && Array.isArray(window.map_o)) {
+        window.map_o.forEach((m) => {
+          if (m && !m._safePatched && typeof m.remove === "function") {
+            m._safePatched = true;
+            const origRem = m.remove;
+            m.remove = function () {
+              if (!this.handlers) return;
+              try {
+                origRem.call(this);
+              } catch {
+                // Safe ignore duplicate remove
               }
             };
-            map.on("zoom", handleZoom);
           }
-        } catch (markerErr) {
-          console.warn("[MapContainer] Marker creation note:", markerErr.message);
-        }
-      });
-    } catch (err) {
-      console.warn("[MapContainer] Map initialization error:", err.message);
-    }
+        });
+      }
 
-    return () => {
-      if (polylineRef.current?.remove) {
-        try {
-          polylineRef.current.remove();
-        } catch {
-          // Safe ignore
+      const container = document.getElementById(mapId);
+      if (!container) return;
+      container.innerHTML = "";
+
+      try {
+        const map = new window.mappls.Map(mapId, {
+          center: [lat, lng],
+          zoom: 15,
+          hybrid: mapStyle === "satellite",
+          fullscreenControl: false,
+        });
+
+        if (typeof map.remove === "function") {
+          const origInstRemove = map.remove;
+          map.remove = function () {
+            if (!this.handlers) return;
+            try {
+              origInstRemove.call(this);
+            } catch {
+              // Safe ignore duplicate remove
+            }
+          };
         }
+
+        mapRef.current = map;
+
+        const onMapReady = () => {
+          if (cancelled) return;
+          setSdkAvailable(true);
+          map.resize?.();
+
+          // Initialize satellite layer and apply style
+          ensureSatelliteLayer(map);
+          applyMapStyle(map, mapStyleRef.current);
+
+          // Initialize custom top-down drone marker on map
+          try {
+            if (typeof window.mappls.Marker === "function" && !markerRef.current) {
+              markerRef.current = new window.mappls.Marker({
+                map,
+                position: { lat, lng },
+                html: buildDroneMarkerHtml(droneCallsign, heading),
+              });
+
+              // Cache reference to the inner rotating and scaling DOM nodes
+              setTimeout(() => {
+                const el = markerRef.current?.getElement?.();
+                if (el) {
+                  markerRotatorRef.current = el.querySelector(".drone-marker-rotator");
+                  markerScalerRef.current = el.querySelector(".drone-marker-scaler");
+                }
+              }, 60);
+
+              // Responsive zoom scaling listener
+              const handleZoom = () => {
+                if (markerScalerRef.current && typeof map.getZoom === "function") {
+                  const z = map.getZoom();
+                  const scale = z < 12 ? 0.82 : z > 16 ? 1.15 : 1.0;
+                  markerScalerRef.current.style.transform = `scale(${scale})`;
+                }
+              };
+              map.on("zoom", handleZoom);
+            }
+          } catch (markerErr) {
+            console.warn("[MapContainer] Marker creation note:", markerErr.message);
+          }
+        };
+
+        const handleStyleLoad = () => {
+          if (cancelled) return;
+          ensureSatelliteLayer(map);
+          applyMapStyle(map, mapStyleRef.current);
+        };
+
+        if (map.loaded?.()) {
+          onMapReady();
+        } else {
+          map.on("load", onMapReady);
+        }
+        map.on?.("style.load", handleStyleLoad);
+
+        // Secondary guarantee: ensure overlay is dismissed and canvas is resized
+        setTimeout(() => {
+          if (!cancelled && mapRef.current) {
+            setSdkAvailable(true);
+            mapRef.current.resize?.();
+          }
+        }, 300);
+
+      } catch (err) {
+        console.warn("[MapContainer] Map initialization error:", err.message);
       }
     };
+
+    if (window.mappls) {
+      initMap();
+    } else {
+      let attempts = 0;
+      pollTimer = setInterval(() => {
+        attempts++;
+        if (window.mappls) {
+          clearInterval(pollTimer);
+          initMap();
+        } else if (attempts >= 50) {
+          clearInterval(pollTimer);
+          console.warn("[MapContainer] Mappls SDK timed out loading.");
+        }
+      }, 100);
+    }
+
+      // Observe and guarantee bottom-left MAPPLS / MapmyIndia banner is hidden
+      const container = document.getElementById(mapId);
+      let attribObserver = null;
+      if (container) {
+        const hideBottomLeftBanner = () => {
+          const els = container.querySelectorAll(
+            '.cst-attrib-cont > a, [id^="watermark_logo"], img[src*="mappls_mmi"], .maplibregl-ctrl-bottom-left a[href*="mappls"], .mapboxgl-ctrl-bottom-left a[href*="mappls"]'
+          );
+          els.forEach((el) => {
+            if (el.style.display !== "none") {
+              el.style.setProperty("display", "none", "important");
+              el.style.setProperty("visibility", "hidden", "important");
+              el.style.setProperty("pointer-events", "none", "important");
+            }
+          });
+        };
+        hideBottomLeftBanner();
+        attribObserver = new MutationObserver(hideBottomLeftBanner);
+        attribObserver.observe(container, { childList: true, subtree: true });
+      }
+
+      return () => {
+        cancelled = true;
+        if (attribObserver) attribObserver.disconnect();
+        if (pollTimer) clearInterval(pollTimer);
+        if (polylineRef.current?.remove) {
+          try {
+            polylineRef.current.remove();
+          } catch {
+            // Safe ignore
+          }
+        }
+        if (markerRef.current?.remove) {
+          try {
+            markerRef.current.remove();
+          } catch {
+            // Safe ignore
+          }
+        }
+        if (mapRef.current && mapRef.current.handlers) {
+          try {
+            mapRef.current.remove();
+          } catch {
+            // Safe ignore
+          }
+        }
+        mapRef.current = null;
+        markerRef.current = null;
+        markerRotatorRef.current = null;
+        markerScalerRef.current = null;
+        polylineRef.current = null;
+      };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Sync map style changes
-  useEffect(() => {
-    applyMapStyle(mapRef.current, mapStyle);
-  }, [mapStyle]);
 
   // Shortest-path angle interpolation for smooth heading rotation (359° -> 0° safe)
   useEffect(() => {
@@ -297,7 +512,7 @@ const MapContainer = ({ mapStyle = "normal", telemetry: propTelemetry }) => {
     return () => cancelAnimationFrame(animId);
   }, []);
 
-  // Handle container resize
+  // Handle container resize & transition settlements
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -308,15 +523,26 @@ const MapContainer = ({ mapStyle = "normal", telemetry: propTelemetry }) => {
 
     const observer = new ResizeObserver(resizeMap);
     observer.observe(el);
-    return () => observer.disconnect();
+
+    // Staggered resize events to guarantee map adapts when parent layout transitions settle
+    const t1 = setTimeout(resizeMap, 50);
+    const t2 = setTimeout(resizeMap, 200);
+    const t3 = setTimeout(resizeMap, 500);
+
+    return () => {
+      observer.disconnect();
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+    };
   }, []);
 
   return (
     <div ref={containerRef} className="map-shell relative h-full w-full bg-[#070B10] overflow-hidden">
       <div
-        id="map"
+        id={mapId}
         className="map-root h-full w-full"
-        style={{ width: "100%", height: "100%" }}
+        style={{ width: "100%", height: "100%", position: "relative" }}
       />
 
       {/* Fallback Tactical Radar View when Mappls CDN is offline */}
@@ -406,17 +632,6 @@ const MapContainer = ({ mapStyle = "normal", telemetry: propTelemetry }) => {
           </div>
         </div>
       )}
-
-      {/* Real-time Map Coordinates Chip */}
-      <div className="absolute bottom-2.5 sm:bottom-3 left-2.5 sm:left-3 z-10 pointer-events-none flex items-center gap-1.5 sm:gap-2 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded bg-[#080C14D9] border border-[#1E293B] text-[8.5px] sm:text-[10px] font-mono text-[#8E9EAA] shadow-lg backdrop-blur">
-        <span>LAT: <strong className="text-[#35E0FF]">{lat.toFixed(5)}</strong></span>
-        <span className="text-[#253342]">|</span>
-        <span>LNG: <strong className="text-[#35E0FF]">{lng.toFixed(5)}</strong></span>
-        <span className="text-[#253342] hidden xs:inline">|</span>
-        <span className="hidden xs:inline">ALT: <strong className="text-[#2FE089]">{telemetry.altitude || 0}m</strong></span>
-        <span className="text-[#253342] hidden sm:inline">|</span>
-        <span className="hidden sm:inline">HDG: <strong className="text-[#35E0FF]">{Math.round(heading)}°</strong></span>
-      </div>
     </div>
   );
 };

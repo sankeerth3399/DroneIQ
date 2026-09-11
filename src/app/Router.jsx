@@ -1,9 +1,9 @@
-import { Routes, Route } from "react-router-dom"
+import { Routes, Route, Navigate } from "react-router-dom"
 import MainLayout from '@/layout/mainlayout.jsx'
 
 import Dashboard from "@/features/dashboard/pages/dashboard.jsx"
-import Fly from "@/features/fly/pages/fly.jsx"
-import Mession from "@/features/mession/pages/MissionPage.jsx"
+import FlyPage from "@/features/fly/pages/FlyPage.jsx"
+import MissionsPage from "@/features/mession/pages/MissionsPage.jsx"
 import Plan from "@/features/plan/pages/Plan.jsx"
 import Waypts from "@/features/waypts/pages/Waypts.jsx"
 import Logs from "@/features/logs/pages/Logs.jsx"
@@ -19,8 +19,9 @@ const Routing = () =>{
             <Route path="/login" element={<Login/>}/>
             <Route element={<MainLayout/>}>
                 <Route path="/dashboard" element={<Dashboard/>}/>
-                <Route path="/fly" element={<Fly/>}/>
-                <Route path="/mission" element={<Mession/>}/>
+                <Route path="/fly" element={<FlyPage/>}/>
+                <Route path="/missions" element={<MissionsPage/>}/>
+                <Route path="/mission" element={<Navigate to="/missions" replace />}/>
                 <Route path="/plan" element={<Plan/>}/>
                 <Route path="/waypts" element={<Waypts/>}/>
                 <Route path="/logs" element={<Logs/>}/>
