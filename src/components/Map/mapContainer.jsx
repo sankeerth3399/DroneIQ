@@ -18,7 +18,7 @@ const getUnderlyingMap = (map) => {
   return map;
 };
 
-const ensureSatelliteLayer = (mapInstance, onDone) => {
+const ensureSatelliteLayer = (mapInstance, isSatellite = false, onDone) => {
   const map = getUnderlyingMap(mapInstance);
   if (!map || typeof map.getSource !== "function" || typeof map.addSource !== "function") return;
 
@@ -32,28 +32,28 @@ const ensureSatelliteLayer = (mapInstance, onDone) => {
             "https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",
             "https://mt2.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",
             "https://mt3.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",
-            "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
           ],
           tileSize: 256,
-          maxzoom: 20
+          minzoom: 0,
+          maxzoom: 22,
+          attribution: "Imagery &copy; Google Maps",
         });
       }
 
       if (map.getSource(SATELLITE_SOURCE_ID) && !map.getLayer(SATELLITE_LAYER_ID)) {
-        // Place satellite layer on top of all vector fills (without beforeId)
         map.addLayer({
           id: SATELLITE_LAYER_ID,
           type: "raster",
           source: SATELLITE_SOURCE_ID,
-          layout: { visibility: "none" },
+          layout: { visibility: isSatellite ? "visible" : "none" },
           paint: {
             "raster-opacity": 1,
-            "raster-fade-duration": 150
-          }
+            "raster-fade-duration": 0,
+          },
         });
       }
 
-      if (map.getLayer(SATELLITE_LAYER_ID)) {
+      if (map.getLayer(SATELLITE_LAYER_ID) && isSatellite) {
         try {
           map.moveLayer(SATELLITE_LAYER_ID);
         } catch {
@@ -76,7 +76,7 @@ const ensureSatelliteLayer = (mapInstance, onDone) => {
   }
 };
 
-const applyMapStyle = (mapInstance, mapStyle) => {
+const applyMapStyle = (mapInstance, mapStyle, polylineRef) => {
   if (!mapInstance) return;
   const isSatellite = mapStyle === "satellite";
   const map = getUnderlyingMap(mapInstance);
@@ -86,8 +86,15 @@ const applyMapStyle = (mapInstance, mapStyle) => {
     if (typeof m.setLayoutProperty === "function" && m.getLayer?.(SATELLITE_LAYER_ID)) {
       try {
         m.setLayoutProperty(SATELLITE_LAYER_ID, "visibility", isSatellite ? "visible" : "none");
+
         if (isSatellite) {
+          // Bring satellite layer to top of all base vector layers so it is fully visible
           m.moveLayer(SATELLITE_LAYER_ID);
+
+          // If polyline trail exists, bring it above satellite layer
+          if (polylineRef?.current && typeof polylineRef.current.setTop === "function") {
+            polylineRef.current.setTop();
+          }
         }
       } catch (err) {
         console.debug("[MapContainer] Style visibility note:", err.message);
@@ -95,7 +102,7 @@ const applyMapStyle = (mapInstance, mapStyle) => {
     }
   };
 
-  ensureSatelliteLayer(map, updateVisibility);
+  ensureSatelliteLayer(map, isSatellite, updateVisibility);
   updateVisibility(map);
 };
 
@@ -201,7 +208,7 @@ const MapContainer = ({ mapStyle = "normal", telemetry: propTelemetry }) => {
 
   useEffect(() => {
     mapStyleRef.current = mapStyle;
-    applyMapStyle(mapRef.current, mapStyle);
+    applyMapStyle(mapRef.current, mapStyle, polylineRef);
   }, [mapStyle]);
 
   // Initialize Mappls Map with async SDK readiness polling & unique element ID
@@ -276,8 +283,8 @@ const MapContainer = ({ mapStyle = "normal", telemetry: propTelemetry }) => {
           map.resize?.();
 
           // Initialize satellite layer and apply style
-          ensureSatelliteLayer(map);
-          applyMapStyle(map, mapStyleRef.current);
+          ensureSatelliteLayer(map, mapStyleRef.current === "satellite");
+          applyMapStyle(map, mapStyleRef.current, polylineRef);
 
           // Initialize custom top-down drone marker on map
           try {
@@ -306,6 +313,9 @@ const MapContainer = ({ mapStyle = "normal", telemetry: propTelemetry }) => {
                 }
               };
               map.on("zoom", handleZoom);
+              map.on("zoomend", () => {
+                map.resize?.();
+              });
             }
           } catch (markerErr) {
             console.warn("[MapContainer] Marker creation note:", markerErr.message);
@@ -314,8 +324,8 @@ const MapContainer = ({ mapStyle = "normal", telemetry: propTelemetry }) => {
 
         const handleStyleLoad = () => {
           if (cancelled) return;
-          ensureSatelliteLayer(map);
-          applyMapStyle(map, mapStyleRef.current);
+          ensureSatelliteLayer(map, mapStyleRef.current === "satellite");
+          applyMapStyle(map, mapStyleRef.current, polylineRef);
         };
 
         if (map.loaded?.()) {
