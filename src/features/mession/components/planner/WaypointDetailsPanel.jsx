@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, Trash2, Check, ArrowUp, Zap, Clock, Compass } from "lucide-react";
+import { X, Trash2, Check, ArrowUp, Zap, Clock, Compass, AlertTriangle } from "lucide-react";
 
 export default function WaypointDetailsPanel({
   waypoint,
@@ -9,6 +9,7 @@ export default function WaypointDetailsPanel({
   validateCoordinates,
 }) {
   const [prevId, setPrevId] = useState(waypoint.id);
+  const [prevCoords, setPrevCoords] = useState({ lat: waypoint.lat, lng: waypoint.lng });
   const [alt, setAlt] = useState(waypoint.alt ?? 50);
   const [speed, setSpeed] = useState(waypoint.speed ?? 8.5);
   const [holdTime, setHoldTime] = useState(waypoint.holdTime ?? 0);
@@ -18,9 +19,10 @@ export default function WaypointDetailsPanel({
   const [lngInput, setLngInput] = useState(String(waypoint.lng?.toFixed(6) ?? ""));
   const [coordError, setCoordError] = useState("");
 
-  // Sync state if selected waypoint id changes
+  // Sync draft state if selected waypoint changes or coordinates update from map drag
   if (waypoint.id !== prevId) {
     setPrevId(waypoint.id);
+    setPrevCoords({ lat: waypoint.lat, lng: waypoint.lng });
     setAlt(waypoint.alt ?? 50);
     setSpeed(waypoint.speed ?? 8.5);
     setHoldTime(waypoint.holdTime ?? 0);
@@ -29,66 +31,102 @@ export default function WaypointDetailsPanel({
     setLatInput(String(waypoint.lat?.toFixed(6) ?? ""));
     setLngInput(String(waypoint.lng?.toFixed(6) ?? ""));
     setCoordError("");
+  } else if (waypoint.lat !== prevCoords.lat || waypoint.lng !== prevCoords.lng) {
+    setPrevCoords({ lat: waypoint.lat, lng: waypoint.lng });
+    setLatInput(String(waypoint.lat?.toFixed(6) ?? ""));
+    setLngInput(String(waypoint.lng?.toFixed(6) ?? ""));
   }
 
-  const handleCoordCommit = (newLatStr, newLngStr) => {
-    const parsedLat = parseFloat(newLatStr);
-    const parsedLng = parseFloat(newLngStr);
+  // Close: discard uncommitted draft changes and close panel
+  const handleClose = (e) => {
+    e?.stopPropagation?.();
+    setCoordError("");
+    onClose?.();
+  };
 
-    if (isNaN(parsedLat) || isNaN(parsedLng)) {
-      setCoordError("Invalid coordinate format");
-      setLatInput(String(waypoint.lat?.toFixed(6) ?? ""));
-      setLngInput(String(waypoint.lng?.toFixed(6) ?? ""));
+  // Delete: remove waypoint
+  const handleDelete = (e) => {
+    e?.stopPropagation?.();
+    onDelete?.(waypoint.id);
+  };
+
+  // Done: validate changes, commit, and close panel
+  const handleApply = (e) => {
+    e?.stopPropagation?.();
+    e?.preventDefault?.();
+
+    // 1. Latitude validation
+    const parsedLat = parseFloat(latInput);
+    if (latInput === "" || isNaN(parsedLat) || parsedLat < -90 || parsedLat > 90) {
+      setCoordError("Invalid latitude.");
       return;
     }
 
+    // 2. Longitude validation
+    const parsedLng = parseFloat(lngInput);
+    if (lngInput === "" || isNaN(parsedLng) || parsedLng < -180 || parsedLng > 180) {
+      setCoordError("Invalid longitude.");
+      return;
+    }
+
+    // 3. Altitude validation
+    const parsedAlt = parseFloat(alt);
+    if (alt === "" || isNaN(parsedAlt) || parsedAlt < 0 || parsedAlt > 1000) {
+      setCoordError("Altitude must be valid.");
+      return;
+    }
+
+    // 4. Speed validation
+    const parsedSpeed = parseFloat(speed);
+    if (speed === "" || isNaN(parsedSpeed) || parsedSpeed <= 0 || parsedSpeed > 50) {
+      setCoordError("Speed must be valid.");
+      return;
+    }
+
+    // 5. Hold time validation
+    const parsedHoldTime = parseFloat(holdTime);
+    if (holdTime === "" || isNaN(parsedHoldTime) || parsedHoldTime < 0) {
+      setCoordError("Hold time must be valid.");
+      return;
+    }
+
+    // 6. Custom heading validation (if Custom selected)
+    let parsedCustomHeading = parseFloat(customHeading);
+    if (heading === "Custom") {
+      if (
+        customHeading === "" ||
+        isNaN(parsedCustomHeading) ||
+        parsedCustomHeading < 0 ||
+        parsedCustomHeading > 360
+      ) {
+        setCoordError("Heading must be between 0° and 360°.");
+        return;
+      }
+    } else {
+      parsedCustomHeading = 0;
+    }
+
+    // 7. Active Geofence boundary validation
     if (validateCoordinates) {
-      const isValid = validateCoordinates(parsedLat, parsedLng);
-      if (!isValid) {
-        setCoordError("WAYPOINT OUTSIDE GEOFENCE — Coordinates must remain inside boundary.");
-        setLatInput(String(waypoint.lat?.toFixed(6) ?? ""));
-        setLngInput(String(waypoint.lng?.toFixed(6) ?? ""));
+      const isInside = validateCoordinates(parsedLat, parsedLng);
+      if (!isInside) {
+        setCoordError("Waypoint outside geofence.");
         return;
       }
     }
 
+    // Valid: Clear error, commit draft updates, and close panel
     setCoordError("");
-    onUpdate(waypoint.id, {
+    onUpdate?.(waypoint.id, {
       lat: Number(parsedLat.toFixed(6)),
       lng: Number(parsedLng.toFixed(6)),
-    });
-  };
-
-  const handleApply = (e) => {
-    e?.preventDefault?.();
-    const parsedLat = parseFloat(latInput);
-    const parsedLng = parseFloat(lngInput);
-    let finalLat = waypoint.lat;
-    let finalLng = waypoint.lng;
-
-    if (!isNaN(parsedLat) && !isNaN(parsedLng)) {
-      if (validateCoordinates && !validateCoordinates(parsedLat, parsedLng)) {
-        setCoordError("WAYPOINT OUTSIDE GEOFENCE — Coordinates reverted.");
-      } else {
-        finalLat = Number(parsedLat.toFixed(6));
-        finalLng = Number(parsedLng.toFixed(6));
-      }
-    }
-
-    onUpdate(waypoint.id, {
-      lat: finalLat,
-      lng: finalLng,
-      alt: Number(alt),
-      speed: Number(speed),
-      holdTime: Number(holdTime),
+      alt: Number(parsedAlt),
+      speed: Number(parsedSpeed),
+      holdTime: Number(parsedHoldTime),
       heading,
-      customHeading: Number(customHeading),
+      customHeading: Number(parsedCustomHeading),
     });
-    onClose();
-  };
-
-  const handleFieldChange = (field, val) => {
-    onUpdate(waypoint.id, { [field]: val });
+    onClose?.();
   };
 
   const isTakeoff = waypoint.type === "TAKEOFF";
@@ -104,6 +142,9 @@ export default function WaypointDetailsPanel({
     <div
       className="w-72 sm:w-80 rounded-xl bg-[#080C14F5] border border-[#1C2834] shadow-2xl backdrop-blur-md text-xs font-mono text-[#EEF4F8] select-none pointer-events-auto overflow-hidden animate-in fade-in zoom-in-95 duration-150"
       onClick={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
+      onPointerDown={(e) => e.stopPropagation()}
+      onTouchStart={(e) => e.stopPropagation()}
     >
       {/* Header Bar */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-[#1A2633] bg-[#0C121DF2]">
@@ -118,8 +159,10 @@ export default function WaypointDetailsPanel({
 
         <button
           type="button"
-          onClick={onClose}
-          className="text-[#8E9EAA] hover:text-white p-1 rounded-md hover:bg-[#1E293B] transition"
+          onClick={handleClose}
+          className="text-[#8E9EAA] hover:text-white p-1 rounded-md hover:bg-[#1E293B] transition cursor-pointer"
+          title="Close (X)"
+          aria-label="Close"
         >
           <X className="w-3.5 h-3.5" />
         </button>
@@ -135,10 +178,12 @@ export default function WaypointDetailsPanel({
                 type="number"
                 step="0.000001"
                 value={latInput}
-                onChange={(e) => setLatInput(e.target.value)}
-                onBlur={() => handleCoordCommit(latInput, lngInput)}
+                onChange={(e) => {
+                  setLatInput(e.target.value);
+                  setCoordError("");
+                }}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") handleCoordCommit(latInput, lngInput);
+                  if (e.key === "Enter") handleApply(e);
                 }}
                 className="w-full px-2 py-1 bg-[#0E1520] border border-[#1C2834] rounded text-[#35E0FF] font-semibold text-xs focus:border-[#35E0FF] outline-none"
               />
@@ -149,20 +194,17 @@ export default function WaypointDetailsPanel({
                 type="number"
                 step="0.000001"
                 value={lngInput}
-                onChange={(e) => setLngInput(e.target.value)}
-                onBlur={() => handleCoordCommit(latInput, lngInput)}
+                onChange={(e) => {
+                  setLngInput(e.target.value);
+                  setCoordError("");
+                }}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") handleCoordCommit(latInput, lngInput);
+                  if (e.key === "Enter") handleApply(e);
                 }}
                 className="w-full px-2 py-1 bg-[#0E1520] border border-[#1C2834] rounded text-[#35E0FF] font-semibold text-xs focus:border-[#35E0FF] outline-none"
               />
             </div>
           </div>
-          {coordError && (
-            <div className="text-[9px] text-[#EF4444] font-bold leading-tight pt-1">
-              {coordError}
-            </div>
-          )}
         </div>
 
         {/* Altitude Input */}
@@ -179,9 +221,11 @@ export default function WaypointDetailsPanel({
               step="1"
               value={alt}
               onChange={(e) => {
-                const val = Number(e.target.value);
-                setAlt(val);
-                handleFieldChange("alt", val);
+                setAlt(e.target.value);
+                setCoordError("");
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleApply(e);
               }}
               className="w-16 px-2 py-1 bg-[#0E1520] border border-[#1C2834] rounded text-right text-white font-bold focus:border-[#35E0FF] outline-none"
             />
@@ -203,9 +247,11 @@ export default function WaypointDetailsPanel({
               step="0.5"
               value={speed}
               onChange={(e) => {
-                const val = Number(e.target.value);
-                setSpeed(val);
-                handleFieldChange("speed", val);
+                setSpeed(e.target.value);
+                setCoordError("");
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleApply(e);
               }}
               className="w-16 px-2 py-1 bg-[#0E1520] border border-[#1C2834] rounded text-right text-white font-bold focus:border-[#35E0FF] outline-none"
             />
@@ -227,9 +273,11 @@ export default function WaypointDetailsPanel({
               step="1"
               value={holdTime}
               onChange={(e) => {
-                const val = Number(e.target.value);
-                setHoldTime(val);
-                handleFieldChange("holdTime", val);
+                setHoldTime(e.target.value);
+                setCoordError("");
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleApply(e);
               }}
               className="w-16 px-2 py-1 bg-[#0E1520] border border-[#1C2834] rounded text-right text-white font-bold focus:border-[#35E0FF] outline-none"
             />
@@ -246,9 +294,8 @@ export default function WaypointDetailsPanel({
           <select
             value={heading}
             onChange={(e) => {
-              const val = e.target.value;
-              setHeading(val);
-              handleFieldChange("heading", val);
+              setHeading(e.target.value);
+              setCoordError("");
             }}
             className="px-2 py-1 bg-[#0E1520] border border-[#1C2834] rounded text-white text-[11px] focus:border-[#35E0FF] outline-none"
           >
@@ -272,9 +319,11 @@ export default function WaypointDetailsPanel({
                 max="359"
                 value={customHeading}
                 onChange={(e) => {
-                  const val = Number(e.target.value);
-                  setCustomHeading(val);
-                  handleFieldChange("customHeading", val);
+                  setCustomHeading(e.target.value);
+                  setCoordError("");
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleApply(e);
                 }}
                 className="w-16 px-2 py-1 bg-[#0E1520] border border-[#1C2834] rounded text-right text-white font-bold focus:border-[#35E0FF] outline-none text-[11px]"
               />
@@ -283,12 +332,20 @@ export default function WaypointDetailsPanel({
           </div>
         )}
 
+        {/* Prominent Validation Error Banner */}
+        {coordError && (
+          <div className="p-2 rounded-lg bg-[#EF44441A] border border-[#EF44444D] text-[#EF4444] text-[10px] font-bold flex items-center gap-1.5 animate-in fade-in duration-150">
+            <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+            <span>{coordError}</span>
+          </div>
+        )}
+
         {/* Action Buttons */}
         <div className="flex items-center justify-between pt-2 border-t border-[#16212E] gap-2">
           <button
             type="button"
-            onClick={() => onDelete(waypoint.id)}
-            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-[#FF4757] hover:bg-[#FF47571A] border border-[#FF475733] transition text-[11px]"
+            onClick={handleDelete}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-[#FF4757] hover:bg-[#FF47571A] border border-[#FF475733] transition text-[11px] cursor-pointer"
           >
             <Trash2 className="w-3.5 h-3.5" />
             <span>Delete</span>
@@ -297,7 +354,7 @@ export default function WaypointDetailsPanel({
           <button
             type="button"
             onClick={handleApply}
-            className="flex items-center gap-1 px-4 py-1.5 rounded-lg bg-[#35E0FF] text-[#06090E] font-bold hover:bg-[#20CAEC] transition shadow-[0_0_10px_rgba(53,224,255,0.3)] text-[11px]"
+            className="flex items-center gap-1 px-4 py-1.5 rounded-lg bg-[#35E0FF] text-[#06090E] font-bold hover:bg-[#20CAEC] transition shadow-[0_0_10px_rgba(53,224,255,0.3)] text-[11px] cursor-pointer"
           >
             <Check className="w-3.5 h-3.5" />
             <span>Done</span>

@@ -92,9 +92,10 @@ export function useMissionPlanner(initialMission = null) {
   }, [items, missionName, missionSettings]);
 
   // Derive valid active selected waypoint (prevents dangling selection if an item was removed)
-  const activeSelectedWaypointId = items.some((it) => it.id === selectedWaypointId)
-    ? selectedWaypointId
-    : items[0]?.id || null;
+  const activeSelectedWaypointId =
+    selectedWaypointId && items.some((it) => it.id === selectedWaypointId)
+      ? selectedWaypointId
+      : null;
 
   const canUndo = historyIndex > 0;
   const canRedo = historyIndex < history.length - 1;
@@ -273,7 +274,7 @@ export function useMissionPlanner(initialMission = null) {
     setItems(renumbered);
     setHistory([renumbered]);
     setHistoryIndex(0);
-    setSelectedWaypointId(renumbered[0]?.id || null);
+    setSelectedWaypointId(null);
 
     if (planData.settings) {
       setMissionSettings((prev) => ({ ...prev, ...planData.settings }));
@@ -351,7 +352,7 @@ export function useMissionPlanner(initialMission = null) {
       if (target.settings) {
         setMissionSettings((prev) => ({ ...prev, ...target.settings }));
       }
-      setSelectedWaypointId(restoredItems[0]?.id || null);
+      setSelectedWaypointId(null);
       pushToHistory(restoredItems);
       return true;
     },

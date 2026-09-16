@@ -454,7 +454,7 @@ const WaypointPlanningPage = () => {
 
       {/* 6. Waypoint Details Editor Panel (Floating on Right) */}
       {planner.selectedWaypoint && (
-        <div className="absolute top-16 right-3 z-20 pointer-events-auto">
+        <div className="absolute top-16 right-3 z-30 pointer-events-auto">
           <WaypointDetailsPanel
             waypoint={planner.selectedWaypoint}
             validateCoordinates={(lat, lng) => isPointInsideGeofence({ lat, lng }, geofenceCoords)}
