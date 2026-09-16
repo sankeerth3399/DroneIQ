@@ -22,8 +22,8 @@ export const DualJoystickOverlay = ({
   mapIsLarge = true,
   cameraSelector = "#drone-live-feed",
 }) => {
-  const [leftStick, setLeftStick] = useState({ x: 0, y: 0 })
-  const [rightStick, setRightStick] = useState({ x: 0, y: 0 })
+  const leftStickRef = useRef({ x: 0, y: 0 })
+  const rightStickRef = useRef({ x: 0, y: 0 })
   const springThrottle = true
 
   // Standard responsive base size
@@ -178,28 +178,28 @@ export const DualJoystickOverlay = ({
 
   const handleLeftChange = useCallback(
     (val) => {
-      setLeftStick(val)
+      leftStickRef.current = val
       onStickUpdate?.({
         yaw: val.x,
         throttle: val.y,
-        pitch: rightStick.y,
-        roll: rightStick.x,
+        pitch: rightStickRef.current.y,
+        roll: rightStickRef.current.x,
       })
     },
-    [onStickUpdate, rightStick.x, rightStick.y]
+    [onStickUpdate]
   )
 
   const handleRightChange = useCallback(
     (val) => {
-      setRightStick(val)
+      rightStickRef.current = val
       onStickUpdate?.({
-        yaw: leftStick.x,
-        throttle: leftStick.y,
+        yaw: leftStickRef.current.x,
+        throttle: leftStickRef.current.y,
         pitch: val.y,
         roll: val.x,
       })
     },
-    [leftStick.x, leftStick.y, onStickUpdate]
+    [onStickUpdate]
   )
 
   if (!visible) {

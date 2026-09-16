@@ -1,23 +1,20 @@
-import { createContext, useContext, useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback } from "react"
+import { AuthContext } from "./authContextCore.js"
 import { authService } from "@/services/api/authService.js"
-
-const AuthContext = createContext(null)
 
 export const AuthProvider = ({ children }) => {
   const [token, setToken] = useState(() => authService.getToken())
   const [user, setUser] = useState(() => authService.getUser())
-  const [authLoading, setAuthLoading] = useState(true)
+  const [authLoading, setAuthLoading] = useState(false)
 
-  // Initialize and restore active session
+  const logout = useCallback(() => {
+    authService.logout()
+    setToken(null)
+    setUser(null)
+  }, [])
+
+  // Manage auth event listeners
   useEffect(() => {
-    const savedToken = authService.getToken()
-    const savedUser = authService.getUser()
-    if (savedToken) {
-      setToken(savedToken)
-      setUser(savedUser)
-    }
-    setAuthLoading(false)
-
     const handleUnauthorized = () => {
       console.warn("[AuthContext] Session expired or 401 received. Logging out.")
       logout()
@@ -35,7 +32,7 @@ export const AuthProvider = ({ children }) => {
       window.removeEventListener("aeronexus:unauthorized", handleUnauthorized)
       window.removeEventListener("aeronexus:logout", handleGlobalLogout)
     }
-  }, [])
+  }, [logout])
 
   const login = useCallback(async ({ username, password }) => {
     setAuthLoading(true)
@@ -47,12 +44,6 @@ export const AuthProvider = ({ children }) => {
     } finally {
       setAuthLoading(false)
     }
-  }, [])
-
-  const logout = useCallback(() => {
-    authService.logout()
-    setToken(null)
-    setUser(null)
   }, [])
 
   const value = {
@@ -67,12 +58,4 @@ export const AuthProvider = ({ children }) => {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 
-export const useAuth = () => {
-  const context = useContext(AuthContext)
-  if (!context) {
-    throw new Error("useAuth must be used within an AuthProvider")
-  }
-  return context
-}
-
-export default AuthContext
+export default AuthProvider

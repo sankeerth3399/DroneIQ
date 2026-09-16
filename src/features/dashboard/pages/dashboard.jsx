@@ -9,7 +9,7 @@ import {
   Radio,
   ExternalLink,
 } from "lucide-react"
-import { useTelemetry } from "@/context/TelemetryContext.jsx"
+import { useTelemetry } from "@/hooks/useTelemetry.js"
 
 const metrics = [
   {

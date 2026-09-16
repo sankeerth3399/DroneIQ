@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react"
 import { Outlet } from "react-router-dom"
 import Sidebar from "../layout/sidebar.jsx"
 import Header from "../components/Header/header.jsx"
+import FlightToast from "@/components/toast/FlightToast.jsx"
 
 const LAPTOP_BREAKPOINT = 1024
 
@@ -55,7 +56,10 @@ const MainLayout = () => {
         onCloseMobile={() => setMobileOpen(false)}
       />
 
-      <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden relative">
+        {/* Global HUD Flight Safety Notification Toast */}
+        <FlightToast />
+
         <header className="shrink-0 bg-[#0A0E12] border-b border-[#1A2633] px-2.5 sm:px-4 py-2 sm:py-2.5 lg:py-3 z-30">
           <Header
             sidebarCollapsed={collapsed}

@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { LogOut } from "lucide-react"
-import UserBold from "@/assets/images/userBold.svg"
-import { useAuth } from "@/context/AuthContext.jsx"
+import { LogOut, User } from "lucide-react"
+import { useAuth } from "@/hooks/useAuth.js"
 
 const getLoggedInUser = (user) => {
     const username = user?.username || localStorage.getItem("firstName") || "Operator"
@@ -50,7 +49,7 @@ const ProfileDropdown = () => {
                 aria-label="Open profile"
                 aria-expanded={open}
             >
-                <img src={UserBold} alt="userIcon" className="w-4 h-4 sm:w-5 sm:h-5" />
+                <User className="w-4 h-4 sm:w-5 sm:h-5 text-[#8E9EAA] hover:text-[#35E0FF] transition" />
             </button>
 
             {open && (

@@ -6,6 +6,8 @@ export default function MissionSummaryHUD({
   formattedDistance = "0.0 m",
   maxAltitude = 0,
   formattedDuration = "00:00",
+  geofenceStatus = "ACTIVE",
+  boundaryCheckPassed = true,
 }) {
   const [minimized, setMinimized] = useState(false);
 
@@ -26,37 +28,68 @@ export default function MissionSummaryHUD({
 
       {/* Body */}
       {!minimized && (
-        <div className="p-2.5 grid grid-cols-2 gap-x-4 gap-y-2 min-w-[210px] sm:min-w-[240px]">
-          <div className="flex items-center justify-between">
-            <span className="text-[#8E9EAA] flex items-center gap-1">
-              <Target className="w-3 h-3 text-[#35E0FF]" />
-              <span>ITEMS:</span>
-            </span>
-            <strong className="text-white font-bold">{String(itemsCount).padStart(2, "0")}</strong>
+        <div className="p-2.5 min-w-[210px] sm:min-w-[240px] space-y-2">
+          <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[#8E9EAA] flex items-center gap-1">
+                <Target className="w-3 h-3 text-[#35E0FF]" />
+                <span>WAYPOINTS:</span>
+              </span>
+              <strong className="text-white font-bold">{String(itemsCount).padStart(2, "0")}</strong>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <span className="text-[#8E9EAA] flex items-center gap-1">
+                <Route className="w-3 h-3 text-[#35E0FF]" />
+                <span>DIST:</span>
+              </span>
+              <strong className="text-[#B7F3FF] font-bold">{formattedDistance}</strong>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <span className="text-[#8E9EAA] flex items-center gap-1">
+                <ArrowUp className="w-3 h-3 text-[#2FE089]" />
+                <span>MAX ALT:</span>
+              </span>
+              <strong className="text-[#2FE089] font-bold">{maxAltitude} m</strong>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <span className="text-[#8E9EAA] flex items-center gap-1">
+                <Clock className="w-3 h-3 text-[#EEF4F8]" />
+                <span>EST TIME:</span>
+              </span>
+              <strong className="text-white font-bold">{formattedDuration}</strong>
+            </div>
           </div>
 
-          <div className="flex items-center justify-between">
-            <span className="text-[#8E9EAA] flex items-center gap-1">
-              <Route className="w-3 h-3 text-[#35E0FF]" />
-              <span>DIST:</span>
-            </span>
-            <strong className="text-[#B7F3FF] font-bold">{formattedDistance}</strong>
-          </div>
+          {/* Boundary & Safety Status */}
+          <div className="pt-2 border-t border-[#1A2633] space-y-1.5">
+            <div className="flex items-center justify-between text-[10px]">
+              <span className="text-[#8E9EAA]">GEOFENCE:</span>
+              <span
+                className={`font-bold px-1.5 py-0.2 rounded text-[9.5px] ${
+                  geofenceStatus === "ACTIVE"
+                    ? "text-[#2FE089] bg-[#2FE08918] border border-[#2FE08940]"
+                    : "text-[#F59E0B] bg-[#F59E0B18] border border-[#F59E0B40]"
+                }`}
+              >
+                {geofenceStatus}
+              </span>
+            </div>
 
-          <div className="flex items-center justify-between">
-            <span className="text-[#8E9EAA] flex items-center gap-1">
-              <ArrowUp className="w-3 h-3 text-[#2FE089]" />
-              <span>MAX ALT:</span>
-            </span>
-            <strong className="text-[#2FE089] font-bold">{maxAltitude} m</strong>
-          </div>
-
-          <div className="flex items-center justify-between">
-            <span className="text-[#8E9EAA] flex items-center gap-1">
-              <Clock className="w-3 h-3 text-[#EEF4F8]" />
-              <span>EST TIME:</span>
-            </span>
-            <strong className="text-white font-bold">{formattedDuration}</strong>
+            <div className="flex items-center justify-between text-[10px]">
+              <span className="text-[#8E9EAA]">BOUNDARY CHECK:</span>
+              <span
+                className={`font-bold px-1.5 py-0.2 rounded text-[9.5px] ${
+                  boundaryCheckPassed
+                    ? "text-[#2FE089] bg-[#2FE08918] border border-[#2FE08940]"
+                    : "text-[#EF4444] bg-[#EF444418] border border-[#EF444440] animate-pulse"
+                }`}
+              >
+                {boundaryCheckPassed ? "PASSED" : "FAILED"}
+              </span>
+            </div>
           </div>
         </div>
       )}

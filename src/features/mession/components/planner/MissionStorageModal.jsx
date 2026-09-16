@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import { useState, useRef } from "react";
 import {
   X,
   Save,
@@ -11,13 +11,16 @@ import {
   FileText,
   AlertCircle,
 } from "lucide-react";
+import { validateMissionAgainstGeofence } from "@/utils/geofence.js";
 
 export default function MissionStorageModal({
   isOpen,
   initialTab = "save",
   onClose,
   planner,
+  geofence = null,
 }) {
+  const [prevIsOpen, setPrevIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState(initialTab);
   const [nameInput, setNameInput] = useState("");
   const [savedMissions, setSavedMissions] = useState([]);
@@ -27,7 +30,6 @@ export default function MissionStorageModal({
 
   const {
     missionName,
-    setMissionName,
     items,
     formattedDistance,
     formattedDuration,
@@ -36,10 +38,10 @@ export default function MissionStorageModal({
     saveMissionToStorage,
     loadMissionFromStorage,
     deleteSavedMissionFromStorage,
-    addWaypointAtCoordinates,
   } = planner;
 
-  useEffect(() => {
+  if (isOpen !== prevIsOpen) {
+    setPrevIsOpen(isOpen);
     if (isOpen) {
       setActiveTab(initialTab);
       setNameInput(missionName || `Survey Mission ${new Date().toLocaleDateString()}`);
@@ -47,13 +49,25 @@ export default function MissionStorageModal({
       setSaveSuccessMsg("");
       setLoadErrorMsg("");
     }
-  }, [isOpen, initialTab, missionName, listSavedMissions]);
+  }
 
   if (!isOpen) return null;
 
   const handleSave = (e) => {
     e.preventDefault();
     if (!nameInput.trim()) return;
+
+    if (!geofence || (Array.isArray(geofence) ? geofence.length < 3 : (geofence?.coordinates?.length || 0) < 3)) {
+      setLoadErrorMsg("GEOFENCE REQUIRED — Create and save a geofence before planning waypoints.");
+      return;
+    }
+
+    const validation = validateMissionAgainstGeofence(items, geofence);
+    if (!validation.isValid) {
+      setLoadErrorMsg(validation.message || "MISSION ROUTE EXCEEDS GEOFENCE — Route must remain inside boundary.");
+      return;
+    }
+
     saveMissionToStorage(nameInput.trim());
     setSavedMissions(listSavedMissions());
     setSaveSuccessMsg(`Mission "${nameInput.trim()}" saved successfully!`);
@@ -122,7 +136,7 @@ export default function MissionStorageModal({
         } else {
           setLoadErrorMsg("Invalid mission plan format: No waypoints found in JSON.");
         }
-      } catch (err) {
+      } catch {
         setLoadErrorMsg("Error parsing JSON file. Please ensure it is valid JSON.");
       }
     };

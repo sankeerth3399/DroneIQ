@@ -1,13 +1,11 @@
-import React, { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   UploadCloud,
   X,
-  Radio,
   CheckCircle2,
   AlertTriangle,
   Loader2,
   Cpu,
-  ShieldCheck,
 } from "lucide-react";
 
 /**
@@ -19,12 +17,13 @@ export default function MissionUploadModal({
   isOpen,
   onClose,
   planner,
-  telemetry,
   droneId = "DRONE-001",
+  geofenceValidation = null,
 }) {
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [uploadComplete, setUploadComplete] = useState(false);
+  const timerRefs = useRef([]);
 
   const {
     missionName,
@@ -36,22 +35,32 @@ export default function MissionUploadModal({
     validation,
   } = planner;
 
+  useEffect(() => {
+    return () => {
+      timerRefs.current.forEach(clearTimeout);
+    };
+  }, []);
+
   if (!isOpen) return null;
 
   const handleStartUpload = () => {
     setUploading(true);
     setProgress(15);
 
-    const step1 = setTimeout(() => setProgress(45), 250);
-    const step2 = setTimeout(() => setProgress(80), 550);
-    const step3 = setTimeout(() => {
-      setProgress(100);
-      setUploading(false);
-      setUploadComplete(true);
-    }, 850);
+    timerRefs.current.forEach(clearTimeout);
+    timerRefs.current = [
+      setTimeout(() => setProgress(45), 250),
+      setTimeout(() => setProgress(80), 550),
+      setTimeout(() => {
+        setProgress(100);
+        setUploading(false);
+        setUploadComplete(true);
+      }, 850),
+    ];
   };
 
   const handleResetAndClose = () => {
+    timerRefs.current.forEach(clearTimeout);
     setUploading(false);
     setProgress(0);
     setUploadComplete(false);
@@ -193,6 +202,19 @@ export default function MissionUploadModal({
               </div>
             )}
 
+            {/* Geofence Boundary Violation Blocking Alert */}
+            {geofenceValidation && !geofenceValidation.isValid && (
+              <div className="flex items-start gap-2 p-2.5 rounded-xl bg-[#EF444422] border border-[#EF444455] text-[#EF4444] text-[11px] font-mono">
+                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                <div>
+                  <div className="font-bold">Upload Blocked: Geofence Breach</div>
+                  <div className="text-[10px] text-[#FCA5A5] mt-0.5">
+                    {geofenceValidation.message || "Mission path breaches active geofence perimeter."}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Actions */}
             <div className="pt-2 flex items-center justify-end gap-2.5">
               <button
@@ -204,10 +226,10 @@ export default function MissionUploadModal({
               </button>
               <button
                 type="button"
-                disabled={!validation.isValid}
+                disabled={!validation.isValid || (geofenceValidation && !geofenceValidation.isValid)}
                 onClick={handleStartUpload}
                 className={`flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-mono font-bold transition shadow-lg ${
-                  validation.isValid
+                  validation.isValid && (!geofenceValidation || geofenceValidation.isValid)
                     ? "bg-[#2FE089] hover:bg-[#52F0A0] text-[#06090E] shadow-[0_0_15px_rgba(47,224,137,0.4)]"
                     : "bg-[#1A2633] text-[#475569] cursor-not-allowed"
                 }`}

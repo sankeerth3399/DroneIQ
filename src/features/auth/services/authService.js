@@ -3,7 +3,7 @@
  */
 import { authService } from "@/services/api/authService.js"
 
-export const loginOperator = async ({ email, username, password, role, rememberDevice }) => {
+export const loginOperator = async ({ email, username, password, rememberDevice }) => {
   const loginUser = username || email
 
   const { user, token } = await authService.login({

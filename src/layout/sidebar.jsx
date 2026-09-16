@@ -1,22 +1,25 @@
-import { NavLink } from "react-router-dom"
-import { X } from "lucide-react"
+import { useState } from "react"
+import { NavLink, useLocation, useNavigate } from "react-router-dom"
+import { X, ChevronDown, FileText, MapPin, ShieldAlert } from "lucide-react"
 import Fly from "../assets/images/drone.svg"
 import Settings from "../assets/images/settings.svg"
 import Logs from "../assets/images/logs.svg"
-import Plan from "../assets/images/plan.svg"
 import Target from "../assets/images/target.svg"
-import Waypts from "../assets/images/waypts.svg"
 import Dashboard from "@/assets/images/dashboard.svg"
 import AeroLogo from "@/components/AeroLogo.jsx"
 
 const Tabs = [
     { label: "Dashboard", value: "/dashboard", Permission: "Dashboard", img: Dashboard },
     { label: "Fly", value: "/fly", Permission: "Fly", img: Fly },
-    { label: "Missions", value: "/missions", Permission: "Fleet Management", img: Target },
-    { label: "Plan", value: "/plan", Permission: "Geofencing", img: Plan },
-    { label: "Waypts", value: "/waypts", Permission: "Alerts & Events", img: Waypts },
+    { label: "Missions", value: "/missions", Permission: "Fleet Management", img: Target, isDropdown: true },
     { label: "Logs", value: "/logs", Permission: "Analytics", img: Logs },
     { label: "Settings", value: "/analytics", Permission: "Analytics", img: Settings },
+]
+
+const missionSubItems = [
+    { label: "Mission Details", value: "/missions/details", icon: FileText },
+    { label: "Create Geofence", value: "/missions/geofence", icon: ShieldAlert },
+    { label: "Waypoint Planning", value: "/missions/waypoints", icon: MapPin },
 ]
 
 const data = {
@@ -44,6 +47,18 @@ const visibleTabs = Tabs.filter((tab) =>
 )
 
 const Sidebar = ({ collapsed = false, onToggle, mobileOpen = false, onCloseMobile }) => {
+    const location = useLocation()
+    const navigate = useNavigate()
+    const isMissionsActive = location.pathname.startsWith("/missions")
+    const [missionsExpanded, setMissionsExpanded] = useState(true)
+    const [prevPath, setPrevPath] = useState(location.pathname)
+
+    if (location.pathname !== prevPath) {
+        setPrevPath(location.pathname)
+        if (isMissionsActive) {
+            setMissionsExpanded(true)
+        }
+    }
 
     return (
         <aside
@@ -111,6 +126,80 @@ const Sidebar = ({ collapsed = false, onToggle, mobileOpen = false, onCloseMobil
                 }`}
             >
                 {visibleTabs.map((tab) => {
+                    if (tab.isDropdown) {
+                        return (
+                            <div key={tab.value} className="mb-0.5">
+                                {/* Parent Dropdown Header */}
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        if (collapsed) {
+                                            navigate("/missions/details")
+                                            onCloseMobile?.()
+                                        } else {
+                                            setMissionsExpanded((prev) => !prev)
+                                        }
+                                    }}
+                                    title={collapsed ? "Missions" : undefined}
+                                    className={`w-full relative flex items-center text-[13px] font-semibold transition-all duration-100 rounded-[6px] ${
+                                        collapsed
+                                            ? `lg:justify-center lg:py-2.5 ${
+                                                  isMissionsActive
+                                                      ? "bg-[#171F27B2] text-white shadow-[0px_4px_4px_0px_#00000026]"
+                                                      : "text-[#CCCCCC] hover:bg-[#FFFFFF0A]"
+                                              } py-2.5 pl-3 pr-2 gap-2.5`
+                                            : `justify-between py-2.5 pl-3 pr-2.5 gap-2 ${
+                                                  isMissionsActive
+                                                      ? "bg-[#171F2780] text-[#FFFFFF] border-l-[3px] border-[#38BDF8]"
+                                                      : "bg-inherit text-[#CCCCCC] hover:bg-[#FFFFFF0A]"
+                                              }`
+                                    }`}
+                                >
+                                    <div className="flex items-center gap-2.5 min-w-0">
+                                        <img src={tab.img} className="w-[18px] h-[18px] shrink-0" alt={tab.label} />
+                                        <span className={`truncate uppercase tracking-wider text-[12px] font-bold ${collapsed ? "lg:hidden block" : "block"}`}>
+                                            {tab.label}
+                                        </span>
+                                    </div>
+
+                                    {!collapsed && (
+                                        <ChevronDown
+                                            className={`w-3.5 h-3.5 text-[#8E9EAA] transition-transform duration-200 ${
+                                                missionsExpanded ? "rotate-0 text-[#35E0FF]" : "-rotate-90"
+                                            }`}
+                                        />
+                                    )}
+                                </button>
+
+                                {/* Child Subitems Menu */}
+                                {!collapsed && missionsExpanded && (
+                                    <div className="flex flex-col mt-0.5 mb-1 pl-4 border-l border-[#1A2633] ml-3.5 space-y-0.5">
+                                        {missionSubItems.map((sub) => {
+                                            const SubIcon = sub.icon
+                                            return (
+                                                <NavLink
+                                                    to={sub.value}
+                                                    key={sub.value}
+                                                    onClick={onCloseMobile}
+                                                    className={({ isActive }) =>
+                                                        `flex items-center gap-2 px-2.5 py-1.5 rounded-[5px] text-[11px] font-medium transition-colors ${
+                                                            isActive
+                                                                ? "bg-[#35E0FF1A] text-[#35E0FF] border-l-2 border-[#35E0FF] font-semibold"
+                                                                : "text-[#94A3B8] hover:text-white hover:bg-[#FFFFFF0A]"
+                                                        }`
+                                                    }
+                                                >
+                                                    <SubIcon className="w-3 h-3 shrink-0 opacity-70" />
+                                                    <span className="truncate">{sub.label}</span>
+                                                </NavLink>
+                                            )
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+                        )
+                    }
+
                     return (
                         <NavLink
                             to={tab.value}

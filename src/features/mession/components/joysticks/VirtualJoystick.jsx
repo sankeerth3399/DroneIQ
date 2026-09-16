@@ -25,11 +25,30 @@ export const VirtualJoystick = ({
 }) => {
   const containerRef = useRef(null)
   const activePointerIdRef = useRef(null)
-  const [knobPos, setKnobPos] = useState({ x: 0, y: -defaultY * ((size - knobSize) / 2) })
+  const cleanupsRef = useRef(null)
+
+  const onChangeRef = useRef(onChange)
+  const onActiveChangeRef = useRef(onActiveChange)
+  useEffect(() => {
+    onChangeRef.current = onChange
+  }, [onChange])
+  useEffect(() => {
+    onActiveChangeRef.current = onActiveChange
+  }, [onActiveChange])
+
+  const maxRadius = (size - knobSize) / 2
+  const initialPy = -defaultY * maxRadius
+
+  const [knobPos, setKnobPos] = useState({ x: 0, y: initialPy })
   const [isDragging, setIsDragging] = useState(false)
   const [normalized, setNormalized] = useState({ x: 0, y: defaultY })
 
-  const maxRadius = (size - knobSize) / 2
+  const posRef = useRef({
+    px: 0,
+    py: initialPy,
+    normX: 0,
+    normY: defaultY,
+  })
 
   // Apply deadzone and clamp to [-1, 1]
   const processAxis = useCallback((raw) => {
@@ -67,6 +86,16 @@ export const VirtualJoystick = ({
     return { px, py, normX, normY }
   }, [maxRadius, processAxis])
 
+  // Clean up any global listeners on unmount
+  useEffect(() => {
+    return () => {
+      if (cleanupsRef.current) {
+        cleanupsRef.current()
+        cleanupsRef.current = null
+      }
+    }
+  }, [])
+
   const handlePointerDown = (e) => {
     // Only capture primary touch/click per stick
     if (activePointerIdRef.current !== null) return
@@ -74,80 +103,65 @@ export const VirtualJoystick = ({
     e.preventDefault()
     e.stopPropagation()
 
-    activePointerIdRef.current = e.pointerId
-    try {
-      e.currentTarget.setPointerCapture(e.pointerId)
-    } catch {
-      // Ignore if pointer capture fails
-    }
-
+    const pointerId = e.pointerId
+    activePointerIdRef.current = pointerId
     setIsDragging(true)
-    onActiveChange?.(true)
+    onActiveChangeRef.current?.(true)
 
-    const { px, py, normX, normY } = calculatePosition(e.clientX, e.clientY)
-    setKnobPos({ x: px, y: py })
-    setNormalized({ x: normX, y: normY })
-    onChange?.({ x: normX, y: normY })
-  }
-
-  const handlePointerMove = (e) => {
-    if (activePointerIdRef.current !== e.pointerId) return
-    e.preventDefault()
-    e.stopPropagation()
-
-    const { px, py, normX, normY } = calculatePosition(e.clientX, e.clientY)
-    setKnobPos({ x: px, y: py })
-    setNormalized({ x: normX, y: normY })
-    onChange?.({ x: normX, y: normY })
-  }
-
-  const handlePointerUp = (e) => {
-    if (activePointerIdRef.current !== e.pointerId) return
-    e.preventDefault()
-    e.stopPropagation()
-
-    try {
-      e.currentTarget.releasePointerCapture(e.pointerId)
-    } catch {
-      // Ignore
+    const updatePosition = (clientX, clientY) => {
+      const pos = calculatePosition(clientX, clientY)
+      posRef.current = pos
+      setKnobPos({ x: pos.px, y: pos.py })
+      setNormalized({ x: pos.normX, y: pos.normY })
+      onChangeRef.current?.({ x: pos.normX, y: pos.normY })
     }
 
-    activePointerIdRef.current = null
-    setIsDragging(false)
-    onActiveChange?.(false)
+    updatePosition(e.clientX, e.clientY)
 
-    // Spring return
-    const nextPx = springX ? 0 : knobPos.x
-    const nextPy = springY ? -defaultY * maxRadius : knobPos.y
-    const nextNormX = springX ? 0 : normalized.x
-    const nextNormY = springY ? defaultY : normalized.y
+    const handleGlobalMove = (moveEvt) => {
+      if (activePointerIdRef.current !== moveEvt.pointerId) return
+      moveEvt.preventDefault()
+      updatePosition(moveEvt.clientX, moveEvt.clientY)
+    }
 
-    setKnobPos({ x: nextPx, y: nextPy })
-    setNormalized({ x: nextNormX, y: nextNormY })
-    onChange?.({ x: nextNormX, y: nextNormY })
-  }
+    const handleGlobalRelease = (releaseEvt) => {
+      if (activePointerIdRef.current !== releaseEvt.pointerId && releaseEvt.type !== "blur") return
 
-  // Handle window blur / release
-  useEffect(() => {
-    const handleGlobalRelease = () => {
-      if (activePointerIdRef.current !== null) {
-        activePointerIdRef.current = null
-        setIsDragging(false)
-        onActiveChange?.(false)
-        if (springX || springY) {
-          const nextPx = springX ? 0 : knobPos.x
-          const nextPy = springY ? -defaultY * maxRadius : knobPos.y
-          const nextNormX = springX ? 0 : normalized.x
-          const nextNormY = springY ? defaultY : normalized.y
-          setKnobPos({ x: nextPx, y: nextPy })
-          setNormalized({ x: nextNormX, y: nextNormY })
-          onChange?.({ x: nextNormX, y: nextNormY })
-        }
+      if (cleanupsRef.current) {
+        cleanupsRef.current()
+        cleanupsRef.current = null
       }
+
+      activePointerIdRef.current = null
+      setIsDragging(false)
+      onActiveChangeRef.current?.(false)
+
+      // Spring return to neutral center
+      const nextPx = springX ? 0 : posRef.current.px
+      const nextPy = springY ? -defaultY * maxRadius : posRef.current.py
+      const nextNormX = springX ? 0 : posRef.current.normX
+      const nextNormY = springY ? defaultY : posRef.current.normY
+
+      posRef.current = { px: nextPx, py: nextPy, normX: nextNormX, normY: nextNormY }
+      setKnobPos({ x: nextPx, y: nextPy })
+      setNormalized({ x: nextNormX, y: nextNormY })
+      onChangeRef.current?.({ x: nextNormX, y: nextNormY })
     }
+
+    const removeListeners = () => {
+      window.removeEventListener("pointermove", handleGlobalMove)
+      window.removeEventListener("pointerup", handleGlobalRelease)
+      window.removeEventListener("pointercancel", handleGlobalRelease)
+      window.removeEventListener("blur", handleGlobalRelease)
+    }
+
+    cleanupsRef.current = removeListeners
+
+    window.addEventListener("pointermove", handleGlobalMove, { passive: false })
+    window.addEventListener("pointerup", handleGlobalRelease)
     window.addEventListener("pointercancel", handleGlobalRelease)
-    return () => window.removeEventListener("pointercancel", handleGlobalRelease)
-  }, [springX, springY, defaultY, maxRadius, knobPos.x, knobPos.y, normalized.x, normalized.y, onChange, onActiveChange])
+    window.addEventListener("blur", handleGlobalRelease)
+  }
 
   return (
     <div
@@ -159,9 +173,6 @@ export const VirtualJoystick = ({
       }`}
       style={{ width: `${size}px`, height: `${size}px` }}
       onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onPointerCancel={handlePointerUp}
       role="slider"
       aria-label={label}
       aria-valuemin={-1}

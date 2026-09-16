@@ -2,7 +2,6 @@ import { useState, useRef, useEffect } from "react";
 import {
   Plus,
   ChevronDown,
-  Edit3,
   Trash2,
   RotateCcw,
   RotateCw,
@@ -26,6 +25,8 @@ export default function MissionPlanningToolbar({
   onOpenLoad,
   onOpenUpload,
   onOpenClear,
+  canSave = true,
+  canUpload = true,
 }) {
   const {
     items,
@@ -233,14 +234,14 @@ export default function MissionPlanningToolbar({
       {/* 8. Save / Load */}
       <button
         type="button"
-        disabled={!hasItems}
+        disabled={!hasItems || !canSave}
         onClick={onOpenSave}
         className={`flex items-center gap-1 px-2 py-1.5 rounded-lg transition shrink-0 ${
-          hasItems
+          hasItems && canSave
             ? "text-[#EEF4F8] hover:bg-[#1E293B] hover:text-[#35E0FF]"
             : "text-[#475569] cursor-not-allowed"
         }`}
-        title="Save Mission to Local Storage"
+        title={!canSave ? "Saving blocked: Geofence violation or missing" : "Save Mission to Local Storage"}
       >
         <Save className="w-3.5 h-3.5" />
         <span className="hidden xl:inline">Save</span>
@@ -259,14 +260,14 @@ export default function MissionPlanningToolbar({
       {/* 9. Upload Mission Button */}
       <button
         type="button"
-        disabled={!hasItems}
+        disabled={!hasItems || !canUpload}
         onClick={onOpenUpload}
         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition shrink-0 ${
-          hasItems
+          hasItems && canUpload
             ? "bg-[#2FE0891A] text-[#2FE089] border border-[#2FE0894D] hover:bg-[#2FE0892E] shadow-[0_0_10px_rgba(47,224,137,0.2)]"
             : "text-[#475569] bg-[#0E1520] border border-[#1C2834] cursor-not-allowed"
         }`}
-        title="Upload Mission Plan to Drone (Simulation Ready)"
+        title={!canUpload ? "Upload blocked: Geofence boundary breach or missing" : "Upload Mission Plan to Drone (Simulation Ready)"}
       >
         <UploadCloud className="w-3.5 h-3.5" />
         <span>Upload</span>

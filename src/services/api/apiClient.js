@@ -30,7 +30,7 @@ export async function apiClient(endpoint, options = {}) {
   let response
   try {
     response = await fetch(url, config)
-  } catch (netErr) {
+  } catch {
     const error = new Error(`Network connection error: Unable to reach backend at ${API_BASE_URL}`)
     error.isNetworkError = true
     error.status = 0
@@ -44,20 +44,16 @@ export async function apiClient(endpoint, options = {}) {
     }
   }
 
-  let responseData = null
+  let responseData
   const contentType = response.headers.get("content-type")
-  if (contentType && contentType.includes("application/json")) {
-    try {
+  try {
+    if (contentType && contentType.includes("application/json")) {
       responseData = await response.json()
-    } catch {
-      responseData = null
-    }
-  } else {
-    try {
+    } else {
       responseData = await response.text()
-    } catch {
-      responseData = null
     }
+  } catch {
+    responseData = null
   }
 
   if (!response.ok) {

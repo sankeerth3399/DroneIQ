@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom"
 import { Plane, CheckCircle2, Play, Radio, Shield, Gauge } from "lucide-react"
-import { useTelemetry } from "@/context/TelemetryContext.jsx"
+import { useTelemetry } from "@/hooks/useTelemetry.js"
 
 const checklistItems = [
   { label: "Battery Level > 30%", status: "PASSED", val: "84% (24.2V)" },

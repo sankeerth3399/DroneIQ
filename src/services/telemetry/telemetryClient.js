@@ -173,7 +173,7 @@ export class DroneIqClient {
       }
     }
 
-    this.ws.onerror = (err) => {
+    this.ws.onerror = () => {
       console.warn("[DroneIqClient] WebSocket error event encountered.")
       this.setConnectionState(
         this.reconnectAttempts > 2 ? ConnectionState.BACKEND_UNAVAILABLE : ConnectionState.CONNECTING

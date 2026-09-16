@@ -1,9 +1,8 @@
-import { createContext, useContext, useState, useEffect, useCallback, useMemo } from "react"
-import { useAuth } from "./AuthContext.jsx"
+import { useState, useEffect, useCallback, useMemo, useRef } from "react"
+import { TelemetryContext } from "./telemetryContextCore.js"
+import { useAuth } from "@/hooks/useAuth.js"
 import { telemetryClient } from "@/services/telemetry/telemetryClient.js"
 import { ConnectionState, createDefaultTelemetry } from "@/services/telemetry/telemetryTypes.js"
-
-const TelemetryContext = createContext(null)
 
 export const TelemetryProvider = ({ children }) => {
   const { token, isAuthenticated } = useAuth()
@@ -12,6 +11,16 @@ export const TelemetryProvider = ({ children }) => {
   const [fleetTelemetry, setFleetTelemetry] = useState({})
   const [connectionState, setConnectionState] = useState(ConnectionState.DISCONNECTED)
   const [lastTelemetryTime, setLastTelemetryTime] = useState(null)
+  const [prevToken, setPrevToken] = useState(token)
+
+  // Clear fleet telemetry when token is cleared
+  if (token !== prevToken) {
+    setPrevToken(token)
+    if (!token) {
+      setFleetTelemetry({})
+      setLastTelemetryTime(null)
+    }
+  }
 
   // Handle incoming live telemetry event
   const handleTelemetryUpdate = useCallback((data) => {
@@ -47,15 +56,10 @@ export const TelemetryProvider = ({ children }) => {
       telemetryClient.connect(token)
     } else {
       telemetryClient.disconnect()
-      setFleetTelemetry({})
-      setLastTelemetryTime(null)
     }
 
     return () => {
-      // Clean up on component unmount
-      if (!isAuthenticated) {
-        telemetryClient.disconnect()
-      }
+      telemetryClient.disconnect()
     }
   }, [isAuthenticated, token])
 
@@ -86,22 +90,83 @@ export const TelemetryProvider = ({ children }) => {
     return () => clearInterval(interval)
   }, [connectionState, lastTelemetryTime])
 
+  // Centralized ARM/DISARM Flight Safety State (Initial state: true)
+  const [isArmed, setIsArmed] = useState(true)
+
+  // Centralized Flight Control Notification Toast
+  const [toast, setToast] = useState(null)
+  const toastTimerRef = useRef(null)
+
+  const clearToast = useCallback(() => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+    setToast(null)
+  }, [])
+
+  const showToast = useCallback((message, type = "info") => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+    setToast({
+      id: Date.now(),
+      message,
+      type,
+    })
+    toastTimerRef.current = setTimeout(() => {
+      setToast(null)
+    }, 2800)
+  }, [])
+
+  const toggleArmed = useCallback(() => {
+    setIsArmed((prev) => {
+      const next = !prev
+      if (next) {
+        showToast("Drone Armed Successfully", "success")
+      } else {
+        showToast("Drone Disarmed Successfully", "warning")
+      }
+      return next
+    })
+  }, [showToast])
+
+  const setArmed = useCallback((val) => {
+    setIsArmed((prev) => {
+      const next = Boolean(val)
+      if (prev !== next) {
+        if (next) {
+          showToast("Drone Armed Successfully", "success")
+        } else {
+          showToast("Drone Disarmed Successfully", "warning")
+        }
+      }
+      return next
+    })
+  }, [showToast])
+
   // Extract selected drone's latest telemetry with safe fallback
-  const telemetry = useMemo(() => {
+  const rawTelemetry = useMemo(() => {
     const activeData = fleetTelemetry[selectedDroneId]
     if (activeData) return activeData
     return createDefaultTelemetry(selectedDroneId)
   }, [fleetTelemetry, selectedDroneId])
 
-  const isLive = useMemo(() => {
-    return (
-      (connectionState === ConnectionState.AUTHENTICATED || connectionState === ConnectionState.CONNECTED) &&
-      Boolean(lastTelemetryTime && Date.now() - lastTelemetryTime < 6000)
-    )
-  }, [connectionState, lastTelemetryTime])
+  // Centralized telemetry object with authoritative isArmed state
+  const telemetry = useMemo(() => ({
+    ...rawTelemetry,
+    armed: isArmed,
+    isArmed,
+  }), [rawTelemetry, isArmed])
+
+  const isLive = Boolean(
+    lastTelemetryTime && connectionState === ConnectionState.AUTHENTICATED
+  )
 
   const value = {
     telemetry,
+    isArmed,
+    setIsArmed,
+    setArmed,
+    toggleArmed,
+    toast,
+    showToast,
+    clearToast,
     fleetTelemetry,
     selectedDroneId,
     selectDrone,
@@ -114,12 +179,4 @@ export const TelemetryProvider = ({ children }) => {
   return <TelemetryContext.Provider value={value}>{children}</TelemetryContext.Provider>
 }
 
-export const useTelemetry = () => {
-  const context = useContext(TelemetryContext)
-  if (!context) {
-    throw new Error("useTelemetry must be used within a TelemetryProvider")
-  }
-  return context
-}
-
-export default TelemetryContext
+export default TelemetryProvider

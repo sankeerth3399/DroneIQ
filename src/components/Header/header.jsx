@@ -1,8 +1,8 @@
-import { Menu } from "lucide-react"
-import Notification from "@/assets/images/notification.svg"
+import { Menu, Bell } from "lucide-react"
 import ProfileDetails from "@/components/profile/profileDetails.jsx"
-import { useTelemetry } from "@/context/TelemetryContext.jsx"
+import { useTelemetry } from "@/hooks/useTelemetry.js"
 import { ConnectionState } from "@/services/telemetry/telemetryTypes.js"
+import ArmStatusButton from "./ArmStatusButton.jsx"
 
 const Header = ({ onToggleMobile, mobileOpen }) => {
     const { telemetry, selectedDroneId, connectionState, isLive } = useTelemetry()
@@ -26,7 +26,6 @@ const Header = ({ onToggleMobile, mobileOpen }) => {
 
     const linkInfo = getLinkDisplay()
     const battery = typeof telemetry.batteryPercentage === "number" ? Math.round(telemetry.batteryPercentage) : 84
-    const isArmed = Boolean(telemetry.armed)
     const flightMode = telemetry.flightMode || "AUTO"
     const satellites = telemetry.gpsSatellites || 16
 
@@ -47,26 +46,8 @@ const Header = ({ onToggleMobile, mobileOpen }) => {
 
                 {/* ADAPTIVE TELEMETRY STRIP */}
                 <div className="flex items-center gap-2 sm:gap-3 lg:gap-5 min-w-0 overflow-hidden">
-                    {/* ARMED / DISARMED STATUS BADGE */}
-                    <div
-                        className={`inline-flex items-center gap-1.5 rounded-[4px] px-2 sm:px-2.5 py-1 border shrink-0 ${
-                            isArmed
-                                ? "bg-[#5C1F1F] border-[#7A2B2B]"
-                                : "bg-[#1B2836] border-[#2A3E52]"
-                        }`}
-                        title={isArmed ? "Vehicle is ARMED" : "Vehicle is DISARMED"}
-                    >
-                        <div
-                            className={`w-[6px] h-[6px] rounded-full shrink-0 ${
-                                isArmed
-                                    ? "bg-[#FF4141] shadow-[0px_0px_5px_0px_#FF4141]"
-                                    : "bg-[#8E9EAA]"
-                            }`}
-                        />
-                        <p className={`text-[10px] sm:text-[11px] font-semibold whitespace-nowrap ${isArmed ? "text-[#FFB3B3]" : "text-[#8E9EAA]"}`}>
-                            {isArmed ? "ARMED" : "DISARMED"}
-                        </p>
-                    </div>
+                    {/* ARMED / UNARMED INTERACTIVE STATUS BUTTON */}
+                    <ArmStatusButton />
 
                     {/* FLIGHT MODE BADGE */}
                     <div className="inline-flex items-center gap-1.5 bg-[#1A5A68] border border-[#215D6B] rounded-[4px] px-2 sm:px-2.5 py-1 shrink-0">
@@ -142,7 +123,7 @@ const Header = ({ onToggleMobile, mobileOpen }) => {
                     className="flex justify-center items-center w-8 h-8 sm:w-9 sm:h-9 bg-[#171F27] border border-[#223240] rounded-[8px] hover:bg-[#202B36] transition shrink-0"
                     title="Notifications"
                 >
-                    <img src={Notification} alt="notification" className="w-4 h-4 sm:w-5 sm:h-5" />
+                    <Bell className="w-4 h-4 text-[#8E9EAA] hover:text-[#35E0FF] transition" />
                 </button>
                 <ProfileDetails />
             </div>

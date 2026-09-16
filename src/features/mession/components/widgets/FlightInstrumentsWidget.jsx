@@ -1,17 +1,63 @@
-import { useState, useEffect } from "react"
-import { Compass, Gauge } from "lucide-react"
-import DraggableWidget from "./DraggableWidget.jsx"
-import AttitudeIndicator from "../instruments/AttitudeIndicator.jsx"
-import CompassIndicator from "../instruments/CompassIndicator.jsx"
+import { useState, useEffect, memo } from "react";
+import { Compass } from "lucide-react";
+import AttitudeIndicator from "../instruments/AttitudeIndicator.jsx";
+import CompassIndicator from "../instruments/CompassIndicator.jsx";
+import { getCardinalDirection } from "@/utils/heading.js";
 
 /**
- * Combined Movable Flight Instruments Widget
+ * Shared Flight Data Metrics Strip (Altitude, Speed, Climb VSI)
+ * Rendered as lightweight floating HUD pills directly beneath the instruments
+ */
+export const TelemetryStrip = memo(function TelemetryStrip({ telemetry }) {
+  const altVal = typeof telemetry.altitude === "number" ? telemetry.altitude.toFixed(1) : "0.0";
+  const spdVal =
+    typeof telemetry.speed === "number"
+      ? telemetry.speed.toFixed(1)
+      : typeof telemetry.groundSpeed === "number"
+      ? telemetry.groundSpeed.toFixed(1)
+      : "0.0";
+  const climbVal =
+    typeof telemetry.verticalSpeed === "number"
+      ? telemetry.verticalSpeed
+      : typeof telemetry.climbRate === "number"
+      ? telemetry.climbRate
+      : 0;
+
+  return (
+    <div className="grid grid-cols-3 gap-1.5 w-full mt-2 text-[8px] sm:text-[8.5px] font-mono text-center select-none">
+      <div className="bg-[#080C14EE] border border-[#1E293B] backdrop-blur-md py-1 px-1 rounded-md shadow-md">
+        <span className="text-[#94A3B8] text-[7px] block font-medium">ALTITUDE</span>
+        <strong className="text-[#2FE089] text-[9px] font-bold">{altVal}m</strong>
+      </div>
+
+      <div className="bg-[#080C14EE] border border-[#1E293B] backdrop-blur-md py-1 px-1 rounded-md shadow-md">
+        <span className="text-[#94A3B8] text-[7px] block font-medium">SPEED</span>
+        <strong className="text-[#35E0FF] text-[9px] font-bold">{spdVal}m/s</strong>
+      </div>
+
+      <div className="bg-[#080C14EE] border border-[#1E293B] backdrop-blur-md py-1 px-1 rounded-md shadow-md">
+        <span className="text-[#94A3B8] text-[7px] block font-medium">CLIMB VSI</span>
+        <strong
+          className={`text-[9px] font-bold ${
+            climbVal > 0
+              ? "text-[#2FE089]"
+              : climbVal < 0
+              ? "text-[#FF8585]"
+              : "text-[#F8FAFC]"
+          }`}
+        >
+          {climbVal > 0 ? `+${climbVal.toFixed(1)}` : climbVal.toFixed(1)}
+        </strong>
+      </div>
+    </div>
+  );
+});
+
+/**
+ * Floating HUD Flight Instruments (Attitude Indicator + Compass + Flight Telemetry)
  * 
- * Houses two visually and functionally independent circular instruments:
- * 1. Circular Attitude Indicator / Artificial Horizon (pitch, roll, bank arc, wings)
- * 2. Circular Compass (360° rotating heading ring, cardinal marks, lubber line)
- * 
- * The entire widget is draggable as a single unit with localStorage position persistence.
+ * Free-floating circular HUD instruments directly over the map with NO outer panel,
+ * box, border, or card background.
  */
 export const FlightInstrumentsWidget = ({
   telemetry = {
@@ -23,179 +69,86 @@ export const FlightInstrumentsWidget = ({
     groundSpeed: 5,
     flightMode: "GUIDED",
   },
-  defaultPosition = { x: 20, y: 20 },
 }) => {
-  // Dynamic instrument sizing (74px on mobile phones, 90px on desktop - compact 20% footprint)
   const [instrumentSize, setInstrumentSize] = useState(() =>
-    typeof window !== "undefined" && window.innerWidth < 640 ? 74 : 90
-  )
+    typeof window !== "undefined" && window.innerWidth < 640 ? 74 : 88
+  );
 
   useEffect(() => {
     const handleResize = () => {
-      setInstrumentSize(window.innerWidth < 640 ? 74 : 90)
-    }
-    window.addEventListener("resize", handleResize)
-    return () => window.removeEventListener("resize", handleResize)
-  }, [])
+      setInstrumentSize(window.innerWidth < 640 ? 74 : 88);
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
-  // Cardinal direction calculation
-  const getCardinal = (deg) => {
-    const directions = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
-    const index = Math.round(((deg % 360) / 45)) % 8
-    return directions[index]
-  }
-
-  const cardinal = getCardinal(telemetry.heading)
-  const headingText = `${String(Math.round(telemetry.heading)).padStart(3, "0")}° ${cardinal}`
+  const cardinal = getCardinalDirection(telemetry.heading);
+  const headingText = `${String(Math.round(telemetry.heading)).padStart(3, "0")}° ${cardinal}`;
 
   return (
-    <DraggableWidget
-      id="flight_instruments"
-      title="FLIGHT INSTRUMENTS"
-      icon={Gauge}
-      badge={telemetry.flightMode}
-      badgeColor="text-[#35E0FF] bg-[#35E0FF1A] border-[#35E0FF33]"
-      defaultPosition={defaultPosition}
-      minimizedContent={
-        <div className="flex items-center gap-2 text-[9px] font-mono select-none">
-          <span className="text-[#8E9EAA]">
-            ATT: <strong className="text-[#35E0FF]">{telemetry.pitch >= 0 ? `+${telemetry.pitch}` : telemetry.pitch}°</strong> /{" "}
-            <strong className="text-[#35E0FF]">{telemetry.roll >= 0 ? `+${telemetry.roll}` : telemetry.roll}°</strong>
-          </span>
-          <div className="w-[1px] h-3 bg-[#223240]" />
-          <div className="flex items-center gap-1 text-[#35E0FF]">
-            <Compass className="w-2.5 h-2.5" />
-            <strong className="text-[10px]">{headingText}</strong>
-          </div>
-          <div className="w-[1px] h-3 bg-[#223240]" />
-          <span className="text-[#8E9EAA]">
-            ALT: <strong className="text-[#2FE089]">{telemetry.altitude}m</strong>
-          </span>
-        </div>
-      }
+    <div
+      className="absolute top-2 left-2 sm:top-3.5 sm:left-4 z-20 pointer-events-auto flex flex-col items-start select-none bg-transparent border-none shadow-none"
+      style={{ background: "transparent", border: "none", boxShadow: "none" }}
     >
-      <div className="flex flex-col items-center select-none">
-        {/* TWO SEPARATE INSTRUMENTS SIDE-BY-SIDE */}
-        <div className="flex items-center gap-2 p-0.5">
-          {/* 1. SEPARATE CIRCULAR ATTITUDE INDICATOR (ARTIFICIAL HORIZON) */}
-          <div className="flex flex-col items-center">
-            <span className="text-[7.5px] font-mono font-semibold text-[#8E9EAA] uppercase tracking-wider mb-0.5">
-              ATTITUDE
-            </span>
+      {/* Two Standalone Floating Circular Instruments Side-by-Side */}
+      <div className="flex items-start gap-2.5 sm:gap-3">
+        {/* 1. ATTITUDE INDICATOR (ARTIFICIAL HORIZON) */}
+        <div className="flex flex-col items-center">
+          <span className="text-[7.5px] font-mono font-semibold text-[#CBD5E1] uppercase tracking-wider mb-1 px-1.5 py-0.5 rounded bg-[#080C14EE] border border-[#1E293B] shadow-sm">
+            ATTITUDE
+          </span>
 
-            <div className="relative p-0.5 rounded-full bg-[#070A10] border border-[#1E293B] shadow-inner">
-              <AttitudeIndicator
-                pitch={telemetry.pitch}
-                roll={telemetry.roll}
-                size={instrumentSize}
-              />
-            </div>
-
-            {/* Attitude Telemetry Readout */}
-            <div className="flex items-center gap-1 mt-0.5 font-mono text-[8px] sm:text-[8.5px]">
-              <span className="text-[#8E9EAA]">
-                P: <strong className={telemetry.pitch !== 0 ? "text-[#35E0FF]" : "text-[#EEF4F8]"}>
-                  {telemetry.pitch >= 0 ? `+${telemetry.pitch}` : telemetry.pitch}°
-                </strong>
-              </span>
-              <span className="text-[#64748B]">|</span>
-              <span className="text-[#8E9EAA]">
-                R: <strong className={telemetry.roll !== 0 ? "text-[#35E0FF]" : "text-[#EEF4F8]"}>
-                  {telemetry.roll >= 0 ? `+${telemetry.roll}` : telemetry.roll}°
-                </strong>
-              </span>
-            </div>
+          <div className="relative p-0.5 rounded-full bg-[#070A10EE] border border-[#1E293B] shadow-[0_4px_16px_rgba(0,0,0,0.6)] backdrop-blur-sm">
+            <AttitudeIndicator
+              pitch={telemetry.pitch}
+              roll={telemetry.roll}
+              size={instrumentSize}
+            />
           </div>
 
-          {/* Vertical Divider */}
-          <div className="w-[1px] h-24 bg-[#1B2836] self-center opacity-70" />
-
-          {/* 2. SEPARATE CIRCULAR COMPASS */}
-          <div className="flex flex-col items-center">
-            <span className="text-[7.5px] font-mono font-semibold text-[#8E9EAA] uppercase tracking-wider mb-0.5">
-              COMPASS
+          <div className="flex items-center justify-center gap-1.5 mt-1.5 px-2 py-0.5 rounded-md bg-[#080C14EE] border border-[#1E293B] shadow-md font-mono text-[8.5px] sm:text-[9px] backdrop-blur-md">
+            <span className="text-[#94A3B8]">
+              P: <strong className={telemetry.pitch !== 0 ? "text-[#35E0FF]" : "text-[#F8FAFC]"}>
+                {telemetry.pitch >= 0 ? `+${telemetry.pitch}` : telemetry.pitch}°
+              </strong>
             </span>
-
-            <div className="relative flex items-center justify-center p-0.5 rounded-full bg-[#070A10] border border-[#1E293B] shadow-inner">
-              <CompassIndicator
-                heading={telemetry.heading}
-                size={instrumentSize}
-                innerSize={Math.round(instrumentSize * 0.58)}
-              />
-
-              {/* Center Heading Arrow / Silhouette */}
-              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                <div className="w-0 h-0 border-l-[3px] border-r-[3px] border-b-[8px] border-l-transparent border-r-transparent border-b-[#35E0FF] drop-shadow-[0_0_4px_#35E0FF]" />
-                <div className="w-1.5 h-1.5 rounded-full bg-[#162230] border border-[#35E0FF] -mt-0.5" />
-              </div>
-            </div>
-
-            {/* Heading Telemetry Readout */}
-            <div className="flex items-center gap-1 mt-0.5 font-mono text-[8px] sm:text-[8.5px]">
-              <Compass className="w-2.5 h-2.5 text-[#35E0FF]" />
-              <strong className="text-[#35E0FF]">{headingText}</strong>
-            </div>
+            <span className="text-[#475569]">|</span>
+            <span className="text-[#94A3B8]">
+              R: <strong className={telemetry.roll !== 0 ? "text-[#35E0FF]" : "text-[#F8FAFC]"}>
+                {telemetry.roll >= 0 ? `+${telemetry.roll}` : telemetry.roll}°
+              </strong>
+            </span>
           </div>
         </div>
 
-        {/* SHARED BOTTOM FLIGHT DATA STRIP */}
-        <div className="grid grid-cols-3 gap-1 w-full mt-1 pt-1 border-t border-[#16222E] text-[8px] sm:text-[8.5px] font-mono text-center">
-          <div className="bg-[#0C121B] py-0.5 px-0.5 rounded border border-[#1B2938]">
-            <span className="text-[#64748B] text-[6.5px] block">ALTITUDE</span>
-            <strong className="text-[#2FE089] text-[8.5px]">{telemetry.altitude}m</strong>
+        {/* 2. COMPASS INDICATOR */}
+        <div className="flex flex-col items-center">
+          <span className="text-[7.5px] font-mono font-semibold text-[#CBD5E1] uppercase tracking-wider mb-1 px-1.5 py-0.5 rounded bg-[#080C14EE] border border-[#1E293B] shadow-sm">
+            COMPASS
+          </span>
+
+          <div className="relative flex items-center justify-center p-0.5 rounded-full bg-[#070A10EE] border border-[#1E293B] shadow-[0_4px_16px_rgba(0,0,0,0.6)] backdrop-blur-sm">
+            <CompassIndicator
+              heading={telemetry.heading}
+              size={instrumentSize}
+              innerSize={Math.round(instrumentSize * 0.58)}
+            />
+
+            {/* Center Heading Arrow / Silhouette */}
+            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+              <div className="w-0 h-0 border-l-[3px] border-r-[3px] border-b-[8px] border-l-transparent border-r-transparent border-b-[#35E0FF] drop-shadow-[0_0_4px_#35E0FF]" />
+              <div className="w-1.5 h-1.5 rounded-full bg-[#162230] border border-[#35E0FF] -mt-0.5" />
+            </div>
           </div>
 
-          <div className="bg-[#0C121B] py-0.5 px-0.5 rounded border border-[#1B2938]">
-            <span className="text-[#64748B] text-[6.5px] block">SPEED</span>
-            <strong className="text-[#35E0FF] text-[8.5px]">{telemetry.groundSpeed}m/s</strong>
-          </div>
-
-          <div className="bg-[#0C121B] py-0.5 px-0.5 rounded border border-[#1B2938]">
-            <span className="text-[#64748B] text-[6.5px] block">CLIMB VSI</span>
-            <strong
-              className={`text-[8.5px] ${
-                telemetry.climbRate > 0
-                  ? "text-[#2FE089]"
-                  : telemetry.climbRate < 0
-                  ? "text-[#FF8585]"
-                  : "text-[#EEF4F8]"
-              }`}
-            >
-              {telemetry.climbRate >= 0 ? `+${telemetry.climbRate}` : telemetry.climbRate}
-            </strong>
-          </div>
-        </div>
-
-        {/* COMPACT INTEGRATED GPS COORDINATES STRIP */}
-        <div className="flex items-center justify-between w-full mt-1 pt-1 border-t border-[#16222E] px-0.5 text-[8px] sm:text-[8.5px] font-mono select-none">
-          <div className="flex items-center gap-1">
-            <span className="text-[#64748B] text-[7.5px] font-semibold">LAT</span>
-            <strong className="text-[#35E0FF] tracking-tight">
-              {typeof telemetry.latitude === "number" ? telemetry.latitude.toFixed(5) : "17.38500"}
-            </strong>
-          </div>
-
-          <div className="w-[1px] h-2.5 bg-[#1B2836]" />
-
-          <div className="flex items-center gap-1">
-            <span className="text-[#64748B] text-[7.5px] font-semibold">LNG</span>
-            <strong className="text-[#35E0FF] tracking-tight">
-              {typeof telemetry.longitude === "number" ? telemetry.longitude.toFixed(5) : "78.48670"}
-            </strong>
-          </div>
-
-          <div className="w-[1px] h-2.5 bg-[#1B2836] hidden xs:block" />
-
-          <div className="hidden xs:flex items-center gap-1">
-            <span className="text-[#64748B] text-[7.5px] font-semibold">HDG</span>
-            <strong className="text-[#35E0FF] tracking-tight">
-              {Math.round(telemetry.heading || 0)}°
-            </strong>
+          <div className="flex items-center justify-center gap-1.5 mt-1.5 px-2.5 py-0.5 rounded-md bg-[#080C14EE] border border-[#1E293B] shadow-md font-mono text-[8.5px] sm:text-[9px] backdrop-blur-md">
+            <Compass className="w-2.5 h-2.5 text-[#35E0FF] shrink-0" />
+            <strong className="text-[#35E0FF]">{headingText}</strong>
           </div>
         </div>
       </div>
-    </DraggableWidget>
-  )
-}
+    </div>
+  );
+};
 
-export default FlightInstrumentsWidget
+export default FlightInstrumentsWidget;

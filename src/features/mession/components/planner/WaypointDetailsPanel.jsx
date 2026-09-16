@@ -1,30 +1,83 @@
-import { useState, useEffect } from "react";
-import { X, Trash2, Check, Navigation, ArrowUp, Zap, Clock, Compass } from "lucide-react";
+import { useState } from "react";
+import { X, Trash2, Check, ArrowUp, Zap, Clock, Compass } from "lucide-react";
 
 export default function WaypointDetailsPanel({
   waypoint,
   onUpdate,
   onDelete,
   onClose,
+  validateCoordinates,
 }) {
+  const [prevId, setPrevId] = useState(waypoint.id);
   const [alt, setAlt] = useState(waypoint.alt ?? 50);
   const [speed, setSpeed] = useState(waypoint.speed ?? 8.5);
   const [holdTime, setHoldTime] = useState(waypoint.holdTime ?? 0);
   const [heading, setHeading] = useState(waypoint.heading ?? "Auto");
   const [customHeading, setCustomHeading] = useState(waypoint.customHeading ?? 0);
+  const [latInput, setLatInput] = useState(String(waypoint.lat?.toFixed(6) ?? ""));
+  const [lngInput, setLngInput] = useState(String(waypoint.lng?.toFixed(6) ?? ""));
+  const [coordError, setCoordError] = useState("");
 
-  // Sync state if selected waypoint changes
-  useEffect(() => {
+  // Sync state if selected waypoint id changes
+  if (waypoint.id !== prevId) {
+    setPrevId(waypoint.id);
     setAlt(waypoint.alt ?? 50);
     setSpeed(waypoint.speed ?? 8.5);
     setHoldTime(waypoint.holdTime ?? 0);
     setHeading(waypoint.heading ?? "Auto");
     setCustomHeading(waypoint.customHeading ?? 0);
-  }, [waypoint]);
+    setLatInput(String(waypoint.lat?.toFixed(6) ?? ""));
+    setLngInput(String(waypoint.lng?.toFixed(6) ?? ""));
+    setCoordError("");
+  }
+
+  const handleCoordCommit = (newLatStr, newLngStr) => {
+    const parsedLat = parseFloat(newLatStr);
+    const parsedLng = parseFloat(newLngStr);
+
+    if (isNaN(parsedLat) || isNaN(parsedLng)) {
+      setCoordError("Invalid coordinate format");
+      setLatInput(String(waypoint.lat?.toFixed(6) ?? ""));
+      setLngInput(String(waypoint.lng?.toFixed(6) ?? ""));
+      return;
+    }
+
+    if (validateCoordinates) {
+      const isValid = validateCoordinates(parsedLat, parsedLng);
+      if (!isValid) {
+        setCoordError("WAYPOINT OUTSIDE GEOFENCE — Coordinates must remain inside boundary.");
+        setLatInput(String(waypoint.lat?.toFixed(6) ?? ""));
+        setLngInput(String(waypoint.lng?.toFixed(6) ?? ""));
+        return;
+      }
+    }
+
+    setCoordError("");
+    onUpdate(waypoint.id, {
+      lat: Number(parsedLat.toFixed(6)),
+      lng: Number(parsedLng.toFixed(6)),
+    });
+  };
 
   const handleApply = (e) => {
     e?.preventDefault?.();
+    const parsedLat = parseFloat(latInput);
+    const parsedLng = parseFloat(lngInput);
+    let finalLat = waypoint.lat;
+    let finalLng = waypoint.lng;
+
+    if (!isNaN(parsedLat) && !isNaN(parsedLng)) {
+      if (validateCoordinates && !validateCoordinates(parsedLat, parsedLng)) {
+        setCoordError("WAYPOINT OUTSIDE GEOFENCE — Coordinates reverted.");
+      } else {
+        finalLat = Number(parsedLat.toFixed(6));
+        finalLng = Number(parsedLng.toFixed(6));
+      }
+    }
+
     onUpdate(waypoint.id, {
+      lat: finalLat,
+      lng: finalLng,
       alt: Number(alt),
       speed: Number(speed),
       holdTime: Number(holdTime),
@@ -73,16 +126,43 @@ export default function WaypointDetailsPanel({
       </div>
 
       <div className="p-3 space-y-2.5">
-        {/* GPS Coordinates Readout */}
-        <div className="grid grid-cols-2 gap-2 p-2 rounded-lg bg-[#0C131F] border border-[#16212E] text-[10px]">
-          <div>
-            <span className="text-[#64748B] block">LATITUDE</span>
-            <span className="text-[#35E0FF] font-semibold">{waypoint.lat?.toFixed(6)}°</span>
+        {/* GPS Coordinates Editable Inputs */}
+        <div className="p-2 rounded-lg bg-[#0C131F] border border-[#16212E] space-y-1.5 text-[10px]">
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[#64748B] block text-[9px] uppercase tracking-wider mb-0.5">Latitude (°)</label>
+              <input
+                type="number"
+                step="0.000001"
+                value={latInput}
+                onChange={(e) => setLatInput(e.target.value)}
+                onBlur={() => handleCoordCommit(latInput, lngInput)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleCoordCommit(latInput, lngInput);
+                }}
+                className="w-full px-2 py-1 bg-[#0E1520] border border-[#1C2834] rounded text-[#35E0FF] font-semibold text-xs focus:border-[#35E0FF] outline-none"
+              />
+            </div>
+            <div>
+              <label className="text-[#64748B] block text-[9px] uppercase tracking-wider mb-0.5">Longitude (°)</label>
+              <input
+                type="number"
+                step="0.000001"
+                value={lngInput}
+                onChange={(e) => setLngInput(e.target.value)}
+                onBlur={() => handleCoordCommit(latInput, lngInput)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleCoordCommit(latInput, lngInput);
+                }}
+                className="w-full px-2 py-1 bg-[#0E1520] border border-[#1C2834] rounded text-[#35E0FF] font-semibold text-xs focus:border-[#35E0FF] outline-none"
+              />
+            </div>
           </div>
-          <div>
-            <span className="text-[#64748B] block">LONGITUDE</span>
-            <span className="text-[#35E0FF] font-semibold">{waypoint.lng?.toFixed(6)}°</span>
-          </div>
+          {coordError && (
+            <div className="text-[9px] text-[#EF4444] font-bold leading-tight pt-1">
+              {coordError}
+            </div>
+          )}
         </div>
 
         {/* Altitude Input */}

@@ -5,7 +5,7 @@ import AeroLogo from "./AeroLogo.jsx"
 import GcsCornerBrackets from "./GcsCornerBrackets.jsx"
 import GcsInput from "./GcsInput.jsx"
 import GcsSelect from "./GcsSelect.jsx"
-import { useAuth } from "@/context/AuthContext.jsx"
+import { useAuth } from "@/hooks/useAuth.js"
 import { loginWithSSO } from "../services/authService.js"
 
 const ROLE_OPTIONS = [
