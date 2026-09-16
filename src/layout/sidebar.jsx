@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { NavLink, useLocation, useNavigate } from "react-router-dom"
 import { X, ChevronDown, FileText, MapPin, ShieldAlert } from "lucide-react"
 import Fly from "../assets/images/drone.svg"
@@ -7,13 +7,16 @@ import Logs from "../assets/images/logs.svg"
 import Target from "../assets/images/target.svg"
 import Dashboard from "@/assets/images/dashboard.svg"
 import AeroLogo from "@/components/AeroLogo.jsx"
+import { useAuth } from "@/hooks/useAuth.js"
+import { Permissions } from "@/auth/permissions.js"
+import { ROLE_METADATA, Roles } from "@/auth/roleConfig.js"
 
-const Tabs = [
-    { label: "Dashboard", value: "/dashboard", Permission: "Dashboard", img: Dashboard },
-    { label: "Fly", value: "/fly", Permission: "Fly", img: Fly },
-    { label: "Missions", value: "/missions", Permission: "Fleet Management", img: Target, isDropdown: true },
-    { label: "Logs", value: "/logs", Permission: "Analytics", img: Logs },
-    { label: "Settings", value: "/analytics", Permission: "Analytics", img: Settings },
+const ALL_TABS = [
+    { label: "Dashboard", value: "/dashboard", img: Dashboard },
+    { label: "Fly", value: "/fly", img: Fly },
+    { label: "Missions", value: "/missions", requiredPermission: Permissions.VIEW_MISSIONS, img: Target, isDropdown: true },
+    { label: "Logs", value: "/logs", requiredPermission: Permissions.VIEW_LOGS, img: Logs },
+    { label: "Settings", value: "/settings", requiredPermission: Permissions.SYSTEM_CONFIG, img: Settings },
 ]
 
 const missionSubItems = [
@@ -22,33 +25,12 @@ const missionSubItems = [
     { label: "Waypoint Planning", value: "/missions/waypoints", icon: MapPin },
 ]
 
-const data = {
-    role_type: "admin",
-    description: "test",
-    status: "active",
-    permissions: [
-        { label: "Dashboard", items: ["View"] },
-        { label: "Fly", items: ["View"] },
-        {
-            label: "Fleet Management",
-            items: ["View", "Add Vehicle", "Edit Vehicle", "Delete Vehicle"],
-        },
-        {
-            label: "Geofencing",
-            items: ["View", "Create Zone", "Edit Zone", "Delete Zone"],
-        },
-        { label: "Alerts & Events", items: ["View"] },
-        { label: "Analytics", items: ["View"] },
-    ],
-}
-
-const visibleTabs = Tabs.filter((tab) =>
-    data?.permissions.some((view) => view.label === tab.Permission)
-)
-
 const Sidebar = ({ collapsed = false, onToggle, mobileOpen = false, onCloseMobile }) => {
     const location = useLocation()
     const navigate = useNavigate()
+    const { user, role, hasPermission } = useAuth()
+    const roleMeta = ROLE_METADATA[role] || ROLE_METADATA[Roles.VIEWER]
+
     const isMissionsActive = location.pathname.startsWith("/missions")
     const [missionsExpanded, setMissionsExpanded] = useState(true)
     const [prevPath, setPrevPath] = useState(location.pathname)
@@ -59,6 +41,17 @@ const Sidebar = ({ collapsed = false, onToggle, mobileOpen = false, onCloseMobil
             setMissionsExpanded(true)
         }
     }
+
+    // Filter tabs dynamically based on user's active permissions
+    const visibleTabs = useMemo(() => {
+        return ALL_TABS.filter((tab) => {
+            if (!tab.requiredPermission) return true
+            return hasPermission(tab.requiredPermission)
+        })
+    }, [hasPermission])
+
+    const displayName = user?.username || "Operator"
+    const initials = displayName.slice(0, 2).toUpperCase()
 
     return (
         <aside
@@ -241,25 +234,30 @@ const Sidebar = ({ collapsed = false, onToggle, mobileOpen = false, onCloseMobil
                                 All Systems Operational
                             </h1>
                         </div>
-                        <p className="text-[10px] text-[#FFFFFF4D] font-normal leading-tight">
-                            TagGPS Fleet v2.4.1
+                        <p className="text-[10px] text-[#FFFFFF4D] font-normal leading-tight font-mono">
+                            AeroNexus GCS v2.4.1
                         </p>
                     </div>
                 </div>
             )}
 
+            {/* Authenticated User / Role Strip in Sidebar Footer */}
             <div
-                className={`flex shrink-0 items-center bg-[#0C111E] gap-2 ${
+                className={`flex shrink-0 items-center bg-[#0C111E] gap-2 border-t border-[#1A2633] ${
                     collapsed ? "justify-center px-2 py-2.5" : "px-3 py-2.5"
                 }`}
             >
-                <div className="flex justify-center items-center w-8 h-8 shrink-0 rounded-full bg-[#059EB2] text-[11px] font-semibold">
-                    {/* {first_last_name.toUpperCase()} */}
+                <div className="flex justify-center items-center w-8 h-8 shrink-0 rounded-full bg-[#059EB2] text-[11px] font-semibold text-white font-mono">
+                    {initials}
                 </div>
                 {!collapsed && (
-                    <div className="min-w-0">
-                        {/* <h1 className="text-[12px] font-semibold truncate">{firstName}</h1> */}
-                        {/* <p className="text-[10px] text-[#FFFFFF73] font-normal truncate">{Role}</p> */}
+                    <div className="min-w-0 flex-1">
+                        <h1 className="text-[12px] font-semibold truncate text-[#EEF4F8] leading-tight font-mono">
+                            {displayName}
+                        </h1>
+                        <p className={`text-[9.5px] font-mono font-semibold truncate ${roleMeta.badgeColor.split(" ")[0]}`}>
+                            {roleMeta.shortLabel}
+                        </p>
                     </div>
                 )}
             </div>

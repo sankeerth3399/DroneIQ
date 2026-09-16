@@ -44,6 +44,21 @@ export async function apiClient(endpoint, options = {}) {
     }
   }
 
+  // Handle 403 Forbidden (Access Denied)
+  if (response.status === 403) {
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("aeronexus:toast", {
+          detail: {
+            message: "Access Denied: You do not have permission.",
+            type: "error",
+          },
+        })
+      )
+      window.dispatchEvent(new CustomEvent("aeronexus:forbidden"))
+    }
+  }
+
   let responseData
   const contentType = response.headers.get("content-type")
   try {

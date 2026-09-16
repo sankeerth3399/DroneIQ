@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import { AuthContext } from "./authContextCore.js"
 import { authService } from "@/services/api/authService.js"
+import { normalizeRole, getRolePermissions, Roles } from "@/auth/roleConfig.js"
 
 export const AuthProvider = ({ children }) => {
   const [token, setToken] = useState(() => authService.getToken())
@@ -25,19 +26,26 @@ export const AuthProvider = ({ children }) => {
       setUser(null)
     }
 
+    const handleRoleChanged = () => {
+      setToken(authService.getToken())
+      setUser(authService.getUser())
+    }
+
     window.addEventListener("aeronexus:unauthorized", handleUnauthorized)
     window.addEventListener("aeronexus:logout", handleGlobalLogout)
+    window.addEventListener("aeronexus:role-changed", handleRoleChanged)
 
     return () => {
       window.removeEventListener("aeronexus:unauthorized", handleUnauthorized)
       window.removeEventListener("aeronexus:logout", handleGlobalLogout)
+      window.removeEventListener("aeronexus:role-changed", handleRoleChanged)
     }
   }, [logout])
 
-  const login = useCallback(async ({ username, password }) => {
+  const login = useCallback(async ({ username, password, requestedRole }) => {
     setAuthLoading(true)
     try {
-      const result = await authService.login({ username, password })
+      const result = await authService.login({ username, password, requestedRole })
       setToken(result.token)
       setUser(result.user)
       return result
@@ -46,13 +54,66 @@ export const AuthProvider = ({ children }) => {
     }
   }, [])
 
+  const devSwitchRole = useCallback((newRole) => {
+    const res = authService.devSwitchRole(newRole)
+    if (res) {
+      setToken(res.token)
+      setUser(res.user)
+    }
+    return res
+  }, [])
+
+  // Derived effective permission set
+  const permissions = useMemo(() => {
+    if (!user || !user.role) return new Set()
+    return getRolePermissions(user.role, user.authorities)
+  }, [user])
+
+  const hasPermission = useCallback(
+    (permission) => {
+      if (!permission) return true
+      if (!user) return false
+      return permissions.has(permission)
+    },
+    [user, permissions]
+  )
+
+  const hasRole = useCallback(
+    (targetRole) => {
+      if (!user || !user.role) return false
+      return normalizeRole(user.role) === normalizeRole(targetRole)
+    },
+    [user]
+  )
+
+  const hasAnyRole = useCallback(
+    (allowedRoles) => {
+      if (!user || !user.role) return false
+      if (!Array.isArray(allowedRoles) || allowedRoles.length === 0) return true
+      const current = normalizeRole(user.role)
+      return allowedRoles.some((r) => normalizeRole(r) === current)
+    },
+    [user]
+  )
+
+  const getToken = useCallback(() => {
+    return token || authService.getToken()
+  }, [token])
+
   const value = {
     token,
     user,
+    role: user?.role ? normalizeRole(user.role) : Roles.VIEWER,
+    permissions,
     isAuthenticated: Boolean(token),
     authLoading,
     login,
     logout,
+    hasRole,
+    hasAnyRole,
+    hasPermission,
+    getToken,
+    devSwitchRole,
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

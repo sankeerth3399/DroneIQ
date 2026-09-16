@@ -27,6 +27,8 @@ export default function MissionPlanningToolbar({
   onOpenClear,
   canSave = true,
   canUpload = true,
+  isReadOnly = false,
+  canDelete = true,
 }) {
   const {
     items,
@@ -69,7 +71,9 @@ export default function MissionPlanningToolbar({
       {/* 1. Quick + Waypoint Button */}
       <button
         type="button"
+        disabled={isReadOnly}
         onClick={() => {
+          if (isReadOnly) return;
           if (isPlacingMode && placingType === "WAYPOINT") {
             cancelPlacingMode();
           } else {
@@ -77,11 +81,13 @@ export default function MissionPlanningToolbar({
           }
         }}
         className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg font-semibold transition shrink-0 ${
-          isPlacingMode && placingType === "WAYPOINT"
+          isReadOnly
+            ? "opacity-50 cursor-not-allowed bg-[#0E1520] text-[#64748B] border border-[#1C2834]"
+            : isPlacingMode && placingType === "WAYPOINT"
             ? "bg-[#35E0FF] text-[#06090E] shadow-[0_0_12px_rgba(53,224,255,0.6)] animate-pulse"
             : "bg-[#35E0FF1A] text-[#35E0FF] border border-[#35E0FF4D] hover:bg-[#35E0FF2E]"
         }`}
-        title="Add Waypoint by clicking on the map"
+        title={isReadOnly ? "Read-only in Viewer mode" : "Add Waypoint by clicking on the map"}
       >
         <Plus className="w-3.5 h-3.5" />
         <span className="hidden xs:inline">Waypoint</span>
@@ -91,15 +97,23 @@ export default function MissionPlanningToolbar({
       <div className="relative shrink-0" ref={dropdownRef}>
         <button
           type="button"
-          onClick={() => setItemDropdownOpen((prev) => !prev)}
-          className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-[#EEF4F8] bg-[#0E1520] border border-[#1C2834] hover:border-[#35E0FF4D] hover:text-[#35E0FF] transition"
-          title="Add specific mission command (Takeoff, Land, RTL)"
+          disabled={isReadOnly}
+          onClick={() => {
+            if (isReadOnly) return;
+            setItemDropdownOpen((prev) => !prev);
+          }}
+          className={`flex items-center gap-1 px-2 py-1.5 rounded-lg transition ${
+            isReadOnly
+              ? "opacity-50 cursor-not-allowed bg-[#0E1520] text-[#64748B] border border-[#1C2834]"
+              : "text-[#EEF4F8] bg-[#0E1520] border border-[#1C2834] hover:border-[#35E0FF4D] hover:text-[#35E0FF]"
+          }`}
+          title={isReadOnly ? "Read-only in Viewer mode" : "Add specific mission command (Takeoff, Land, RTL)"}
         >
           <span className="hidden sm:inline">+ Item</span>
           <ChevronDown className="w-3 h-3 text-[#8E9EAA]" />
         </button>
 
-        {itemDropdownOpen && (
+        {itemDropdownOpen && !isReadOnly && (
           <div className="absolute top-full mt-1.5 left-0 z-50 w-44 rounded-xl bg-[#080C14F5] border border-[#1C2834] shadow-2xl backdrop-blur-lg p-1.5 flex flex-col gap-1">
             <button
               type="button"
@@ -142,14 +156,22 @@ export default function MissionPlanningToolbar({
       {/* 3. Delete Selected */}
       <button
         type="button"
-        disabled={!hasSelected}
+        disabled={!hasSelected || isReadOnly || !canDelete}
         onClick={() => deleteWaypoint(selectedWaypointId)}
         className={`flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-lg transition shrink-0 ${
-          hasSelected
+          hasSelected && !isReadOnly && canDelete
             ? "text-[#FF4757] hover:bg-[#FF47571A] border border-transparent hover:border-[#FF47574D]"
             : "text-[#475569] cursor-not-allowed"
         }`}
-        title={hasSelected ? "Delete selected waypoint" : "Select a waypoint to delete"}
+        title={
+          isReadOnly
+            ? "Read-only in Viewer mode"
+            : !canDelete
+            ? "Delete permission restricted"
+            : hasSelected
+            ? "Delete selected waypoint"
+            : "Select a waypoint to delete"
+        }
       >
         <Trash2 className="w-3.5 h-3.5" />
         <span className="hidden md:inline">Delete</span>
@@ -158,14 +180,20 @@ export default function MissionPlanningToolbar({
       {/* 4. Clear Mission */}
       <button
         type="button"
-        disabled={!hasItems}
+        disabled={!hasItems || isReadOnly || !canDelete}
         onClick={onOpenClear}
         className={`flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-lg transition shrink-0 ${
-          hasItems
+          hasItems && !isReadOnly && canDelete
             ? "text-[#94A3B8] hover:text-white hover:bg-[#1E293B]"
             : "text-[#475569] cursor-not-allowed"
         }`}
-        title="Clear all mission items"
+        title={
+          isReadOnly
+            ? "Read-only in Viewer mode"
+            : !canDelete
+            ? "Delete permission restricted"
+            : "Clear all mission items"
+        }
       >
         <XSquare className="w-3.5 h-3.5" />
         <span className="hidden md:inline">Clear</span>
@@ -234,14 +262,20 @@ export default function MissionPlanningToolbar({
       {/* 8. Save / Load */}
       <button
         type="button"
-        disabled={!hasItems || !canSave}
+        disabled={!hasItems || !canSave || isReadOnly}
         onClick={onOpenSave}
         className={`flex items-center gap-1 px-2 py-1.5 rounded-lg transition shrink-0 ${
-          hasItems && canSave
+          hasItems && canSave && !isReadOnly
             ? "text-[#EEF4F8] hover:bg-[#1E293B] hover:text-[#35E0FF]"
             : "text-[#475569] cursor-not-allowed"
         }`}
-        title={!canSave ? "Saving blocked: Geofence violation or missing" : "Save Mission to Local Storage"}
+        title={
+          isReadOnly
+            ? "Read-only in Viewer mode"
+            : !canSave
+            ? "Saving blocked: Geofence violation or missing"
+            : "Save Mission to Local Storage"
+        }
       >
         <Save className="w-3.5 h-3.5" />
         <span className="hidden xl:inline">Save</span>
@@ -260,14 +294,20 @@ export default function MissionPlanningToolbar({
       {/* 9. Upload Mission Button */}
       <button
         type="button"
-        disabled={!hasItems || !canUpload}
+        disabled={!hasItems || !canUpload || isReadOnly}
         onClick={onOpenUpload}
         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition shrink-0 ${
-          hasItems && canUpload
+          hasItems && canUpload && !isReadOnly
             ? "bg-[#2FE0891A] text-[#2FE089] border border-[#2FE0894D] hover:bg-[#2FE0892E] shadow-[0_0_10px_rgba(47,224,137,0.2)]"
             : "text-[#475569] bg-[#0E1520] border border-[#1C2834] cursor-not-allowed"
         }`}
-        title={!canUpload ? "Upload blocked: Geofence boundary breach or missing" : "Upload Mission Plan to Drone (Simulation Ready)"}
+        title={
+          isReadOnly
+            ? "Read-only in Viewer mode"
+            : !canUpload
+            ? "Upload blocked: Geofence boundary breach or missing"
+            : "Upload Mission Plan to Drone (Simulation Ready)"
+        }
       >
         <UploadCloud className="w-3.5 h-3.5" />
         <span>Upload</span>

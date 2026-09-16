@@ -3,11 +3,16 @@ import MapLoad from "@/components/Map/mapContainer.jsx";
 import { useDroneTelemetry } from "@/hooks/useDroneTelemetry.js";
 import DualJoystickOverlay from "@/features/mession/components/joysticks/DualJoystickOverlay.jsx";
 import FlightInstrumentsWidget from "@/features/mession/components/widgets/FlightInstrumentsWidget.jsx";
+import GimbalControlWidget from "@/features/fly/components/GimbalControlWidget.jsx";
 import CameraWidget from "@/features/fly/components/CameraWidget.jsx";
+import EmergencyOverrideDeck from "@/features/fly/components/EmergencyOverrideDeck.jsx";
 import CaptureToast from "@/features/mession/components/toast/CaptureToast.jsx";
-import { Plane, LayoutGrid } from "lucide-react";
+import { Plane, LayoutGrid, ShieldAlert, Layers } from "lucide-react";
 
 import { useTelemetry } from "@/hooks/useTelemetry.js";
+import { useAuth } from "@/hooks/useAuth.js";
+import { Permissions } from "@/auth/permissions.js";
+import { Roles } from "@/auth/roleConfig.js";
 
 const pipClass =
   "absolute right-2 top-2 sm:right-4 sm:top-4 z-20 flex cursor-pointer flex-col overflow-hidden rounded-xl border border-[#223240] bg-[#171F27B2] shadow-2xl backdrop-blur-md transition-all duration-300 h-[124px] w-[155px] sm:h-[156px] sm:w-[205px] md:h-[188px] md:w-[245px]";
@@ -47,8 +52,29 @@ const mapStyleOptions = [
 const FlyPage = () => {
   const [mapIsLarge, setMapIsLarge] = useState(true);
   const [camSelected, setCamSelected] = useState("main");
-  const [mapStyle, setMapStyle] = useState("normal");
+  const [mapStyle, setMapStyle] = useState(() => {
+    try {
+      return localStorage.getItem("aeronexus_map_style") || "normal";
+    } catch {
+      return "normal";
+    }
+  });
+
+  const handleMapStyleChange = useCallback((newStyle) => {
+    setMapStyle(newStyle);
+    try {
+      localStorage.setItem("aeronexus_map_style", newStyle);
+    } catch {
+      // Ignore
+    }
+  }, []);
   const [joysticksVisible, setJoysticksVisible] = useState(true);
+
+  // RBAC permissions and role inspection
+  const { hasPermission, role } = useAuth();
+  const canExecuteFlight = hasPermission(Permissions.EXECUTE_FLIGHT_COMMANDS);
+  const canOverrideFlight = hasPermission(Permissions.OVERRIDE_FLIGHT_COMMANDS);
+  const isViewer = role === Roles.VIEWER;
 
   // Single source of truth telemetry & physics simulation hook
   const {
@@ -58,11 +84,20 @@ const FlyPage = () => {
     setSimMode,
     isLive,
     isArmed,
+    gimbalState,
+    setGimbalPitch,
+    setGimbalRoll,
+    setGimbalYaw,
+    setGimbalOrientation,
+    centerGimbal,
   } = useDroneTelemetry();
   const { showToast } = useTelemetry();
 
   // Desktop Keyboard Flight Controls (WASD: Throttle/Yaw, Arrow Keys: Pitch/Roll, Space: Hover)
+  // Strictly gated by EXECUTE_FLIGHT_COMMANDS permission
   useEffect(() => {
+    if (!canExecuteFlight) return;
+
     const keysDown = new Set();
 
     const updateFromKeys = () => {
@@ -130,7 +165,7 @@ const FlyPage = () => {
       window.removeEventListener("keyup", handleKeyUp);
       window.removeEventListener("blur", handleBlur);
     };
-  }, [updateStickInputs]);
+  }, [updateStickInputs, canExecuteFlight]);
 
   // Capture toast notification state
   const [toast, setToast] = useState(null);
@@ -162,6 +197,8 @@ const FlyPage = () => {
       localStorage.removeItem("aeronexus_widget_pos_attitude");
       localStorage.removeItem("aeronexus_widget_pos_capture_controls");
       localStorage.removeItem("aeronexus_widget_min_capture_controls");
+      localStorage.removeItem("aeronexus_widget_pos_gimbal");
+      localStorage.removeItem("aeronexus_widget_min_gimbal");
       window.location.reload();
     } catch {
       // Ignore
@@ -199,7 +236,7 @@ const FlyPage = () => {
           <MapStyleBar
             options={mapStyleOptions}
             value={mapStyle}
-            onChange={setMapStyle}
+            onChange={handleMapStyleChange}
           />
         )}
       </div>
@@ -217,17 +254,80 @@ const FlyPage = () => {
         isDroneFlashing={isDroneFlashing}
       />
 
+      {/* FLOATING MAP STYLE SELECTOR HUD (Normal Map / Satellite Map) */}
+      <div
+        id="fly-map-style-selector"
+        className={`absolute right-2 sm:right-4 z-20 flex items-center bg-[#080C14E6] border border-[#1A2633] backdrop-blur-md rounded-lg p-1 shadow-2xl gap-1 pointer-events-auto transition-all duration-300 ${
+          mapIsLarge
+            ? camSelected === "fpv"
+              ? "top-[238px] sm:top-[290px] md:top-[340px]"
+              : "top-[166px] sm:top-[198px] md:top-[230px]"
+            : "bottom-4 right-[200px] sm:right-[245px]"
+        }`}
+      >
+        <div className="flex items-center gap-1 px-1.5 py-0.5 text-[9px] sm:text-[10px] font-mono text-[#64748B] border-r border-[#1E293B] mr-0.5 select-none">
+          <Layers className="w-3 h-3 text-[#35E0FF]" />
+          <span className="hidden xs:inline uppercase tracking-wider font-semibold">Map</span>
+        </div>
+        {mapStyleOptions.map((opt) => (
+          <button
+            key={opt.id}
+            type="button"
+            onClick={() => handleMapStyleChange(opt.id)}
+            className={`px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs font-mono font-semibold rounded-md transition ${
+              mapStyle === opt.id
+                ? "bg-[#35E0FF2E] border border-[#1A5A68] text-[#35E0FF] shadow-[0_0_8px_rgba(53,224,255,0.25)]"
+                : "text-[#5D707C] hover:text-[#94A3B8]"
+            }`}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+
       {/* FLOATING HUD FLIGHT INSTRUMENTS */}
       <FlightInstrumentsWidget telemetry={telemetry} />
 
-      {/* DUAL QGC-STYLE VIRTUAL JOYSTICKS (Left: Throttle/Yaw, Right: Pitch/Roll) */}
-      <DualJoystickOverlay
-        onStickUpdate={updateStickInputs}
-        visible={joysticksVisible}
-        onToggleVisible={() => setJoysticksVisible((prev) => !prev)}
-        camSelected={camSelected}
-        mapIsLarge={mapIsLarge}
+      {/* QGC-INSPIRED FLOATING GIMBAL CONTROL & ORIENTATION WIDGET */}
+      <GimbalControlWidget
+        gimbalState={gimbalState}
+        setGimbalPitch={setGimbalPitch}
+        setGimbalRoll={setGimbalRoll}
+        setGimbalYaw={setGimbalYaw}
+        setGimbalOrientation={setGimbalOrientation}
+        centerGimbal={centerGimbal}
+        droneHeading={telemetry.heading || 0}
       />
+
+      {/* DUAL QGC-STYLE VIRTUAL JOYSTICKS (Left: Throttle/Yaw, Right: Pitch/Roll) */}
+      {/* Strictly enabled only for authorized roles (SUPER_ADMIN, FLIGHT_OPERATOR) */}
+      {canExecuteFlight && (
+        <DualJoystickOverlay
+          onStickUpdate={updateStickInputs}
+          visible={joysticksVisible}
+          onToggleVisible={() => setJoysticksVisible((prev) => !prev)}
+          camSelected={camSelected}
+          mapIsLarge={mapIsLarge}
+          hasEmergencyDeck={canOverrideFlight}
+        />
+      )}
+
+      {/* EMERGENCY OVERRIDE DECK (SUPER_ADMIN & FLEET_MANAGER ONLY) */}
+      {canOverrideFlight && (
+        <EmergencyOverrideDeck
+          hasLeftJoystick={canExecuteFlight && joysticksVisible}
+        />
+      )}
+
+      {/* VIEWER AUDITOR MODE BANNER */}
+      {isViewer && (
+        <div className="absolute top-12 sm:top-14 left-1/2 -translate-x-1/2 z-25 pointer-events-auto px-3.5 py-1.5 rounded-md bg-[#0B1017F2] border border-[#5E2222] shadow-[0_4px_20px_rgba(0,0,0,0.8)] backdrop-blur-md flex items-center gap-2 text-[10px] sm:text-[11px] font-mono text-[#FF8585] animate-in fade-in slide-in-from-top-1">
+          <ShieldAlert className="w-3.5 h-3.5 text-[#FF4141] shrink-0" />
+          <span className="font-semibold tracking-wide">
+            AUDITOR MODE: Flight command controls are inhibited for your role.
+          </span>
+        </div>
+      )}
 
       {/* TOP-CENTER MISSION TELEMETRY HUD STRIP */}
       <div className="absolute top-1.5 sm:top-3 left-1/2 -translate-x-1/2 z-15 pointer-events-auto flex flex-wrap items-center justify-center gap-1.5 sm:gap-2.5 px-2.5 sm:px-3.5 py-1 rounded-md bg-[#080C14CC] border border-[#1A2633] backdrop-blur-md shadow-lg text-[8.5px] sm:text-[10px] font-mono max-w-[calc(100vw-30px)] sm:max-w-none">
@@ -276,8 +376,8 @@ const FlyPage = () => {
           </span>
         </div>
 
-        {/* Interactive Simulation Mode Switcher */}
-        {!isLive && (
+        {/* Interactive Simulation Mode Switcher (Authorized flight execution roles only) */}
+        {!isLive && canExecuteFlight && (
           <>
             <div className="w-[1px] h-2.5 bg-[#223240] hidden md:block shrink-0" />
             <button
@@ -304,11 +404,41 @@ const FlyPage = () => {
 
         <div className="w-[1px] h-2.5 bg-[#223240] hidden sm:block shrink-0" />
 
+        {/* Quick Map Style (Normal / Satellite) */}
+        <div className="flex items-center gap-0.5 bg-[#05080DB3] p-0.5 rounded border border-[#1E293B] shrink-0">
+          <button
+            type="button"
+            onClick={() => handleMapStyleChange("normal")}
+            className={`px-1.5 py-0.5 rounded text-[8px] sm:text-[9px] font-mono font-semibold transition ${
+              mapStyle === "normal"
+                ? "bg-[#35E0FF26] text-[#35E0FF] border border-[#1A5A68]"
+                : "text-[#5D707C] hover:text-[#94A3B8]"
+            }`}
+            title="Switch map to standard vector view"
+          >
+            NORMAL
+          </button>
+          <button
+            type="button"
+            onClick={() => handleMapStyleChange("satellite")}
+            className={`px-1.5 py-0.5 rounded text-[8px] sm:text-[9px] font-mono font-semibold transition ${
+              mapStyle === "satellite"
+                ? "bg-[#35E0FF26] text-[#35E0FF] border border-[#1A5A68]"
+                : "text-[#5D707C] hover:text-[#94A3B8]"
+            }`}
+            title="Switch map to satellite imagery view"
+          >
+            SATELLITE
+          </button>
+        </div>
+
+        <div className="w-[1px] h-2.5 bg-[#223240] hidden sm:block shrink-0" />
+
         {/* Reset Layout Button */}
         <button
           type="button"
           onClick={handleResetLayout}
-          className="flex items-center gap-1 text-[8.5px] sm:text-[9.5px] text-[#8E9EAA] hover:text-[#35E0FF] transition shrink-0"
+          className="flex items-center gap-1 text-[8.5px] sm:text-[9.5px] text-[#8E9EAA] hover:text-[#35E0FF] transition shrink-0 cursor-pointer"
           title="Reset all draggable widgets to default positions"
         >
           <LayoutGrid className="w-2.5 h-2.5 sm:w-3 sm:h-3" />

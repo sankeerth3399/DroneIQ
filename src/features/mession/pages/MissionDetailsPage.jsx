@@ -19,9 +19,18 @@ import {
   Info,
   Save,
 } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth.js";
+import { Permissions } from "@/auth/permissions.js";
+import { Roles } from "@/auth/roleConfig.js";
 
 export const MissionDetailsPage = () => {
   const navigate = useNavigate();
+  const { hasPermission, role } = useAuth();
+  const canCreateMissions = hasPermission(Permissions.CREATE_MISSIONS);
+  const canEditMissions = hasPermission(Permissions.EDIT_MISSIONS);
+  const canDeleteMissions = hasPermission(Permissions.DELETE_MISSIONS);
+  const isViewer = role === Roles.VIEWER;
+
   const {
     projects,
     currentProject,
@@ -116,6 +125,7 @@ export const MissionDetailsPage = () => {
   // Save/Create project details and keep on page
   const handleSaveProjectOnly = (e) => {
     e?.preventDefault?.();
+    if (isViewer || (!canCreateMissions && !canEditMissions)) return;
     if (!isValid) return;
 
     const payload = {
@@ -142,20 +152,20 @@ export const MissionDetailsPage = () => {
   // Save details and proceed to Geofence setup
   const handleProceedToGeofence = (e) => {
     e?.preventDefault?.();
-    if (!isValid) return;
+    if (!isViewer && (canCreateMissions || canEditMissions) && isValid) {
+      const payload = {
+        ...formData,
+        name: formData.name.trim(),
+        projectName: formData.name.trim(),
+      };
 
-    const payload = {
-      ...formData,
-      name: formData.name.trim(),
-      projectName: formData.name.trim(),
-    };
-
-    if (isCreatingNew) {
-      const created = createProject(payload);
-      setIsCreatingNew(false);
-      selectProject(created.id);
-    } else if (currentProject) {
-      updateProject(currentProject.id, payload);
+      if (isCreatingNew) {
+        const created = createProject(payload);
+        setIsCreatingNew(false);
+        selectProject(created.id);
+      } else if (currentProject) {
+        updateProject(currentProject.id, payload);
+      }
     }
 
     navigate("/missions/geofence");
@@ -164,28 +174,28 @@ export const MissionDetailsPage = () => {
   // Save details and proceed to Waypoint Planning (strictly blocked without geofence)
   const handleEnterMission = (e) => {
     e.preventDefault();
-    if (!isValid) return;
-
     if (!hasConfiguredGeofence) {
       handleProceedToGeofence(e);
       return;
     }
 
-    const payload = {
-      ...formData,
-      name: formData.name.trim(),
-      projectName: formData.name.trim(),
-    };
+    if (!isViewer && (canCreateMissions || canEditMissions) && isValid) {
+      const payload = {
+        ...formData,
+        name: formData.name.trim(),
+        projectName: formData.name.trim(),
+      };
 
-    if (isCreatingNew) {
-      const created = createProject(payload);
-      setIsCreatingNew(false);
-      selectProject(created.id);
-    } else if (currentProject) {
-      updateProject(currentProject.id, payload);
+      if (isCreatingNew) {
+        const created = createProject(payload);
+        setIsCreatingNew(false);
+        selectProject(created.id);
+      } else if (currentProject) {
+        updateProject(currentProject.id, payload);
+      }
     }
 
-    setSaveToast("Project saved. Launching Waypoint Planning...");
+    setSaveToast("Launching Waypoint Planning...");
     setTimeout(() => {
       navigate("/missions/waypoints");
     }, 280);
@@ -297,9 +307,13 @@ export const MissionDetailsPage = () => {
 
         <button
           type="button"
+          disabled={isViewer || !canCreateMissions}
           onClick={handleStartNewProject}
+          title={isViewer ? "Viewer mode is read-only" : !canCreateMissions ? "Create permission required" : "Start a new project draft"}
           className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-mono transition border ${
-            isCreatingNew
+            isViewer || !canCreateMissions
+              ? "opacity-50 cursor-not-allowed bg-[#0A1019] text-[#64748B] border-[#1E293B]"
+              : isCreatingNew
               ? "bg-[#35E0FF22] text-[#35E0FF] border-[#35E0FF]"
               : "bg-[#0A1019] text-[#E2E8F0] border-[#1E293B] hover:border-[#35E0FF66] hover:bg-[#0E1724]"
           }`}
@@ -313,6 +327,14 @@ export const MissionDetailsPage = () => {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
         {/* ==================== LEFT COLUMN: ACTIVE PROJECT FORM ==================== */}
         <div className="lg:col-span-7 bg-[#0A0E15CC] border border-[#1A2633] rounded-xl p-4 sm:p-5 backdrop-blur-md shadow-xl">
+          {/* Auditor Mode Banner for Viewer */}
+          {isViewer && (
+            <div className="mb-4 p-2.5 rounded-lg bg-[#0B1017] border border-[#5E2222] text-[#FF8585] text-xs font-mono flex items-center gap-2">
+              <ShieldAlert className="w-3.5 h-3.5 text-[#FF4141] shrink-0" />
+              <span>AUDITOR MODE: Project details are read-only for your role.</span>
+            </div>
+          )}
+
           <div className="flex items-center justify-between border-b border-[#16222E] pb-3 mb-4">
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-[#35E0FF]" />
@@ -514,13 +536,19 @@ export const MissionDetailsPage = () => {
                 <button
                   type="button"
                   onClick={handleSaveProjectOnly}
-                  disabled={!isValid}
+                  disabled={!isValid || isViewer || (!canCreateMissions && !canEditMissions)}
                   className={`w-full sm:w-auto px-4 py-3 rounded-xl font-mono text-xs font-bold tracking-wider uppercase transition flex items-center justify-center gap-2 border ${
-                    isValid
+                    !isViewer && isValid && (canCreateMissions || canEditMissions)
                       ? "bg-[#0A1624] border-[#35E0FF66] text-[#35E0FF] hover:bg-[#35E0FF1A] hover:border-[#35E0FF] cursor-pointer shadow-md"
-                      : "bg-[#162330] text-[#556778] border border-[#1F3040] cursor-not-allowed"
+                      : "bg-[#162330] text-[#556778] border border-[#1F3040] cursor-not-allowed opacity-50"
                   }`}
-                  title="Save project to Past Projects catalog"
+                  title={
+                    isViewer
+                      ? "Viewer mode is read-only"
+                      : !canCreateMissions && !canEditMissions
+                      ? "Permission denied to save missions"
+                      : "Save project to Past Projects catalog"
+                  }
                 >
                   <Save className="w-4 h-4" />
                   <span>{isCreatingNew ? "SAVE PROJECT" : "SAVE DETAILS"}</span>
@@ -644,14 +672,16 @@ export const MissionDetailsPage = () => {
                           {isCurrent ? "Active" : "Open"}
                         </button>
 
-                        <button
-                          type="button"
-                          onClick={() => setDeleteConfirmId(proj.id)}
-                          className="p-1 rounded text-[#64748B] hover:text-[#EF4444] hover:bg-[#EF44441F] transition"
-                          title="Delete Project"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        {canDeleteMissions && (
+                          <button
+                            type="button"
+                            onClick={() => setDeleteConfirmId(proj.id)}
+                            className="p-1 rounded text-[#64748B] hover:text-[#EF4444] hover:bg-[#EF44441F] transition"
+                            title="Delete Project"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
                     </div>
 

@@ -21,7 +21,11 @@ import {
   ArrowRight,
   Info,
   FolderKanban,
+  ShieldAlert,
 } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth.js";
+import { Permissions } from "@/auth/permissions.js";
+import { Roles } from "@/auth/roleConfig.js";
 
 const mapStyleOptions = [
   { id: "normal", label: "Normal Map" },
@@ -40,14 +44,33 @@ const CreateGeofencePage = () => {
     clearGeofence,
   } = useMission();
 
-  const [mapStyle, setMapStyle] = useState("normal");
+  const { hasPermission, role } = useAuth();
+  const canEditGeofence = hasPermission(Permissions.CREATE_MISSIONS) || hasPermission(Permissions.EDIT_MISSIONS);
+  const isViewer = role === Roles.VIEWER || !canEditGeofence;
+
+  const [mapStyle, setMapStyle] = useState(() => {
+    try {
+      return localStorage.getItem("aeronexus_map_style") || "normal";
+    } catch {
+      return "normal";
+    }
+  });
+
+  const handleMapStyleChange = (style) => {
+    setMapStyle(style);
+    try {
+      localStorage.setItem("aeronexus_map_style", style);
+    } catch {
+      // Ignore
+    }
+  };
   const [lastLoadedProjectId, setLastLoadedProjectId] = useState(currentProjectId);
 
   const initialCoords =
     currentProject?.geofence?.polygon || currentProject?.geofence?.coordinates || [];
   const [vertices, setVertices] = useState(() => initialCoords);
   const [isClosed, setIsClosed] = useState(() => initialCoords.length >= 3);
-  const [isDrawing, setIsDrawing] = useState(() => initialCoords.length < 3);
+  const [isDrawing, setIsDrawing] = useState(() => !isViewer && initialCoords.length < 3);
   const [isEditing, setIsEditing] = useState(false);
   const [history, setHistory] = useState([]);
   const [notification, setNotification] = useState(null);
@@ -72,7 +95,7 @@ const CreateGeofencePage = () => {
 
   // Handle map click when in drawing mode
   const handleMapClick = (coords) => {
-    if (!isDrawing) return;
+    if (isViewer || !isDrawing) return;
 
     // Check if clicking close to the first vertex to auto-close
     if (vertices.length >= 3) {
@@ -92,6 +115,7 @@ const CreateGeofencePage = () => {
 
   // Vertex dragging during edit mode
   const handleVertexDrag = (index, newCoords) => {
+    if (isViewer) return;
     setVertices((prev) => {
       const next = [...prev];
       next[index] = newCoords;
@@ -100,6 +124,7 @@ const CreateGeofencePage = () => {
   };
 
   const handleVertexDragEnd = (index, newCoords) => {
+    if (isViewer) return;
     pushHistory(
       vertices.map((v, i) => (i === index ? newCoords : v))
     );
@@ -117,6 +142,7 @@ const CreateGeofencePage = () => {
   };
 
   const handleClosePolygon = () => {
+    if (isViewer) return;
     if (vertices.length < 3) {
       showToast("At least 3 vertices are required to close a geofence.", "warning");
       return;
@@ -128,12 +154,14 @@ const CreateGeofencePage = () => {
   };
 
   const handleStartDraw = () => {
+    if (isViewer) return;
     setIsDrawing(true);
     setIsEditing(false);
     setIsClosed(false);
   };
 
   const handleToggleEdit = () => {
+    if (isViewer) return;
     if (vertices.length < 3) {
       showToast("Create a geofence with at least 3 vertices first.", "warning");
       return;
@@ -143,6 +171,7 @@ const CreateGeofencePage = () => {
   };
 
   const handleClear = () => {
+    if (isViewer) return;
     if (vertices.length === 0) return;
     pushHistory([]);
     setVertices([]);
@@ -156,6 +185,7 @@ const CreateGeofencePage = () => {
   };
 
   const handleSave = () => {
+    if (isViewer) return;
     if (vertices.length < 3) {
       showToast("Cannot save: Polygon must have at least 3 vertices.", "error");
       return;
@@ -295,13 +325,16 @@ const CreateGeofencePage = () => {
           {/* Draw Polygon Button */}
           <button
             type="button"
+            disabled={isViewer}
             onClick={handleStartDraw}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition ${
-              isDrawing
+              isViewer
+                ? "text-[#475569] cursor-not-allowed opacity-50"
+                : isDrawing
                 ? "bg-[#35E0FF2B] text-[#35E0FF] border border-[#1EB8D8]"
                 : "text-[#94A3B8] hover:text-white hover:bg-[#111A24]"
             }`}
-            title="Click on the map to place vertices sequentially"
+            title={isViewer ? "Read-only in Viewer mode" : "Click on the map to place vertices sequentially"}
           >
             <Plus className="w-3.5 h-3.5" />
             <span>Draw Polygon</span>
@@ -311,13 +344,13 @@ const CreateGeofencePage = () => {
           <button
             type="button"
             onClick={handleClosePolygon}
-            disabled={vertices.length < 3 || isClosed}
+            disabled={vertices.length < 3 || isClosed || isViewer}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition ${
-              vertices.length >= 3 && !isClosed
+              !isViewer && vertices.length >= 3 && !isClosed
                 ? "bg-[#2FE08924] text-[#2FE089] border border-[#2FE08955] hover:bg-[#2FE08938]"
                 : "text-[#475569] cursor-not-allowed opacity-50"
             }`}
-            title="Connect the last point to the first to complete the perimeter"
+            title={isViewer ? "Read-only in Viewer mode" : "Connect the last point to the first to complete the perimeter"}
           >
             <CheckCircle2 className="w-3.5 h-3.5" />
             <span>Close Boundary</span>
@@ -327,15 +360,17 @@ const CreateGeofencePage = () => {
           <button
             type="button"
             onClick={handleToggleEdit}
-            disabled={vertices.length < 3}
+            disabled={vertices.length < 3 || isViewer}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition ${
-              isEditing
+              isViewer
+                ? "text-[#475569] cursor-not-allowed opacity-50"
+                : isEditing
                 ? "bg-[#3B82F633] text-[#60A5FA] border border-[#3B82F6]"
                 : vertices.length >= 3
                 ? "text-[#94A3B8] hover:text-white hover:bg-[#111A24]"
                 : "text-[#475569] cursor-not-allowed opacity-50"
             }`}
-            title="Drag vertices interactively on the map"
+            title={isViewer ? "Read-only in Viewer mode" : "Drag vertices interactively on the map"}
           >
             <Edit3 className="w-3.5 h-3.5" />
             <span>Edit Vertices</span>
@@ -347,9 +382,9 @@ const CreateGeofencePage = () => {
           <button
             type="button"
             onClick={handleUndo}
-            disabled={history.length === 0}
+            disabled={history.length === 0 || isViewer}
             className={`p-1.5 rounded-lg text-xs transition ${
-              history.length > 0
+              !isViewer && history.length > 0
                 ? "text-[#94A3B8] hover:text-white hover:bg-[#111A24]"
                 : "text-[#475569] cursor-not-allowed opacity-40"
             }`}
@@ -362,9 +397,9 @@ const CreateGeofencePage = () => {
           <button
             type="button"
             onClick={handleClear}
-            disabled={vertices.length === 0}
+            disabled={vertices.length === 0 || isViewer}
             className={`p-1.5 rounded-lg text-xs transition ${
-              vertices.length > 0
+              !isViewer && vertices.length > 0
                 ? "text-[#EF4444] hover:bg-[#EF444422]"
                 : "text-[#475569] cursor-not-allowed opacity-40"
             }`}
@@ -379,12 +414,13 @@ const CreateGeofencePage = () => {
           <button
             type="button"
             onClick={handleSave}
-            disabled={vertices.length < 3}
+            disabled={vertices.length < 3 || isViewer}
             className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-mono font-bold transition ${
-              vertices.length >= 3
+              !isViewer && vertices.length >= 3
                 ? "bg-gradient-to-r from-[#06B6D4] to-[#0284C7] text-white shadow-[0_0_12px_rgba(6,182,212,0.4)] hover:brightness-110"
                 : "bg-[#1E293B] text-[#64748B] cursor-not-allowed"
             }`}
+            title={isViewer ? "Read-only in Viewer mode" : "Save Geofence to Project"}
           >
             <Save className="w-3.5 h-3.5" />
             <span>SAVE GEOFENCE</span>
@@ -392,13 +428,23 @@ const CreateGeofencePage = () => {
         </div>
       </div>
 
+      {/* Auditor Mode Banner for Viewer */}
+      {isViewer && (
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-25 pointer-events-auto px-3.5 py-1.5 rounded-md bg-[#0B1017F2] border border-[#5E2222] shadow-lg backdrop-blur-md flex items-center gap-2 text-[10px] sm:text-[11px] font-mono text-[#FF8585] animate-in fade-in">
+          <ShieldAlert className="w-3.5 h-3.5 text-[#FF4141] shrink-0" />
+          <span className="font-semibold tracking-wide">
+            AUDITOR MODE: Geofence viewing only (Geometry modification restricted).
+          </span>
+        </div>
+      )}
+
       {/* 3. Map Style Selector (Top-Right) */}
       <div className="absolute top-3 right-3 z-20 flex items-center bg-[#080C14CC] border border-[#1A2633] backdrop-blur-md rounded-lg p-1 shadow-lg gap-1 pointer-events-auto">
         {mapStyleOptions.map((opt) => (
           <button
             key={opt.id}
             type="button"
-            onClick={() => setMapStyle(opt.id)}
+            onClick={() => handleMapStyleChange(opt.id)}
             className={`px-2.5 py-1 text-[10px] sm:text-xs font-mono font-semibold rounded-md transition ${
               mapStyle === opt.id
                 ? "bg-[#35E0FF2E] border border-[#1A5A68] text-[#35E0FF] shadow-[0_0_8px_rgba(53,224,255,0.25)]"

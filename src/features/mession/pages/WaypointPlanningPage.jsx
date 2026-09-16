@@ -16,6 +16,10 @@ import WaypointDetailsPanel from "@/features/mession/components/planner/Waypoint
 import MissionItemListHUD from "@/features/mession/components/planner/MissionItemListHUD.jsx";
 import MissionSummaryHUD from "@/features/mession/components/planner/MissionSummaryHUD.jsx";
 
+import { useAuth } from "@/hooks/useAuth.js";
+import { Permissions } from "@/auth/permissions.js";
+import { Roles } from "@/auth/roleConfig.js";
+
 // Planner Modals
 import MissionSettingsModal from "@/features/mession/components/planner/MissionSettingsModal.jsx";
 import MissionPreviewModal from "@/features/mession/components/planner/MissionPreviewModal.jsx";
@@ -37,10 +41,32 @@ const mapStyleOptions = [
  */
 const WaypointPlanningPage = () => {
   const navigate = useNavigate();
-  const [mapStyle, setMapStyle] = useState("normal");
+  const [mapStyle, setMapStyle] = useState(() => {
+    try {
+      return localStorage.getItem("aeronexus_map_style") || "normal";
+    } catch {
+      return "normal";
+    }
+  });
+
+  const handleMapStyleChange = (style) => {
+    setMapStyle(style);
+    try {
+      localStorage.setItem("aeronexus_map_style", style);
+    } catch {
+      // Ignore
+    }
+  };
   const { telemetry } = useDroneTelemetry();
   const { currentProject, currentProjectId, projects, selectProject, saveMission } = useMission();
   const planner = useMissionPlanner(currentProject?.mission);
+
+  // RBAC permissions and role inspection
+  const { hasPermission, role } = useAuth();
+  const canCreate = hasPermission(Permissions.CREATE_MISSIONS);
+  const canEdit = hasPermission(Permissions.EDIT_MISSIONS);
+  const canDelete = hasPermission(Permissions.DELETE_MISSIONS);
+  const isViewer = role === Roles.VIEWER || (!canCreate && !canEdit);
 
   // Modal dialog states
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -182,6 +208,8 @@ const WaypointPlanningPage = () => {
 
   // Map Click Listener for Waypoint Placement with Strict Geofence Check
   const handleMapClick = (coords) => {
+    if (isViewer || !canCreate) return;
+
     if (!hasActiveGeofence) {
       showToast("GEOFENCE REQUIRED — Create and save a geofence before planning waypoints.", "error");
       return;
@@ -204,11 +232,13 @@ const WaypointPlanningPage = () => {
 
   // Waypoint Drag Handling with Boundary Revert Check
   const handleWaypointDrag = (id, newCoords) => {
+    if (isViewer || !canEdit) return;
     // Allow visual feedback while dragging
     planner.updateWaypointCoordinates(id, newCoords);
   };
 
   const handleWaypointDragEnd = (id, newCoords) => {
+    if (isViewer || !canEdit) return;
     if (!hasActiveGeofence) {
       const prevPos = previousPositionsRef.current.get(id);
       if (prevPos) {
@@ -393,8 +423,10 @@ const WaypointPlanningPage = () => {
       <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 max-w-[calc(100vw-24px)] sm:max-w-none">
         <MissionPlanningToolbar
           planner={planner}
-          canSave={hasActiveGeofence && geofenceValidation.isValid}
-          canUpload={hasActiveGeofence && geofenceValidation.isValid}
+          isReadOnly={isViewer}
+          canDelete={canDelete}
+          canSave={!isViewer && (canCreate || canEdit) && hasActiveGeofence && geofenceValidation.isValid}
+          canUpload={!isViewer && (canCreate || canEdit) && hasActiveGeofence && geofenceValidation.isValid}
           onOpenSettings={() => setIsSettingsOpen(true)}
           onOpenPreview={() => setIsPreviewOpen(true)}
           onOpenSave={() => {
@@ -410,13 +442,23 @@ const WaypointPlanningPage = () => {
         />
       </div>
 
+      {/* Viewer Auditor Mode Banner */}
+      {isViewer && (
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-25 pointer-events-auto px-3.5 py-1.5 rounded-md bg-[#0B1017F2] border border-[#5E2222] shadow-lg backdrop-blur-md flex items-center gap-2 text-[10px] sm:text-[11px] font-mono text-[#FF8585] animate-in fade-in">
+          <ShieldAlert className="w-3.5 h-3.5 text-[#FF4141] shrink-0" />
+          <span className="font-semibold tracking-wide">
+            AUDITOR MODE: Waypoint planning is read-only for your role.
+          </span>
+        </div>
+      )}
+
       {/* 3. Floating Map Style Selector (Top-Right) */}
       <div className="absolute top-3 right-3 z-10 flex items-center bg-[#080C14CC] border border-[#1A2633] backdrop-blur-md rounded-lg p-1 shadow-lg gap-1 pointer-events-auto">
         {mapStyleOptions.map((opt) => (
           <button
             key={opt.id}
             type="button"
-            onClick={() => setMapStyle(opt.id)}
+            onClick={() => handleMapStyleChange(opt.id)}
             className={`px-2.5 py-1 text-[10px] sm:text-xs font-mono font-semibold rounded-md transition ${
               mapStyle === opt.id
                 ? "bg-[#35E0FF2E] border border-[#1A5A68] text-[#35E0FF] shadow-[0_0_8px_rgba(53,224,255,0.25)]"

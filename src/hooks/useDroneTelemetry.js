@@ -28,6 +28,12 @@ export function useDroneTelemetry() {
     selectDrone,
     isArmed,
     showToast,
+    gimbalState,
+    setGimbalPitch,
+    setGimbalRoll,
+    setGimbalYaw,
+    setGimbalOrientation,
+    centerGimbal,
   } = useTelemetry();
 
   // Local simulated telemetry state (Single Source of Truth when offline)
@@ -426,10 +432,14 @@ export function useDroneTelemetry() {
         roll: isArmed ? simTelemetry.roll : 0,
         armed: isArmed,
         isArmed: isArmed,
+        gimbal: gimbalState,
       };
 
   return {
-    telemetry: activeTelemetry,
+    telemetry: {
+      ...activeTelemetry,
+      gimbal: activeTelemetry.gimbal || gimbalState,
+    },
     updateStickInputs,
     simMode,
     setSimMode,
@@ -439,6 +449,12 @@ export function useDroneTelemetry() {
     connectionState,
     selectedDroneId,
     selectDrone,
+    gimbalState,
+    setGimbalPitch,
+    setGimbalRoll,
+    setGimbalYaw,
+    setGimbalOrientation,
+    centerGimbal,
   };
 }
 

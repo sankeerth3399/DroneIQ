@@ -1,11 +1,15 @@
 import { Menu, Bell } from "lucide-react"
 import ProfileDetails from "@/components/profile/profileDetails.jsx"
 import { useTelemetry } from "@/hooks/useTelemetry.js"
+import { useAuth } from "@/hooks/useAuth.js"
 import { ConnectionState } from "@/services/telemetry/telemetryTypes.js"
+import { ROLE_METADATA, Roles } from "@/auth/roleConfig.js"
 import ArmStatusButton from "./ArmStatusButton.jsx"
 
 const Header = ({ onToggleMobile, mobileOpen }) => {
     const { telemetry, selectedDroneId, connectionState, isLive } = useTelemetry()
+    const { role } = useAuth()
+    const roleMeta = ROLE_METADATA[role] || ROLE_METADATA[Roles.VIEWER]
 
     // Determine link display text and color based on connection state
     const getLinkDisplay = () => {
@@ -116,8 +120,17 @@ const Header = ({ onToggleMobile, mobileOpen }) => {
                 </div>
             </div>
 
-            {/* RIGHT: Notifications & Profile Details */}
+            {/* RIGHT: Active Role Badge, Notifications & Profile Details */}
             <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+                {/* COMPACT ACTIVE ROLE BADGE (AeroNexus Aerospace Design) */}
+                <div
+                    className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-[4px] border text-[10px] sm:text-[11px] font-mono font-bold shrink-0 select-none shadow-sm ${roleMeta.badgeColor}`}
+                    title={`Current Role: ${roleMeta.label} — ${roleMeta.description}`}
+                >
+                    <div className={`w-1.5 h-1.5 rounded-full ${roleMeta.indicatorColor}`} />
+                    <span>{roleMeta.shortLabel}</span>
+                </div>
+
                 <button
                     type="button"
                     className="flex justify-center items-center w-8 h-8 sm:w-9 sm:h-9 bg-[#171F27] border border-[#223240] rounded-[8px] hover:bg-[#202B36] transition shrink-0"

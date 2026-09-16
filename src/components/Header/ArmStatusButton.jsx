@@ -1,19 +1,53 @@
 import { useTelemetry } from "@/hooks/useTelemetry.js";
+import { useAuth } from "@/hooks/useAuth.js";
+import { Permissions } from "@/auth/permissions.js";
+import { Lock } from "lucide-react";
 
 /**
- * Interactive ARM / UNARMED Flight Safety Control Button
+ * Interactive ARM / UNARMED Flight Safety Control Button with RBAC
  * 
- * Centralized flight-control switch in the AeroNexus header:
- * - When ARMED: red indicator, burgundy background, flight movement unlocked
- * - When UNARMED: neutral/gray indicator, dark background, flight movement completely locked
+ * - When permitted (SUPER_ADMIN, FLIGHT_OPERATOR):
+ *   Interactive flight safety switch toggling isArmed state.
+ * - When restricted (FLEET_MANAGER, VIEWER):
+ *   Inhibited with lock indicator and explanation tooltip.
  */
 export const ArmStatusButton = () => {
-  const { isArmed, toggleArmed } = useTelemetry();
+  const { isArmed, toggleArmed, showToast } = useTelemetry();
+  const { hasPermission } = useAuth();
+
+  const canExecuteFlight = hasPermission(Permissions.EXECUTE_FLIGHT_COMMANDS);
+
+  const handleClick = () => {
+    if (!canExecuteFlight) {
+      if (typeof showToast === "function") {
+        showToast("ARM/DISARM inhibited: Requires Flight Operator or Super Admin role.", "warning");
+      }
+      return;
+    }
+    toggleArmed();
+  };
+
+  if (!canExecuteFlight) {
+    return (
+      <button
+        type="button"
+        onClick={handleClick}
+        className="inline-flex items-center gap-1.5 rounded-[4px] px-2 sm:px-2.5 py-1 border shrink-0 transition-all cursor-not-allowed select-none bg-[#161B22] border-[#2E3842] opacity-70"
+        title="ARM/DISARM Inhibited — Flight command permissions required"
+        aria-label="ARM/DISARM Inhibited for active role"
+      >
+        <Lock className="w-3 h-3 text-[#8E9EAA]" />
+        <span className="text-[10px] sm:text-[11px] font-semibold whitespace-nowrap font-mono tracking-wide text-[#8E9EAA]">
+          {isArmed ? "ARMED (LOCKED)" : "UNARMED"}
+        </span>
+      </button>
+    );
+  }
 
   return (
     <button
       type="button"
-      onClick={toggleArmed}
+      onClick={handleClick}
       className={`inline-flex items-center gap-1.5 rounded-[4px] px-2 sm:px-2.5 py-1 border shrink-0 transition-all cursor-pointer select-none active:scale-95 ${
         isArmed
           ? "bg-[#5C1F1F] border-[#7A2B2B] hover:bg-[#6E2525] hover:border-[#943434] shadow-[0_0_8px_rgba(255,65,65,0.2)]"

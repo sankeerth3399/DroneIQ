@@ -8,10 +8,14 @@ import VirtualJoystick from "./VirtualJoystick.jsx"
  * - Left Stick: Throttle (Vertical) / Yaw (Horizontal)
  * - Right Stick: Pitch (Vertical) / Roll (Horizontal)
  * - Pure Floating Circular HUD: No rectangular boxes, borders, or outer panels
- * - Dynamic Collision Avoidance Engine:
- *     Main Cam: Right Joystick sits at lower-right corner.
- *     FPV Cam: If camera expands, Right Joystick automatically repositions to a safe,
- *              collision-free location, ensuring the camera widget is never covered.
+ * - Deterministic Shared Vertical Alignment:
+ *     Left and Right circular joysticks ALWAYS share the exact same vertical height (Y coordinate)
+ *     via a common CSS custom property: --joystick-bottom.
+ * - Identical Dimensions:
+ *     Both circular joysticks share identical width, height, outer diameter, and knob size.
+ * - Dynamic Camera Collision Avoidance:
+ *     Right Joystick shifts horizontally if needed to avoid camera widgets, while strictly
+ *     preserving vertical alignment with the Left Joystick.
  * - Minimal Show / Hide Joysticks HUD control
  */
 export const DualJoystickOverlay = ({
@@ -26,75 +30,68 @@ export const DualJoystickOverlay = ({
   const rightStickRef = useRef({ x: 0, y: 0 })
   const springThrottle = true
 
-  // Standard responsive base size
-  const [baseSize, setBaseSize] = useState(142)
-
-  // Dynamic layout coordinates for right joystick
-  const [rightPos, setRightPos] = useState({
-    right: 28,
-    bottom: 26,
-    size: 142,
+  // Standard responsive base size and shared bottom positioning
+  const [dimensions, setDimensions] = useState(() => {
+    if (typeof window === "undefined") {
+      return { sharedBottom: 28, leftOffset: 28, baseSize: 142 }
+    }
+    const w = window.innerWidth
+    const h = window.innerHeight
+    const bSize = (w < 440 || h < 440) ? 100 : (w < 640 || h < 540) ? 114 : (w < 1024 || h < 720) ? 128 : 142
+    const sBottom = w < 640 ? 16 : w < 1024 ? 22 : 28
+    const lOffset = w < 640 ? 12 : w < 1024 ? 20 : 28
+    return { sharedBottom: sBottom, leftOffset: lOffset, baseSize: bSize }
   })
 
+  // Dynamic horizontal offset for right joystick (horizontal-only adjustment preserves shared Y)
+  const [rightOffset, setRightOffset] = useState(28)
   const rightContainerRef = useRef(null)
 
-  // 1. Calculate responsive base size on viewport changes
+  // 1. Calculate responsive base size and shared bottom on viewport changes
   useEffect(() => {
     const handleResize = () => {
-      const width = window.innerWidth
-      const height = window.innerHeight
-      if (width < 440 || height < 440) {
-        setBaseSize(100)
-      } else if (width < 640 || height < 540) {
-        setBaseSize(114)
-      } else if (width < 1024 || height < 720) {
-        setBaseSize(128)
-      } else {
-        setBaseSize(142)
-      }
+      const w = window.innerWidth
+      const h = window.innerHeight
+      const bSize = (w < 440 || h < 440) ? 100 : (w < 640 || h < 540) ? 114 : (w < 1024 || h < 720) ? 128 : 142
+      const sBottom = w < 640 ? 16 : w < 1024 ? 22 : 28
+      const lOffset = w < 640 ? 12 : w < 1024 ? 20 : 28
+      setDimensions({ sharedBottom: sBottom, leftOffset: lOffset, baseSize: bSize })
     }
     handleResize()
     window.addEventListener("resize", handleResize)
     return () => window.removeEventListener("resize", handleResize)
   }, [])
 
-  // 2. Collision avoidance layout engine for Right Joystick vs Camera Widget
+  // 2. Collision avoidance layout engine for Right Joystick vs Camera Widget (Horizontal shift only)
   const updateRightStickLayout = useCallback(() => {
     const winW = window.innerWidth
     const winH = window.innerHeight
 
     const defaultRight = winW < 640 ? 12 : (winW < 1024 ? 20 : 28)
-    const defaultBottom = winW < 640 ? 12 : (winW < 1024 ? 20 : 26)
     const margin = 16
 
     // Case A: Map is not large (Camera is full screen) -> docked mini controls at bottom-right
     if (!mapIsLarge) {
-      setRightPos({
-        right: defaultRight,
-        bottom: 84, // lifted safely above docked mini controls (h ~65px)
-        size: baseSize,
-      })
+      // Shift left of docked mini controls (width ~230px + margin 16px = ~246px)
+      // Vertical height remains identical to left joystick (var(--joystick-bottom))
+      setRightOffset(winW < 640 ? 195 : 246)
       return
     }
 
     // Case B: Map is large (Normal Fly view) -> Camera is PiP in top-right
     const camEl = document.querySelector(cameraSelector)
     if (!camEl) {
-      setRightPos({
-        right: defaultRight,
-        bottom: defaultBottom,
-        size: baseSize,
-      })
+      setRightOffset(defaultRight)
       return
     }
 
     const camRect = camEl.getBoundingClientRect()
-    const joyW = baseSize
-    const joyH = baseSize
+    const joyW = dimensions.baseSize
+    const joyH = dimensions.baseSize
 
     // In viewport coordinates:
-    const testJoyTop = winH - defaultBottom - joyH
-    const testJoyBottom = winH - defaultBottom
+    const testJoyTop = winH - dimensions.sharedBottom - joyH
+    const testJoyBottom = winH - dimensions.sharedBottom
     const testJoyLeft = winW - defaultRight - joyW
     const testJoyRight = winW - defaultRight
 
@@ -116,37 +113,14 @@ export const DualJoystickOverlay = ({
     )
 
     if ((intersectsHorizontal && intersectsVertical) || needsFpvSeparation) {
-      // Collision detected or tight space! Camera widget has higher layout priority.
-      const spaceBelow = winH - (camRect.bottom + margin) - defaultBottom
-
-      if (spaceBelow >= 120 && !needsFpvSeparation) {
-        // Fits below camera in right column: adjust size if needed to never overlap
-        const safeSize = Math.max(90, Math.min(baseSize, Math.round(spaceBelow - 10)))
-        setRightPos({
-          right: defaultRight,
-          bottom: defaultBottom,
-          size: safeSize,
-        })
-      } else {
-        // Dynamically shift right joystick leftward outside camera column
-        const safeRight = Math.round((winW - camRect.left) + margin)
-        // Clamp to screen bounds:
-        const clampedRight = Math.min(winW - joyW - 20, Math.max(defaultRight, safeRight))
-        setRightPos({
-          right: clampedRight,
-          bottom: defaultBottom,
-          size: baseSize,
-        })
-      }
+      // Shift right joystick horizontally leftward outside camera column while preserving vertical alignment
+      const safeRight = Math.round((winW - camRect.left) + margin)
+      const clampedRight = Math.min(winW - joyW - 20, Math.max(defaultRight, safeRight))
+      setRightOffset(clampedRight)
     } else {
-      // No collision: return to default position
-      setRightPos({
-        right: defaultRight,
-        bottom: defaultBottom,
-        size: baseSize,
-      })
+      setRightOffset(defaultRight)
     }
-  }, [baseSize, mapIsLarge, cameraSelector, camSelected])
+  }, [dimensions.baseSize, dimensions.sharedBottom, mapIsLarge, cameraSelector, camSelected])
 
   // Recalculate layout on relevant triggers, resize, and camera ResizeObserver
   useEffect(() => {
@@ -155,7 +129,10 @@ export const DualJoystickOverlay = ({
     const t2 = setTimeout(updateRightStickLayout, 150)
     const t3 = setTimeout(updateRightStickLayout, 320)
 
-    window.addEventListener("resize", updateRightStickLayout)
+    const handleResize = () => {
+      updateRightStickLayout()
+    }
+    window.addEventListener("resize", handleResize)
 
     const camEl = document.querySelector(cameraSelector)
     let ro = null
@@ -171,7 +148,7 @@ export const DualJoystickOverlay = ({
       clearTimeout(t1)
       clearTimeout(t2)
       clearTimeout(t3)
-      window.removeEventListener("resize", updateRightStickLayout)
+      window.removeEventListener("resize", handleResize)
       if (ro) ro.disconnect()
     }
   }, [updateRightStickLayout, cameraSelector, camSelected])
@@ -204,7 +181,10 @@ export const DualJoystickOverlay = ({
 
   if (!visible) {
     return (
-      <div className="absolute bottom-3 sm:bottom-4 left-1/2 -translate-x-1/2 z-20 pointer-events-auto">
+      <div
+        style={{ bottom: "var(--joystick-bottom, 28px)" }}
+        className="absolute left-1/2 -translate-x-1/2 z-20 pointer-events-auto"
+      >
         <button
           type="button"
           onClick={onToggleVisible}
@@ -219,15 +199,29 @@ export const DualJoystickOverlay = ({
   }
 
   return (
-    <div className="pointer-events-none absolute inset-0 z-20 overflow-hidden">
-      {/* LEFT CIRCULAR JOYSTICK: Throttle & Yaw (Lower-left floating HUD control) */}
-      <div className="pointer-events-auto absolute left-3 sm:left-6 md:left-8 bottom-3 sm:bottom-6 md:bottom-8 select-none">
+    <div
+      className="pointer-events-none absolute inset-0 z-20 overflow-hidden"
+      style={{
+        "--joystick-bottom": `${dimensions.sharedBottom}px`,
+      }}
+    >
+      {/* LEFT CIRCULAR JOYSTICK: Throttle & Yaw (Uses shared --joystick-bottom) */}
+      <div
+        id="fly-left-joystick-container"
+        style={{
+          left: `${dimensions.leftOffset}px`,
+          bottom: "var(--joystick-bottom)",
+          width: `${dimensions.baseSize}px`,
+          height: `${dimensions.baseSize}px`,
+        }}
+        className="pointer-events-auto absolute transition-all duration-300 ease-out select-none"
+      >
         <VirtualJoystick
           label="LEFT"
           axisXLabel="YAW"
           axisYLabel="THR"
-          size={baseSize}
-          knobSize={Math.round(baseSize * 0.32)}
+          size={dimensions.baseSize}
+          knobSize={Math.round(dimensions.baseSize * 0.32)}
           springX={true}
           springY={springThrottle}
           defaultY={0}
@@ -237,7 +231,10 @@ export const DualJoystickOverlay = ({
 
       {/* MINIMAL HIDE JOYSTICKS BUTTON (Centered at bottom) */}
       {onToggleVisible && (
-        <div className="pointer-events-auto absolute left-1/2 -translate-x-1/2 bottom-1.5 sm:bottom-2">
+        <div
+          style={{ bottom: "calc(var(--joystick-bottom) - 8px)" }}
+          className="pointer-events-auto absolute left-1/2 -translate-x-1/2"
+        >
           <button
             type="button"
             onClick={onToggleVisible}
@@ -250,12 +247,15 @@ export const DualJoystickOverlay = ({
         </div>
       )}
 
-      {/* RIGHT CIRCULAR JOYSTICK: Pitch & Roll (Lower-right floating HUD control with camera collision avoidance) */}
+      {/* RIGHT CIRCULAR JOYSTICK: Pitch & Roll (Uses IDENTICAL --joystick-bottom and size) */}
       <div
+        id="fly-right-joystick-container"
         ref={rightContainerRef}
         style={{
-          right: `${rightPos.right}px`,
-          bottom: `${rightPos.bottom}px`,
+          right: `${rightOffset}px`,
+          bottom: "var(--joystick-bottom)",
+          width: `${dimensions.baseSize}px`,
+          height: `${dimensions.baseSize}px`,
         }}
         className="pointer-events-auto absolute transition-all duration-300 ease-out select-none"
       >
@@ -263,8 +263,8 @@ export const DualJoystickOverlay = ({
           label="RIGHT"
           axisXLabel="ROL"
           axisYLabel="PIT"
-          size={rightPos.size}
-          knobSize={Math.round(rightPos.size * 0.32)}
+          size={dimensions.baseSize}
+          knobSize={Math.round(dimensions.baseSize * 0.32)}
           springX={true}
           springY={true}
           defaultY={0}
