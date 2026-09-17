@@ -129,7 +129,7 @@ export function normalizeRole(rawRole, username = "") {
 
   const normalized = rawRole.trim().toUpperCase()
 
-  if (normalized === Roles.SUPER_ADMIN || normalized === "ADMIN" || normalized === "ADMINISTRATOR") {
+  if (normalized === Roles.SUPER_ADMIN || normalized === "ADMIN") {
     return Roles.SUPER_ADMIN
   }
   if (normalized === Roles.FLEET_MANAGER || normalized === "MANAGER" || normalized === "FLEET_MGR") {
@@ -138,13 +138,11 @@ export function normalizeRole(rawRole, username = "") {
   if (
     normalized === Roles.FLIGHT_OPERATOR ||
     normalized === "PILOT" ||
-    normalized === "OPERATOR" ||
-    normalized === "MISSION OPERATOR" ||
-    normalized === "MISSION_OPERATOR"
+    normalized === "OPERATOR"
   ) {
     return Roles.FLIGHT_OPERATOR
   }
-  if (normalized === Roles.VIEWER || normalized === "OBSERVER" || normalized === "AUDITOR") {
+  if (normalized === Roles.VIEWER || normalized === "AUDITOR") {
     return Roles.VIEWER
   }
 

@@ -75,7 +75,7 @@ const missionSteps = [
 ]
 
 const enterprisePoints = [
-    { title: "Role-based access", body: "Separate planners, pilots, and observers with least-privilege roles." },
+    { title: "Role-based access", body: "Enforce least-privilege operations with granular RBAC permissions." },
     { title: "Fleet scale", body: "Operate hundreds of vehicles from a single ground-control workspace." },
     { title: "On-prem or cloud", body: "Deploy in your VPC or air-gapped network with the same operator UI." },
 ]

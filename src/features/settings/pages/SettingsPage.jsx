@@ -240,7 +240,7 @@ export const SettingsPage = ({ initialTab = "system" }) => {
           {!canSystemConfig ? (
             <div className="p-4 rounded-lg bg-[#1B1212] border border-[#5E2222] text-[#FF8585] text-xs font-mono flex items-center gap-2">
               <Lock className="w-4 h-4" />
-              <span>System Configuration is restricted to Super Administrators. Displaying read-only parameters.</span>
+              <span>System Configuration is restricted to Super Admin (SUPER_ADMIN). Displaying read-only parameters.</span>
             </div>
           ) : null}
 

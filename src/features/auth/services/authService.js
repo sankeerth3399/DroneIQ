@@ -24,9 +24,4 @@ export const loginOperator = async ({ email, username, password, rememberDevice 
   }
 }
 
-export const loginWithSSO = async () => {
-  await new Promise((resolve) => setTimeout(resolve, 600))
-  return { provider: "SAML_OIDC", status: "pending_idp_redirect" }
-}
-
 export default authService

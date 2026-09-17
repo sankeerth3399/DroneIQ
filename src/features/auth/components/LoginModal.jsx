@@ -2,7 +2,7 @@ import { useEffect } from "react"
 import LoginForm from "./LoginForm.jsx"
 
 /**
- * LoginModal: Accessible popup dialog presenting the AeroNexus GCS Operator Sign In.
+ * LoginModal: Accessible popup dialog presenting AeroNexus GCS Sign In.
  * Follows SRP (modal lifecycle & accessibility) and OCP (dialog wrapper).
  */
 export const LoginModal = ({ isOpen, onClose, onSuccess }) => {
@@ -32,7 +32,7 @@ export const LoginModal = ({ isOpen, onClose, onSuccess }) => {
     <div
       role="dialog"
       aria-modal="true"
-      aria-labelledby="operator-sign-in-heading"
+      aria-labelledby="aeronexus-signin-heading"
       className="gcs-modal-backdrop"
       onClick={(e) => {
         // Close when clicking directly on backdrop

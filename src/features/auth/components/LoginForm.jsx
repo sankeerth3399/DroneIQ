@@ -1,39 +1,42 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import { Check, AlertCircle, Loader2, Zap } from "lucide-react"
 import AeroLogo from "./AeroLogo.jsx"
 import GcsCornerBrackets from "./GcsCornerBrackets.jsx"
 import GcsInput from "./GcsInput.jsx"
-import GcsSelect from "./GcsSelect.jsx"
 import { useAuth } from "@/hooks/useAuth.js"
-import { loginWithSSO } from "../services/authService.js"
-import { Roles } from "@/auth/roleConfig.js"
 import { DEV_TEST_USERS } from "@/auth/jwtUtils.js"
 
-const ROLE_OPTIONS = [
-  Roles.SUPER_ADMIN,
-  Roles.FLEET_MANAGER,
-  Roles.FLIGHT_OPERATOR,
-  Roles.VIEWER,
-]
+export const APP_VERSION = "2.6.0-rbac"
+export const BUILD_DATE = "2026-09-17"
 
 /**
- * LoginForm: GCS Operator Sign In presentation and submission component.
+ * LoginForm: AeroNexus GCS Sign In presentation and submission component.
  * Connects to DroneIQ backend via POST /api/auth/login.
+ * Backend determines and returns authoritative RBAC role.
  */
 export const LoginForm = ({ onSuccess, onCancel, showCloseButton = false }) => {
   const navigate = useNavigate()
   const { login } = useAuth()
 
-  // Form states matching canonical 4 roles
+  // Form states - prefilled with default administrator account for fast verification
   const [email, setEmail] = useState("superadmin")
   const [password, setPassword] = useState("admin123")
-  const [role, setRole] = useState(Roles.SUPER_ADMIN)
   const [rememberDevice, setRememberDevice] = useState(true)
 
   // Status states
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.__AERONEXUS_BUILD__ = {
+        version: APP_VERSION,
+        buildDate: BUILD_DATE,
+        authEndpoint: "/api/auth/login",
+      }
+    }
+  }, [])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -58,18 +61,10 @@ export const LoginForm = ({ onSuccess, onCancel, showCloseButton = false }) => {
 
     try {
       setLoading(true)
-      const result = await login({
+      await login({
         username: identifier,
         password,
-        requestedRole: role,
       })
-
-      const authedRole = result?.user?.role
-      if (role && authedRole && role !== authedRole) {
-        setError(`Selected role (${role}) does not match your account role (${authedRole}).`)
-        setLoading(false)
-        return
-      }
 
       if (rememberDevice) {
         localStorage.setItem("aeronexus_remembered_email", identifier)
@@ -90,46 +85,14 @@ export const LoginForm = ({ onSuccess, onCancel, showCloseButton = false }) => {
   }
 
   const handleForgotPassword = () => {
-    alert("Forgot password flow initiated. Password reset instructions will be sent to the registered email.")
-  }
-
-  const handleRequestAccess = () => {
-    if (onCancel) {
-      onCancel()
-    }
-    navigate("/landing#enterprise")
-  }
-
-  const handleSSO = async () => {
-    try {
-      await loginWithSSO()
-      alert("Redirecting to SAML / OIDC Single Sign-On identity provider...")
-    } catch (err) {
-      setError(err.message || "SSO initialization failed.")
-    }
+    alert("Password reset instructions will be sent to the registered email.")
   }
 
   const handleFillTestAccount = (testUser) => {
     setEmail(testUser.username)
     setPassword(testUser.password || "admin123")
-    setRole(testUser.role)
     setError("")
   }
-
-  const handleUsernameChange = (val) => {
-    setEmail(val)
-    const lower = val.trim().toLowerCase()
-    if (lower === "superadmin" || lower === "admin") {
-      setRole(Roles.SUPER_ADMIN)
-    } else if (lower === "fleet_manager" || lower === "manager") {
-      setRole(Roles.FLEET_MANAGER)
-    } else if (lower === "pilot" || lower === "operator") {
-      setRole(Roles.FLIGHT_OPERATOR)
-    } else if (lower === "viewer") {
-      setRole(Roles.VIEWER)
-    }
-  }
-
 
   return (
     <div className="gcs-panel w-full max-w-[400px] px-6 sm:px-7 pt-8 pb-7 shadow-2xl">
@@ -162,10 +125,10 @@ export const LoginForm = ({ onSuccess, onCancel, showCloseButton = false }) => {
       {/* Title & Subtitle */}
       <div className="text-center mt-6 mb-7">
         <h1
-          id="operator-sign-in-heading"
+          id="aeronexus-signin-heading"
           className="text-[21px] font-semibold text-[var(--gcs-text-light)] tracking-tight font-mono"
         >
-          Operator Sign In
+          AeroNexus GCS Sign In
         </h1>
         <p className="text-[13.5px] text-[var(--gcs-text-muted)] mt-1.5 font-normal">
           Authenticate with RBAC role privileges.
@@ -210,17 +173,16 @@ export const LoginForm = ({ onSuccess, onCancel, showCloseButton = false }) => {
 
       {/* Form */}
       <form onSubmit={handleSubmit} noValidate className="space-y-4 font-mono">
-        {/* Email Field */}
+        {/* Username / Email Field */}
         <GcsInput
-          id="operator-email"
+          id="operator-username"
           label="Username / Email"
           type="text"
           autoComplete="username"
           required
           value={email}
-          onChange={(e) => handleUsernameChange(e.target.value)}
+          onChange={(e) => setEmail(e.target.value)}
           placeholder="superadmin, fleet_manager, pilot, viewer"
-
         />
 
         {/* Password Field */}
@@ -233,15 +195,6 @@ export const LoginForm = ({ onSuccess, onCancel, showCloseButton = false }) => {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           placeholder="••••••••"
-        />
-
-        {/* Role Select (Canonical Roles) */}
-        <GcsSelect
-          id="operator-role"
-          label="Role (Canonical RBAC)"
-          options={ROLE_OPTIONS}
-          value={role}
-          onChange={(e) => setRole(e.target.value)}
         />
 
         {/* Remember Device & Forgot Password */}
@@ -272,7 +225,7 @@ export const LoginForm = ({ onSuccess, onCancel, showCloseButton = false }) => {
           <button
             type="button"
             onClick={handleForgotPassword}
-            className="gcs-link text-xs"
+            className="gcs-link text-xs cursor-pointer"
           >
             Forgot password?
           </button>
@@ -294,34 +247,10 @@ export const LoginForm = ({ onSuccess, onCancel, showCloseButton = false }) => {
           )}
         </button>
 
-        {/* Request Access */}
-        <div className="text-center text-[13px] text-[var(--gcs-text-label)] pt-1 font-sans">
-          <span>No account? </span>
-          <button
-            type="button"
-            onClick={handleRequestAccess}
-            className="gcs-link font-medium ml-1"
-          >
-            Request access
-          </button>
+        {/* Non-sensitive Build Identifier Footer */}
+        <div className="text-center text-[10.5px] text-[var(--gcs-text-muted)] font-mono mt-5 pt-3 border-t border-[var(--gcs-border-subtle)] opacity-70 select-none">
+          AeroNexus RBAC v{APP_VERSION} · DroneIQ GCS
         </div>
-
-        {/* Subtle Horizontal Divider */}
-        <div className="pt-2">
-          <div className="border-t border-[var(--gcs-border-subtle)] w-full" />
-        </div>
-
-        {/* SSO Button */}
-        <button
-          type="button"
-          onClick={handleSSO}
-          className="gcs-btn-secondary cursor-pointer font-sans"
-        >
-          <span>Sign in with SSO</span>
-          <span className="text-[var(--gcs-text-muted)] ml-1.5 text-[12.5px] font-normal font-mono">
-            (SAML / OIDC)
-          </span>
-        </button>
       </form>
     </div>
   )
