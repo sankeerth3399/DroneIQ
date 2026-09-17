@@ -42,6 +42,30 @@ export const AuthProvider = ({ children }) => {
     }
   }, [logout])
 
+  // Verify and hydrate authoritative backend profile on startup if token is present
+  useEffect(() => {
+    if (!token) return
+    let isMounted = true
+    authService
+      .getProfile()
+      .then((updatedProfile) => {
+        if (isMounted && updatedProfile && updatedProfile.username) {
+          setUser(updatedProfile)
+        }
+      })
+      .catch((err) => {
+        if (isMounted && err?.status === 401) {
+          console.warn("[AuthContext] Initial profile verification failed (token expired). Clearing session.")
+          logout()
+        }
+      })
+
+    return () => {
+      isMounted = false
+    }
+  }, [token, logout])
+
+
   const login = useCallback(async ({ username, password, requestedRole }) => {
     setAuthLoading(true)
     try {

@@ -44,6 +44,33 @@ export const droneService = {
       }
     }
   },
+
+  /**
+   * Fetch latest telemetry across all drones via REST
+   */
+  async getLatestTelemetry() {
+
+    try {
+      const response = await apiClient("/api/telemetry/latest", { method: "GET" })
+      return response?.data || response
+    } catch (err) {
+      console.warn("[DroneService] GET /api/telemetry/latest unavailable:", err.message)
+      return null
+    }
+  },
+
+  /**
+   * Fetch latest telemetry for a specific drone via REST
+   */
+  async getDroneTelemetry(droneId = "DRONE-001") {
+    try {
+      const response = await apiClient(`/api/drones/${droneId}/telemetry/latest`, { method: "GET" })
+      return response?.data || response
+    } catch {
+      return this.getLatestTelemetry()
+    }
+  },
 }
+
 
 export default droneService

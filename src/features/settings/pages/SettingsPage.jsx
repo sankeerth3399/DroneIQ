@@ -14,6 +14,7 @@ import { useAuth } from "@/hooks/useAuth.js"
 import { Roles, ROLE_METADATA } from "@/auth/roleConfig.js"
 import { Permissions } from "@/auth/permissions.js"
 import { useTelemetry } from "@/hooks/useTelemetry.js"
+import { API_BASE_URL, WS_BASE_URL } from "@/config/env.js"
 
 const DEFAULT_USERS = [
   {
@@ -71,13 +72,14 @@ export const SettingsPage = ({ initialTab = "system" }) => {
 
   // System Configuration State
   const [sysConfig, setSysConfig] = useState({
-    wsUrl: "ws://localhost:8080/ws/telemetry",
-    apiUrl: "http://localhost:8080",
+    wsUrl: `${WS_BASE_URL}/ws/telemetry`,
+    apiUrl: API_BASE_URL,
     telemetryRate: "20Hz",
     safetyBuffer: "15",
     maxCeiling: "120",
     failsafeMode: "RTL",
   })
+
   const [sysSaved, setSysSaved] = useState(false)
 
   // Team & Users State

@@ -32,10 +32,14 @@ export const authService = {
         method: "POST",
         body: JSON.stringify(payload),
       })
-      authData = response?.data || response
+      // Support both backend wrapper formats:
+      // 1. { success: true, data: { token, tokenType, expiresIn, username, email, role } }
+      // 2. Direct data object { token, ... }
+      authData = response?.data?.data ? response.data.data : response?.data || response
     } catch (apiErr) {
-      // Development mode fallback: support seeded test accounts if backend is unreachable
-      if (import.meta.env.DEV) {
+      // ONLY fall back to seeded dev accounts if the backend is completely unreachable (Network Error / status 0)
+      // Never mask a legitimate 401 Unauthorized or other HTTP rejection from the backend
+      if (import.meta.env.DEV && (apiErr.isNetworkError || apiErr.status === 0)) {
         const lowerUser = trimmedUsername.toLowerCase()
         const devMatch =
           DEV_TEST_USERS[lowerUser] ||
@@ -44,7 +48,7 @@ export const authService = {
           )
 
         if (devMatch || requestedRole) {
-          console.warn("[AuthService] Backend unavailable. Using local dev test profile for testing.")
+          console.warn("[AuthService] Backend unreachable. Using local dev test profile for testing.")
           const targetRole = devMatch?.role || normalizeRole(requestedRole) || Roles.FLIGHT_OPERATOR
           const devToken = createDevJwt({
             sub: trimmedUsername,
@@ -108,7 +112,49 @@ export const authService = {
       localStorage.setItem("role", user.role)
     }
 
+    // Optionally hydrate authoritative profile from /api/auth/me in the background
+    this.getProfile().catch((err) => {
+      console.warn("[AuthService] Background /api/auth/me profile sync warning:", err.message)
+    })
+
     return { token, user }
+  },
+
+  /**
+   * Fetch authenticated user profile from GET /api/auth/me
+   * Authoritative backend profile verification
+   */
+  async getProfile() {
+    const token = this.getToken()
+    if (!token) return null
+
+    try {
+      const response = await apiClient("/api/auth/me", { method: "GET" })
+      const profile = response?.data || response
+      if (profile && profile.username) {
+        const currentUser = this.getUser() || {}
+        const updatedUser = {
+          ...currentUser,
+          id: profile.id,
+          username: profile.username,
+          email: profile.email || currentUser.email,
+          role: normalizeRole(profile.role || currentUser.role),
+          createdAt: profile.createdAt,
+        }
+        if (typeof window !== "undefined") {
+          localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(updatedUser))
+          localStorage.setItem("firstName", updatedUser.username || "Operator")
+          localStorage.setItem("role", updatedUser.role)
+        }
+        return updatedUser
+      }
+      return profile
+    } catch (err) {
+      if (err.status === 401) {
+        console.warn("[AuthService] /api/auth/me returned 401. Token is invalid or expired.")
+      }
+      throw err
+    }
   },
 
   /**

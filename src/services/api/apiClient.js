@@ -1,4 +1,4 @@
-import { API_BASE_URL } from "@/config/env.js"
+import { API_BASE_URL, buildApiUrl } from "@/config/env.js"
 
 export const TOKEN_STORAGE_KEY = "aeronexus_jwt_token"
 export const USER_STORAGE_KEY = "aeronexus_user"
@@ -6,11 +6,12 @@ export const USER_STORAGE_KEY = "aeronexus_user"
 /**
  * Centralized REST API Client
  * - Automatic Authorization: Bearer <token> injection
- * - Centralized 401 handling & session expiration broadcast
- * - Standardized error extraction
+ * - Deduplicated endpoint URL resolution via buildApiUrl
+ * - Differentiated 401 handling (login invalid credentials vs protected session expiration)
+ * - Standardized error extraction matching DroneIQ Spring Boot contract
  */
 export async function apiClient(endpoint, options = {}) {
-  const url = endpoint.startsWith("http") ? endpoint : `${API_BASE_URL}${endpoint.startsWith("/") ? "" : "/"}${endpoint}`
+  const url = buildApiUrl(endpoint)
   const token = typeof window !== "undefined" ? localStorage.getItem(TOKEN_STORAGE_KEY) : null
 
   const headers = {
@@ -37,9 +38,22 @@ export async function apiClient(endpoint, options = {}) {
     throw error
   }
 
-  // Handle 401 Unauthorized (Expired or Invalid JWT)
+  // Check if this request is the login endpoint
+  const isAuthEndpoint =
+    typeof endpoint === "string" &&
+    (endpoint.includes("/auth/login") || endpoint.includes("/auth/register"))
+
+  // Handle 401 Unauthorized (Expired or Invalid JWT on PROTECTED endpoints only)
   if (response.status === 401) {
-    if (typeof window !== "undefined") {
+    if (!isAuthEndpoint && typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("aeronexus:toast", {
+          detail: {
+            message: "Session expired. Please sign in again.",
+            type: "warning",
+          },
+        })
+      )
       window.dispatchEvent(new CustomEvent("aeronexus:unauthorized"))
     }
   }
@@ -85,3 +99,4 @@ export async function apiClient(endpoint, options = {}) {
 }
 
 export default apiClient
+

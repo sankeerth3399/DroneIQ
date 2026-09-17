@@ -9,9 +9,12 @@ import { ConnectionState } from "./telemetryTypes.js"
 export class DroneIqClient {
   constructor() {
     this.ws = null
-    this.token = null
-    this.url = `${WS_BASE_URL}/ws/telemetry`
-    this.pingIntervalId = null
+    const cleanWsBase = (WS_BASE_URL || "")
+      .replace(/\/ws\/telemetry\/?$/i, "")
+      .replace(/\/api\/?$/i, "")
+      .replace(/\/+$/, "")
+    this.url = `${cleanWsBase}/ws/telemetry`
+
     this.reconnectTimeoutId = null
     this.reconnectAttempts = 0
     this.maxReconnectDelay = 30000
