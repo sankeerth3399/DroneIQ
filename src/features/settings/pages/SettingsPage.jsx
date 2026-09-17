@@ -170,8 +170,26 @@ export const SettingsPage = ({ initialTab = "system" }) => {
     showToast(`User ${newUser.username} added successfully with role ${newUser.role}.`, "success")
   }
 
+  const handleChangeUserRole = (userId, newRole) => {
+    if (currentRole !== Roles.SUPER_ADMIN) {
+      showToast("Access Denied: Only Super Admin can change user roles.", "error")
+      return
+    }
+    const updated = teamUsers.map((u) => (u.id === userId ? { ...u, role: newRole } : u))
+    setTeamUsers(updated)
+    try {
+      localStorage.setItem("aeronexus_team_users", JSON.stringify(updated))
+    } catch {
+      // Ignore
+    }
+    showToast("Operator role updated successfully.", "success")
+  }
+
   const handleDeleteUser = (userId) => {
-    if (!canManageUsers) return
+    if (currentRole !== Roles.SUPER_ADMIN) {
+      showToast("Access Denied: Only Super Admin can delete users.", "error")
+      return
+    }
     const updated = teamUsers.filter((u) => u.id !== userId)
     setTeamUsers(updated)
     try {
@@ -386,22 +404,38 @@ export const SettingsPage = ({ initialTab = "system" }) => {
                         </td>
                         <td className="py-3 px-4 text-[#8E9EAA]">{u.email}</td>
                         <td className="py-3 px-4">
-                          <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold border ${meta.badgeColor}`}>
-                            {meta.shortLabel}
-                          </span>
+                          {currentRole === Roles.SUPER_ADMIN && u.username !== "superadmin" ? (
+                            <select
+                              value={u.role}
+                              onChange={(e) => handleChangeUserRole(u.id, e.target.value)}
+                              className="bg-[#0B1017] border border-[#203C54] text-[#35E0FF] text-[10.5px] rounded px-2 py-1 font-mono focus:outline-none focus:border-[#35E0FF] cursor-pointer"
+                              title="Change operator role"
+                            >
+                              <option value={Roles.SUPER_ADMIN}>SUPER_ADMIN</option>
+                              <option value={Roles.FLEET_MANAGER}>FLEET_MANAGER</option>
+                              <option value={Roles.FLIGHT_OPERATOR}>FLIGHT_OPERATOR</option>
+                              <option value={Roles.VIEWER}>VIEWER</option>
+                            </select>
+                          ) : (
+                            <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold border ${meta.badgeColor}`}>
+                              {meta.shortLabel}
+                            </span>
+                          )}
                         </td>
                         <td className="py-3 px-4 text-[#2FE089]">{u.status}</td>
                         <td className="py-3 px-4 text-[#8E9EAA]">{u.lastActive}</td>
                         <td className="py-3 px-4 text-right">
-                          {u.username !== "superadmin" && (
+                          {currentRole === Roles.SUPER_ADMIN && u.username !== "superadmin" ? (
                             <button
                               type="button"
                               onClick={() => handleDeleteUser(u.id)}
-                              className="p-1 rounded text-[#FF8585] hover:bg-[#FF41411A] transition"
+                              className="p-1 rounded text-[#FF8585] hover:bg-[#FF41411A] transition cursor-pointer"
                               title="Revoke operator credentials"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
+                          ) : (
+                            <span className="text-[#556677] text-[10px] font-mono">—</span>
                           )}
                         </td>
                       </tr>

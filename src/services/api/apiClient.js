@@ -64,7 +64,7 @@ export async function apiClient(endpoint, options = {}) {
       window.dispatchEvent(
         new CustomEvent("aeronexus:toast", {
           detail: {
-            message: "Access Denied: You do not have permission.",
+            message: "Access Denied: You do not have permission to perform this action.",
             type: "error",
           },
         })

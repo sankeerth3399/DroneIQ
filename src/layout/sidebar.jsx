@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react"
 import { NavLink, useLocation, useNavigate } from "react-router-dom"
-import { X, ChevronDown, FileText, MapPin, ShieldAlert } from "lucide-react"
+import { X, ChevronDown, FileText, MapPin, ShieldAlert, Users as UsersIcon } from "lucide-react"
 import Fly from "../assets/images/drone.svg"
 import Settings from "../assets/images/settings.svg"
 import Logs from "../assets/images/logs.svg"
@@ -16,6 +16,7 @@ const ALL_TABS = [
     { label: "Fly", value: "/fly", img: Fly },
     { label: "Missions", value: "/missions", requiredPermission: Permissions.VIEW_MISSIONS, img: Target, isDropdown: true },
     { label: "Logs", value: "/logs", requiredPermission: Permissions.VIEW_LOGS, img: Logs },
+    { label: "Users", value: "/user-management", requiredPermission: Permissions.INVITE_USERS, icon: UsersIcon },
     { label: "Settings", value: "/settings", requiredPermission: Permissions.SYSTEM_CONFIG, img: Settings },
 ]
 
@@ -216,7 +217,11 @@ const Sidebar = ({ collapsed = false, onToggle, mobileOpen = false, onCloseMobil
                                 }`
                             }
                         >
-                            <img src={tab.img} className="w-[18px] h-[18px] shrink-0" alt={tab.label} />
+                            {tab.icon ? (
+                                <tab.icon className="w-[18px] h-[18px] shrink-0 text-[#8E9EAA]" />
+                            ) : (
+                                <img src={tab.img} className="w-[18px] h-[18px] shrink-0" alt={tab.label} />
+                            )}
                             <span className={`truncate ${collapsed ? "lg:hidden block" : "block"}`}>
                                 {tab.label}
                             </span>

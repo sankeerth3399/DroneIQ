@@ -114,12 +114,18 @@ export const authService = {
       localStorage.setItem("role", user.role)
     }
 
-    // Optionally hydrate authoritative profile from /api/auth/me in the background
-    this.getProfile().catch((err) => {
-      console.warn("[AuthService] Background /api/auth/me profile sync warning:", err.message)
-    })
+    // Authoritatively hydrate profile from GET /api/auth/me immediately
+    let finalUser = user
+    try {
+      const profile = await this.getProfile()
+      if (profile && profile.username) {
+        finalUser = profile
+      }
+    } catch (err) {
+      console.warn("[AuthService] /api/auth/me hydration warning:", err.message)
+    }
 
-    return { token, user }
+    return { token, user: finalUser }
   },
 
   /**

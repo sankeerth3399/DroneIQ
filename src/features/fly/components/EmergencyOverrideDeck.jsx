@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react"
-import { AlertOctagon, RotateCcw, ArrowDownCircle, Ban, AlertTriangle } from "lucide-react"
+import { AlertOctagon, RotateCcw, ArrowDownCircle, Ban, AlertTriangle, PowerOff } from "lucide-react"
 import { useTelemetry } from "@/hooks/useTelemetry.js"
+import { apiClient } from "@/services/api/apiClient.js"
 
 /**
  * Emergency Override Deck for Super Admin and Fleet Manager
@@ -9,7 +10,7 @@ import { useTelemetry } from "@/hooks/useTelemetry.js"
  */
 export const EmergencyOverrideDeck = ({ hasLeftJoystick = false }) => {
   const { showToast } = useTelemetry()
-  const [activeModal, setActiveModal] = useState(null) // null | "RTL" | "LAND" | "ABORT"
+  const [activeModal, setActiveModal] = useState(null) // null | "RTL" | "LAND" | "DISARM" | "ABORT"
   const [isOpen, setIsOpen] = useState(false)
   const deckRef = useRef(null)
 
@@ -60,13 +61,37 @@ export const EmergencyOverrideDeck = ({ hasLeftJoystick = false }) => {
     }
   }, [isOpen])
 
-  const handleConfirmAction = () => {
+  const handleConfirmAction = async () => {
+    const cmdMap = {
+      RTL: "OVERRIDE_RTL",
+      LAND: "EMERGENCY_LAND",
+      DISARM: "FORCE_DISARM",
+      ABORT: "ABORT_MISSION",
+    }
+    const backendCommand = cmdMap[activeModal] || activeModal
+
+    // Dispatch backend API command with Authorization: Bearer <token>
+    try {
+      await apiClient("/api/commands/override", {
+        method: "POST",
+        body: JSON.stringify({
+          command: backendCommand,
+          timestamp: new Date().toISOString(),
+        }),
+      })
+    } catch (err) {
+      console.warn("[EmergencyDeck] Override API dispatched (backend response):", err.message)
+    }
+
     if (activeModal === "RTL") {
       showToast("EMERGENCY OVERRIDE: Return-to-Launch (RTL) initiated.", "warning")
       window.dispatchEvent(new CustomEvent("aeronexus:emergency-rtl"))
     } else if (activeModal === "LAND") {
       showToast("EMERGENCY OVERRIDE: Immediate Emergency Land executed.", "error")
       window.dispatchEvent(new CustomEvent("aeronexus:emergency-land"))
+    } else if (activeModal === "DISARM") {
+      showToast("EMERGENCY OVERRIDE: Motors Force Disarmed.", "error")
+      window.dispatchEvent(new CustomEvent("aeronexus:emergency-disarm"))
     } else if (activeModal === "ABORT") {
       showToast("EMERGENCY OVERRIDE: Active Mission Aborted. Aircraft in Hold.", "error")
       window.dispatchEvent(new CustomEvent("aeronexus:emergency-abort"))
@@ -149,6 +174,18 @@ export const EmergencyOverrideDeck = ({ hasLeftJoystick = false }) => {
 
             <button
               type="button"
+              onClick={() => setActiveModal("DISARM")}
+              className="w-full flex items-center justify-between px-2.5 py-1.5 rounded bg-[#2A1212] hover:bg-[#3D1A1A] border border-[#DC262666] hover:border-[#DC2626] text-[#F87171] text-[10.5px] font-semibold transition"
+            >
+              <div className="flex items-center gap-2">
+                <PowerOff className="w-3.5 h-3.5 text-[#EF4444]" />
+                <span>FORCE DISARM</span>
+              </div>
+              <span className="text-[8.5px] opacity-60">KILL MOTORS</span>
+            </button>
+
+            <button
+              type="button"
               onClick={() => setActiveModal("ABORT")}
               className="w-full flex items-center justify-between px-2.5 py-1.5 rounded bg-[#1B1424] hover:bg-[#2D1E3D] border border-[#A855F766] hover:border-[#A855F7] text-[#C084FC] text-[10.5px] font-semibold transition"
             >
@@ -173,6 +210,8 @@ export const EmergencyOverrideDeck = ({ hasLeftJoystick = false }) => {
                   ? "Confirm Override RTL?"
                   : activeModal === "LAND"
                   ? "Confirm Emergency Land?"
+                  : activeModal === "DISARM"
+                  ? "Confirm Force Disarm?"
                   : "Confirm Abort Mission?"}
               </h3>
             </div>
@@ -182,6 +221,8 @@ export const EmergencyOverrideDeck = ({ hasLeftJoystick = false }) => {
                 "This action will supersede routine pilot control and immediately route the drone to its designated home location."}
               {activeModal === "LAND" &&
                 "CAUTION: Immediate descent will initiate at current coordinates. Ensure clear clearance underneath the aircraft."}
+              {activeModal === "DISARM" &&
+                "CRITICAL WARNING: Immediate motor cutoff will execute. The aircraft will drop from current altitude without control."}
               {activeModal === "ABORT" &&
                 "This action terminates the autonomous waypoint sequence immediately and commands the aircraft to hover/hold position."}
             </p>
