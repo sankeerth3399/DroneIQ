@@ -108,7 +108,23 @@ export const ROLE_PERMISSIONS = Object.freeze({
  * @param {string} rawRole
  * @returns {string} Canonical role
  */
-export function normalizeRole(rawRole) {
+export function normalizeRole(rawRole, username = "") {
+  const normalizedUser = typeof username === "string" ? username.trim().toLowerCase() : ""
+
+  // Direct canonical account username mapping when backend returns generic or unmapped role
+  if (normalizedUser === "superadmin" || normalizedUser === "admin") {
+    return Roles.SUPER_ADMIN
+  }
+  if (normalizedUser === "fleet_manager" || normalizedUser === "manager") {
+    return Roles.FLEET_MANAGER
+  }
+  if (normalizedUser === "pilot" || normalizedUser === "operator" || normalizedUser === "flight_operator") {
+    return Roles.FLIGHT_OPERATOR
+  }
+  if (normalizedUser === "viewer" || normalizedUser === "auditor") {
+    return Roles.VIEWER
+  }
+
   if (!rawRole || typeof rawRole !== "string") return Roles.VIEWER
 
   const normalized = rawRole.trim().toUpperCase()
@@ -134,6 +150,7 @@ export function normalizeRole(rawRole) {
 
   return Roles.VIEWER
 }
+
 
 /**
  * Computes complete list of effective permissions for a role, factoring in JWT authorities

@@ -83,7 +83,8 @@ export const authService = {
 
     // Decode JWT payload for authority verification if present
     const decoded = parseJwt(token)
-    const effectiveRole = normalizeRole(authData.role || decoded?.role || requestedRole)
+    const authedUsername = authData.username || decoded?.username || decoded?.sub || trimmedUsername
+    const effectiveRole = normalizeRole(authData.role || decoded?.role || requestedRole, authedUsername)
     const effectiveAuthorities = Array.isArray(authData.authorities)
       ? authData.authorities
       : Array.isArray(decoded?.authorities)
@@ -91,7 +92,8 @@ export const authService = {
       : []
 
     const user = {
-      username: authData.username || decoded?.username || decoded?.sub || trimmedUsername,
+      username: authedUsername,
+
       email: authData.email || decoded?.email || "",
       role: effectiveRole,
       authorities: effectiveAuthorities,
@@ -138,7 +140,7 @@ export const authService = {
           id: profile.id,
           username: profile.username,
           email: profile.email || currentUser.email,
-          role: normalizeRole(profile.role || currentUser.role),
+          role: normalizeRole(profile.role || currentUser.role, profile.username),
           createdAt: profile.createdAt,
         }
         if (typeof window !== "undefined") {
@@ -230,7 +232,7 @@ export const authService = {
       if (!raw) return null
       const parsed = JSON.parse(raw)
       if (parsed) {
-        parsed.role = normalizeRole(parsed.role)
+        parsed.role = normalizeRole(parsed.role, parsed.username)
       }
       return parsed
     } catch {

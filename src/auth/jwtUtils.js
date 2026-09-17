@@ -57,32 +57,37 @@ export function createDevJwt(payload = {}) {
 export const DEV_TEST_USERS = Object.freeze({
   superadmin: {
     username: "superadmin",
+    password: "admin123",
     displayName: "Commander Alex Vance",
-    email: "superadmin@aeronexus.io",
+    email: "superadmin@droneiq.io",
     role: Roles.SUPER_ADMIN,
     authorities: [],
   },
   fleet_manager: {
     username: "fleet_manager",
+    password: "manager123",
     displayName: "Marcus Brody (Fleet Director)",
-    email: "fleet_manager@aeronexus.io",
+    email: "fleet_manager@droneiq.io",
     role: Roles.FLEET_MANAGER,
     authorities: [],
   },
   pilot: {
     username: "pilot",
+    password: "operator123",
     displayName: "Capt. Sarah Chen (Pilot)",
-    email: "pilot@aeronexus.io",
+    email: "pilot@droneiq.io",
     role: Roles.FLIGHT_OPERATOR,
     authorities: [],
   },
   viewer: {
     username: "viewer",
+    password: "viewer123",
     displayName: "Elena Rostova (FAA Auditor)",
-    email: "viewer@aeronexus.io",
+    email: "viewer@droneiq.io",
     role: Roles.VIEWER,
     authorities: [],
   },
 })
+
 
 export default parseJwt

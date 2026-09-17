@@ -58,11 +58,18 @@ export const LoginForm = ({ onSuccess, onCancel, showCloseButton = false }) => {
 
     try {
       setLoading(true)
-      await login({
+      const result = await login({
         username: identifier,
         password,
         requestedRole: role,
       })
+
+      const authedRole = result?.user?.role
+      if (role && authedRole && role !== authedRole) {
+        setError(`Selected role (${role}) does not match your account role (${authedRole}).`)
+        setLoading(false)
+        return
+      }
 
       if (rememberDevice) {
         localStorage.setItem("aeronexus_remembered_email", identifier)
@@ -104,10 +111,25 @@ export const LoginForm = ({ onSuccess, onCancel, showCloseButton = false }) => {
 
   const handleFillTestAccount = (testUser) => {
     setEmail(testUser.username)
-    setPassword("admin123")
+    setPassword(testUser.password || "admin123")
     setRole(testUser.role)
     setError("")
   }
+
+  const handleUsernameChange = (val) => {
+    setEmail(val)
+    const lower = val.trim().toLowerCase()
+    if (lower === "superadmin" || lower === "admin") {
+      setRole(Roles.SUPER_ADMIN)
+    } else if (lower === "fleet_manager" || lower === "manager") {
+      setRole(Roles.FLEET_MANAGER)
+    } else if (lower === "pilot" || lower === "operator") {
+      setRole(Roles.FLIGHT_OPERATOR)
+    } else if (lower === "viewer") {
+      setRole(Roles.VIEWER)
+    }
+  }
+
 
   return (
     <div className="gcs-panel w-full max-w-[400px] px-6 sm:px-7 pt-8 pb-7 shadow-2xl">
@@ -196,8 +218,9 @@ export const LoginForm = ({ onSuccess, onCancel, showCloseButton = false }) => {
           autoComplete="username"
           required
           value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="superadmin or pilot"
+          onChange={(e) => handleUsernameChange(e.target.value)}
+          placeholder="superadmin, fleet_manager, pilot, viewer"
+
         />
 
         {/* Password Field */}
