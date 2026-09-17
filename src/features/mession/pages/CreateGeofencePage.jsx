@@ -22,6 +22,8 @@ import {
   Info,
   FolderKanban,
   ShieldAlert,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth.js";
 import { Permissions } from "@/auth/permissions.js";
@@ -74,6 +76,7 @@ const CreateGeofencePage = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [history, setHistory] = useState([]);
   const [notification, setNotification] = useState(null);
+  const [metricsCollapsed, setMetricsCollapsed] = useState(() => typeof window !== "undefined" && window.innerWidth < 640);
 
   // Synchronize vertices when active project changes during render
   if (lastLoadedProjectId !== currentProjectId) {
@@ -320,14 +323,14 @@ const CreateGeofencePage = () => {
       </div>
 
       {/* 2. Floating Action Toolbar (Top-Center) */}
-      <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 max-w-[calc(100vw-24px)] sm:max-w-none pointer-events-auto">
-        <div className="flex items-center gap-1.5 sm:gap-2 bg-[#080C14E6] border border-[#1A2633] backdrop-blur-md rounded-xl p-1.5 shadow-2xl">
+      <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 max-w-[calc(100vw-24px)] pointer-events-auto">
+        <div className="flex items-center gap-1.5 sm:gap-2 bg-[#080C14E6] border border-[#1A2633] backdrop-blur-md rounded-xl p-1.5 shadow-2xl overflow-x-auto scrollbar-none">
           {/* Draw Polygon Button */}
           <button
             type="button"
             disabled={isViewer}
             onClick={handleStartDraw}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition ${
+            className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition shrink-0 ${
               isViewer
                 ? "text-[#475569] cursor-not-allowed opacity-50"
                 : isDrawing
@@ -337,7 +340,7 @@ const CreateGeofencePage = () => {
             title={isViewer ? "Read-only in Viewer mode" : "Click on the map to place vertices sequentially"}
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>Draw Polygon</span>
+            <span className="whitespace-nowrap">Draw</span>
           </button>
 
           {/* Close Polygon Button */}
@@ -345,7 +348,7 @@ const CreateGeofencePage = () => {
             type="button"
             onClick={handleClosePolygon}
             disabled={vertices.length < 3 || isClosed || isViewer}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition ${
+            className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition shrink-0 ${
               !isViewer && vertices.length >= 3 && !isClosed
                 ? "bg-[#2FE08924] text-[#2FE089] border border-[#2FE08955] hover:bg-[#2FE08938]"
                 : "text-[#475569] cursor-not-allowed opacity-50"
@@ -353,7 +356,7 @@ const CreateGeofencePage = () => {
             title={isViewer ? "Read-only in Viewer mode" : "Connect the last point to the first to complete the perimeter"}
           >
             <CheckCircle2 className="w-3.5 h-3.5" />
-            <span>Close Boundary</span>
+            <span className="whitespace-nowrap">Close</span>
           </button>
 
           {/* Edit Vertices Button */}
@@ -361,7 +364,7 @@ const CreateGeofencePage = () => {
             type="button"
             onClick={handleToggleEdit}
             disabled={vertices.length < 3 || isViewer}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition ${
+            className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition shrink-0 ${
               isViewer
                 ? "text-[#475569] cursor-not-allowed opacity-50"
                 : isEditing
@@ -373,7 +376,7 @@ const CreateGeofencePage = () => {
             title={isViewer ? "Read-only in Viewer mode" : "Drag vertices interactively on the map"}
           >
             <Edit3 className="w-3.5 h-3.5" />
-            <span>Edit Vertices</span>
+            <span className="whitespace-nowrap">Edit</span>
           </button>
 
           <div className="h-5 w-[1px] bg-[#1E293B]" />
@@ -475,57 +478,69 @@ const CreateGeofencePage = () => {
       {/* ==================== BOTTOM HUD PANELS ==================== */}
 
       {/* 4. Geofence Metrics HUD (Bottom-Left) */}
-      <div className="absolute bottom-4 left-4 z-20 pointer-events-auto">
-        <div className="bg-[#080C14E6] border border-[#1A2633] backdrop-blur-md rounded-xl p-3.5 shadow-2xl w-[280px] sm:w-[320px]">
-          <div className="flex items-center justify-between pb-2 border-b border-[#1E293B]">
-            <div className="flex items-center gap-2">
-              <Shield className="w-4 h-4 text-[#35E0FF]" />
-              <span className="font-mono text-xs font-bold uppercase tracking-wider text-white">
+      <div className="absolute bottom-3 left-3 sm:bottom-4 sm:left-4 z-20 pointer-events-auto max-w-[calc(100vw-24px)]">
+        <div className="bg-[#080C14E6] border border-[#1A2633] backdrop-blur-md rounded-xl p-2.5 sm:p-3.5 shadow-2xl w-[260px] sm:w-[320px] max-w-full">
+          <div className="flex items-center justify-between pb-1.5 sm:pb-2 border-b border-[#1E293B]">
+            <button
+              type="button"
+              onClick={() => setMetricsCollapsed((prev) => !prev)}
+              className="flex items-center gap-1.5 sm:gap-2 text-left hover:opacity-80 transition cursor-pointer"
+            >
+              <Shield className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#35E0FF]" />
+              <span className="font-mono text-[11px] sm:text-xs font-bold uppercase tracking-wider text-white">
                 Boundary Metrics
               </span>
-            </div>
-            <span className="font-mono text-[10px] text-[#35E0FF] bg-[#35E0FF1A] px-2 py-0.5 rounded border border-[#35E0FF33]">
+              <span className="sm:hidden text-[#64748B]">
+                {metricsCollapsed ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+              </span>
+            </button>
+            <span className="font-mono text-[9px] sm:text-[10px] text-[#35E0FF] bg-[#35E0FF1A] px-1.5 sm:px-2 py-0.5 rounded border border-[#35E0FF33]">
               {vertices.length} VERTICES
             </span>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 mt-3">
-            <div className="flex flex-col bg-[#0C121D] p-2.5 rounded-lg border border-[#1A2633]">
-              <span className="text-[10px] font-mono text-[#64748B]">ENCLOSED AREA</span>
-              <span className="text-sm sm:text-base font-mono font-bold text-[#E2E8F0] mt-0.5">
-                {formattedArea}
-              </span>
-              <span className="text-[9px] font-mono text-[#475569]">
-                {areaM2 > 0 ? `${(areaM2 / 1000000).toFixed(4)} km²` : "0.0000 km²"}
-              </span>
-            </div>
+          {!metricsCollapsed && (
+            <>
+              <div className="grid grid-cols-2 gap-2 sm:gap-3 mt-2 sm:mt-3">
+                <div className="flex flex-col bg-[#0C121D] p-2 sm:p-2.5 rounded-lg border border-[#1A2633]">
+                  <span className="text-[9px] sm:text-[10px] font-mono text-[#64748B]">ENCLOSED AREA</span>
+                  <span className="text-xs sm:text-base font-mono font-bold text-[#E2E8F0] mt-0.5">
+                    {formattedArea}
+                  </span>
+                  <span className="text-[8px] sm:text-[9px] font-mono text-[#475569]">
+                    {areaM2 > 0 ? `${(areaM2 / 1000000).toFixed(4)} km²` : "0.0000 km²"}
+                  </span>
+                </div>
 
-            <div className="flex flex-col bg-[#0C121D] p-2.5 rounded-lg border border-[#1A2633]">
-              <span className="text-[10px] font-mono text-[#64748B]">PERIMETER</span>
-              <span className="text-sm sm:text-base font-mono font-bold text-[#E2E8F0] mt-0.5">
-                {formattedPerimeter}
-              </span>
-              <span className="text-[9px] font-mono text-[#475569]">
-                {perimeterM > 0 ? `${(perimeterM / 1000).toFixed(3)} km` : "0.000 km"}
-              </span>
-            </div>
-          </div>
+                <div className="flex flex-col bg-[#0C121D] p-2 sm:p-2.5 rounded-lg border border-[#1A2633]">
+                  <span className="text-[9px] sm:text-[10px] font-mono text-[#64748B]">PERIMETER</span>
+                  <span className="text-xs sm:text-base font-mono font-bold text-[#E2E8F0] mt-0.5">
+                    {formattedPerimeter}
+                  </span>
+                  <span className="text-[8px] sm:text-[9px] font-mono text-[#475569]">
+                    {perimeterM > 0 ? `${(perimeterM / 1000).toFixed(3)} km` : "0.000 km"}
+                  </span>
+                </div>
+              </div>
 
-          <div className="mt-3 text-[10px] font-mono text-[#94A3B8] leading-tight bg-[#0B131E] p-2 rounded border border-[#16202C]">
-            <span className="text-[#35E0FF] font-semibold">Rule:</span> Waypoints placed in Waypoint Planning cannot cross or lie outside this boundary.
-          </div>
+              <div className="mt-2 sm:mt-3 text-[9px] sm:text-[10px] font-mono text-[#94A3B8] leading-tight bg-[#0B131E] p-1.5 sm:p-2 rounded border border-[#16202C]">
+                <span className="text-[#35E0FF] font-semibold">Rule:</span> Waypoints placed in Waypoint Planning cannot cross or lie outside this boundary.
+              </div>
+            </>
+          )}
         </div>
       </div>
 
       {/* 5. Direct Transition Link to Waypoint Planning (Bottom-Right) */}
-      <div className="absolute bottom-4 right-4 z-20 pointer-events-auto">
+      <div className="absolute bottom-3 right-3 sm:bottom-4 sm:right-4 z-20 pointer-events-auto">
         <button
           type="button"
           onClick={() => navigate("/missions/waypoints")}
-          className="flex items-center gap-2 bg-[#080C14E6] hover:bg-[#0E1724] border border-[#1EB8D855] hover:border-[#35E0FF] backdrop-blur-md rounded-xl px-4 py-3 text-xs font-mono font-bold text-[#35E0FF] shadow-2xl transition group"
+          className="flex items-center gap-1.5 sm:gap-2 bg-[#080C14E6] hover:bg-[#0E1724] border border-[#1EB8D855] hover:border-[#35E0FF] backdrop-blur-md rounded-xl px-3 py-2 sm:px-4 sm:py-3 text-[11px] sm:text-xs font-mono font-bold text-[#35E0FF] shadow-2xl transition group min-h-[40px]"
         >
-          <span>PROCEED TO WAYPOINT PLANNING</span>
-          <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
+          <span className="hidden sm:inline">PROCEED TO WAYPOINT PLANNING</span>
+          <span className="sm:hidden">TO PLANNING</span>
+          <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 transition-transform group-hover:translate-x-1" />
         </button>
       </div>
 

@@ -444,6 +444,12 @@ const MapContainer = ({
           zoom: 15,
           hybrid: mapStyle === "satellite",
           fullscreenControl: false,
+          zoomControl: false,
+          rotateControl: false,
+          scrollZoom: true,
+          doubleClickZoom: true,
+          touchZoomRotate: true,
+          dragPan: true,
         });
 
         if (typeof map.remove === "function") {
@@ -569,24 +575,38 @@ const MapContainer = ({
       }, 100);
     }
 
-      // Observe and guarantee bottom-left MAPPLS / MapmyIndia banner is hidden
+      // Observe and guarantee bottom-left MAPPLS banner and 3D / Zoom controls are pruned
       const container = document.getElementById(mapId);
       let attribObserver = null;
       if (container) {
-        const hideBottomLeftBanner = () => {
-          const els = container.querySelectorAll(
+        const cleanMapControls = () => {
+          // Hide bottom-left branding banner
+          const banners = container.querySelectorAll(
             '.cst-attrib-cont > a, [id^="watermark_logo"], img[src*="mappls_mmi"], .maplibregl-ctrl-bottom-left a[href*="mappls"], .mapboxgl-ctrl-bottom-left a[href*="mappls"]'
           );
-          els.forEach((el) => {
+          banners.forEach((el) => {
             if (el.style.display !== "none") {
               el.style.setProperty("display", "none", "important");
               el.style.setProperty("visibility", "hidden", "important");
               el.style.setProperty("pointer-events", "none", "important");
             }
           });
+
+          // Remove 3D control, zoom (+ / -) controls, and their containers without leaving empty boxes
+          const controlsToRemove = container.querySelectorAll(
+            '.map-control, [id^="mmi_ctrl"], .expand-map-control, .map-zoom-in, .map-zoom-out, .D3, [id^="d3"], .mcompass, [id^="mcompass"], .maplibregl-ctrl-zoom-in, .maplibregl-ctrl-zoom-out, .mapboxgl-ctrl-zoom-in, .mapboxgl-ctrl-zoom-out, .maplibregl-ctrl-pitch, .mapboxgl-ctrl-pitch, .maplibregl-ctrl-compass, .mapboxgl-ctrl-compass, .cst-btn-3d, .mappls-3d-ctrl, .mappls-ctrl-zoom, .mappls-zoom-ctrl, button[title*="3D"], button[aria-label*="3D"], a[title="Compass"], a[alt="Compass"], a[title="Zoom In"], a[alt="Zoom In"], a[title="Zoom Out"], a[alt="Zoom Out"]'
+          );
+          controlsToRemove.forEach((el) => {
+            const parentControl = el.closest('.map-control, [id^="mmi_ctrl"], .maplibregl-ctrl-group, .mapboxgl-ctrl-group');
+            if (parentControl && parentControl.parentNode) {
+              parentControl.remove();
+            } else if (el.parentNode) {
+              el.remove();
+            }
+          });
         };
-        hideBottomLeftBanner();
-        attribObserver = new MutationObserver(hideBottomLeftBanner);
+        cleanMapControls();
+        attribObserver = new MutationObserver(cleanMapControls);
         attribObserver.observe(container, { childList: true, subtree: true });
       }
 
@@ -653,6 +673,37 @@ const MapContainer = ({
       };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Responsive Map Size Recalculation (Sidebar toggle, window resize, orientation change)
+  useEffect(() => {
+    const handleResize = () => {
+      if (mapRef.current) {
+        try {
+          mapRef.current.resize?.();
+        } catch {
+          // Safe ignore
+        }
+      }
+    };
+
+    window.addEventListener("resize", handleResize);
+    window.addEventListener("orientationchange", handleResize);
+
+    const container = containerRef.current || document.getElementById(mapId);
+    let ro = null;
+    if (container && typeof ResizeObserver !== "undefined") {
+      ro = new ResizeObserver(() => {
+        handleResize();
+      });
+      ro.observe(container);
+    }
+
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      window.removeEventListener("orientationchange", handleResize);
+      if (ro) ro.disconnect();
+    };
+  }, [mapId]);
 
 
   // Shortest-path angle interpolation for smooth heading rotation (359° -> 0° safe)

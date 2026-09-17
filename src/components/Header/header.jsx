@@ -79,8 +79,8 @@ const Header = ({ onToggleMobile, mobileOpen }) => {
                         </span>
                     </div>
 
-                    {/* WEBSOCKET / TELEMETRY LINK (Hidden on tiny < 480px, compact on sm) */}
-                    <div className="hidden xs:flex flex-col shrink-0">
+                    {/* WEBSOCKET / TELEMETRY LINK (Hidden on mobile < sm, visible on sm+) */}
+                    <div className="hidden sm:flex flex-col shrink-0">
                         <div className="flex items-center gap-1.5">
                             <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0" />
                             <span className={`text-[11px] sm:text-[12px] font-semibold leading-none ${linkInfo.color}`}>

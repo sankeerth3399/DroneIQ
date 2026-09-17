@@ -140,7 +140,7 @@ export default function WaypointDetailsPanel({
 
   return (
     <div
-      className="w-72 sm:w-80 rounded-xl bg-[#080C14F5] border border-[#1C2834] shadow-2xl backdrop-blur-md text-xs font-mono text-[#EEF4F8] select-none pointer-events-auto overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+      className="w-full max-w-[340px] sm:w-80 max-h-[calc(100dvh-80px)] overflow-y-auto rounded-xl bg-[#080C14FA] border border-[#1C2834] shadow-2xl backdrop-blur-md text-xs font-mono text-[#EEF4F8] select-none pointer-events-auto animate-in fade-in zoom-in-95 duration-150"
       onClick={(e) => e.stopPropagation()}
       onMouseDown={(e) => e.stopPropagation()}
       onPointerDown={(e) => e.stopPropagation()}

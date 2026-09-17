@@ -494,9 +494,9 @@ const WaypointPlanningPage = () => {
 
       {/* ==================== FLOATING PANELS ==================== */}
 
-      {/* 6. Waypoint Details Editor Panel (Floating on Right) */}
+      {/* 6. Waypoint Details Editor Panel (Slide-up Bottom Sheet on Mobile, Floating on Desktop) */}
       {planner.selectedWaypoint && (
-        <div className="absolute top-16 right-3 z-30 pointer-events-auto">
+        <div className="fixed inset-x-3 bottom-3 sm:inset-x-auto sm:bottom-auto sm:absolute sm:top-16 sm:right-3 z-35 flex justify-center sm:block pointer-events-auto">
           <WaypointDetailsPanel
             waypoint={planner.selectedWaypoint}
             validateCoordinates={(lat, lng) => isPointInsideGeofence({ lat, lng }, geofenceCoords)}
@@ -510,7 +510,7 @@ const WaypointPlanningPage = () => {
       {/* ==================== BOTTOM HUD PANELS ==================== */}
 
       {/* 7. Mission Items List HUD (Bottom-Left) */}
-      <div className="absolute bottom-3 left-3 z-10 pointer-events-auto max-w-[280px] sm:max-w-xs">
+      <div className="absolute bottom-3 left-3 z-10 pointer-events-auto max-w-[calc(100vw-24px)] sm:max-w-xs">
         <MissionItemListHUD
           items={planner.items}
           selectedWaypointId={planner.selectedWaypointId}
@@ -521,7 +521,7 @@ const WaypointPlanningPage = () => {
       </div>
 
       {/* 8. Mission Metrics Summary HUD (Bottom-Right) */}
-      <div className="absolute bottom-3 right-3 z-10 pointer-events-auto max-w-xs">
+      <div className="absolute bottom-3 right-3 z-10 pointer-events-auto max-w-[calc(100vw-24px)] sm:max-w-xs">
         <MissionSummaryHUD
           itemsCount={planner.items.length}
           formattedDistance={planner.formattedDistance}

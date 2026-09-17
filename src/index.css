@@ -8,8 +8,13 @@ html {
 html,
 body,
 #root {
+    width: 100%;
+    max-width: 100%;
+    min-height: 100dvh;
+    height: 100dvh;
     margin: 0;
     padding: 0;
+    overflow-x: hidden;
     overscroll-behavior: none;
     overscroll-behavior-y: none;
 }
@@ -74,6 +79,48 @@ img[src*="mappls_mmi"],
 .mapboxgl-ctrl-bottom-left .maplibregl-ctrl-logo,
 .mapboxgl-ctrl-logo,
 .maplibregl-ctrl-logo {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+/* Remove map 3D control, zoom (+ / -) controls, and their containers without leaving blank space */
+.map-control,
+[id^="mmi_ctrl"],
+.expand-map-control,
+.map-zoom-in,
+.map-zoom-out,
+.D3,
+[id^="d3"],
+.mcompass,
+[id^="mcompass"],
+.maplibregl-ctrl-zoom-in,
+.maplibregl-ctrl-zoom-out,
+.mapboxgl-ctrl-zoom-in,
+.mapboxgl-ctrl-zoom-out,
+.maplibregl-ctrl-group:has(.maplibregl-ctrl-zoom-in),
+.mapboxgl-ctrl-group:has(.mapboxgl-ctrl-zoom-in),
+.maplibregl-ctrl-pitch,
+.mapboxgl-ctrl-pitch,
+.maplibregl-ctrl-compass,
+.mapboxgl-ctrl-compass,
+.cst-btn-3d,
+.mappls-3d-ctrl,
+.mappls-ctrl-zoom,
+.mappls-zoom-ctrl,
+button[title*="3D"],
+button[aria-label*="3D"],
+a[title="Compass"],
+a[alt="Compass"],
+a[title="Zoom In"],
+a[alt="Zoom In"],
+a[title="Zoom Out"],
+a[alt="Zoom Out"] {
     display: none !important;
     visibility: hidden !important;
     opacity: 0 !important;

@@ -1,4 +1,5 @@
 import { useMemo } from "react"
+import { formatSignedTelemetry } from "@/utils/telemetryFormat.js"
 
 /**
  * High-Tech Circular Attitude Indicator (Artificial Horizon)
@@ -15,6 +16,9 @@ export const AttitudeIndicator = ({
   roll = 0,  // degrees: -180 to +180
   size = 140, // diameter in pixels
 }) => {
+  const safePitch = Number.isFinite(Number(pitch)) ? Number(pitch) : 0
+  const safeRoll = Number.isFinite(Number(roll)) ? Number(roll) : 0
+
   const radius = size / 2
   // Dynamically scale pixels per degree of pitch based on instrument size
   const scaleRatio = size / 140
@@ -31,18 +35,20 @@ export const AttitudeIndicator = ({
   ], [scaleRatio])
 
   // Pitch translation (clamped to radius so horizon stays visible)
-  const pitchOffset = Math.max(-radius * 0.85, Math.min(radius * 0.85, pitch * pitchScale))
+  const pitchOffset = Math.max(-radius * 0.85, Math.min(radius * 0.85, safePitch * pitchScale))
 
   return (
     <div
       className="relative rounded-full overflow-hidden select-none bg-[#070A10]"
       style={{ width: `${size}px`, height: `${size}px` }}
+      title={`Attitude: P ${formatSignedTelemetry(safePitch)}°, R ${formatSignedTelemetry(safeRoll)}°`}
+      aria-label={`Attitude: Pitch ${formatSignedTelemetry(safePitch)}°, Roll ${formatSignedTelemetry(safeRoll)}°`}
     >
       {/* ROTATING & TRANSLATING HORIZON SPHERE */}
       <div
         className="absolute inset-[-60%] will-change-transform"
         style={{
-          transform: `rotate(${-roll}deg) translateY(${pitchOffset}px)`,
+          transform: `rotate(${-safeRoll}deg) translateY(${pitchOffset}px)`,
           transformOrigin: "center center",
         }}
       >

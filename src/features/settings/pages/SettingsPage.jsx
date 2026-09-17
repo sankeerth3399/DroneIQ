@@ -379,8 +379,62 @@ export const SettingsPage = ({ initialTab = "system" }) => {
             </button>
           </div>
 
-          {/* User Table */}
-          <div className="rounded-xl border border-[#1A2633] bg-[#0B1017] overflow-hidden">
+          {/* Mobile Operator Cards (< sm) */}
+          <div className="sm:hidden divide-y divide-[#1A2633] rounded-xl border border-[#1A2633] bg-[#0B1017] overflow-hidden">
+            {teamUsers.map((u) => {
+              const meta = ROLE_METADATA[u.role] || ROLE_METADATA[Roles.VIEWER]
+              return (
+                <div key={u.id} className="p-3.5 space-y-2.5 font-mono">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="font-semibold text-white text-xs">{u.name}</div>
+                      <div className="text-[10px] text-[#8E9EAA]">@{u.username} • {u.email}</div>
+                    </div>
+                    <span className="text-[10px] text-[#2FE089] shrink-0">{u.status}</span>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2 pt-1 border-t border-[#16222E]">
+                    <div>
+                      <span className="text-[9px] text-[#64748B] block">ASSIGNED ROLE</span>
+                      {currentRole === Roles.SUPER_ADMIN && u.username !== "superadmin" ? (
+                        <select
+                          value={u.role}
+                          onChange={(e) => handleChangeUserRole(u.id, e.target.value)}
+                          className="mt-0.5 bg-[#080C14] border border-[#203C54] text-[#35E0FF] text-[10.5px] rounded px-2 py-1 font-mono focus:outline-none focus:border-[#35E0FF] cursor-pointer"
+                        >
+                          <option value={Roles.SUPER_ADMIN}>SUPER_ADMIN</option>
+                          <option value={Roles.FLEET_MANAGER}>FLEET_MANAGER</option>
+                          <option value={Roles.FLIGHT_OPERATOR}>FLIGHT_OPERATOR</option>
+                          <option value={Roles.VIEWER}>VIEWER</option>
+                        </select>
+                      ) : (
+                        <span className={`inline-block mt-0.5 px-2 py-0.5 rounded text-[10px] font-bold border ${meta.badgeColor}`}>
+                          {meta.shortLabel}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-[#8E9EAA]">{u.lastActive}</span>
+                      {currentRole === Roles.SUPER_ADMIN && u.username !== "superadmin" && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteUser(u.id)}
+                          className="p-1.5 rounded text-[#FF8585] hover:bg-[#FF41411A] transition cursor-pointer min-h-[32px] min-w-[32px] flex items-center justify-center"
+                          title="Revoke operator credentials"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Desktop/Tablet User Table (sm+) */}
+          <div className="hidden sm:block rounded-xl border border-[#1A2633] bg-[#0B1017] overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs font-mono">
                 <thead className="bg-[#080C14] border-b border-[#1A2633] text-[#8E9EAA]">
@@ -450,14 +504,14 @@ export const SettingsPage = ({ initialTab = "system" }) => {
 
       {/* INVITE OPERATOR MODAL */}
       {isInviteOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in">
-          <div className="w-full max-w-md rounded-xl bg-[#0B1017] border border-[#223240] p-6 shadow-2xl space-y-4 font-mono text-xs">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-3 sm:p-4 animate-in fade-in">
+          <div className="w-full max-w-md max-h-[calc(100dvh-24px)] overflow-y-auto rounded-xl bg-[#0B1017] border border-[#223240] p-4 sm:p-6 shadow-2xl space-y-4 font-mono text-xs">
             <div className="flex items-center justify-between border-b border-[#1A2633] pb-3">
               <span className="text-sm font-bold text-white">INVITE / REGISTER OPERATOR</span>
               <button
                 type="button"
                 onClick={() => setIsInviteOpen(false)}
-                className="text-[#8E9EAA] hover:text-white"
+                className="text-[#8E9EAA] hover:text-white p-1 min-h-[36px] min-w-[36px] flex items-center justify-center text-base"
               >
                 ✕
               </button>

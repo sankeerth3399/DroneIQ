@@ -3,11 +3,10 @@ import MapLoad from "@/components/Map/mapContainer.jsx";
 import { useDroneTelemetry } from "@/hooks/useDroneTelemetry.js";
 import DualJoystickOverlay from "@/features/mession/components/joysticks/DualJoystickOverlay.jsx";
 import FlightInstrumentsWidget from "@/features/mession/components/widgets/FlightInstrumentsWidget.jsx";
-import GimbalControlWidget from "@/features/fly/components/GimbalControlWidget.jsx";
 import CameraWidget from "@/features/fly/components/CameraWidget.jsx";
 import EmergencyOverrideDeck from "@/features/fly/components/EmergencyOverrideDeck.jsx";
 import CaptureToast from "@/features/mession/components/toast/CaptureToast.jsx";
-import { Plane, LayoutGrid, ShieldAlert, Layers } from "lucide-react";
+import { Plane, LayoutGrid, ShieldAlert } from "lucide-react";
 
 import { useTelemetry } from "@/hooks/useTelemetry.js";
 import { useAuth } from "@/hooks/useAuth.js";
@@ -85,10 +84,7 @@ const FlyPage = () => {
     isLive,
     isArmed,
     gimbalState,
-    setGimbalPitch,
     setGimbalRoll,
-    setGimbalYaw,
-    setGimbalOrientation,
     centerGimbal,
   } = useDroneTelemetry();
   const { showToast } = useTelemetry();
@@ -241,63 +237,25 @@ const FlyPage = () => {
         )}
       </div>
 
-      {/* LIVE DRONE CAMERA FEED WIDGET (Composed Preview, Tabs, and Capture Banner) */}
+      {/* LIVE DRONE CAMERA FEED WIDGET (Composed Preview, Tabs, Capture Banner, and Integrated Gimbal Roll & Center) */}
       <CameraWidget
         mapIsLarge={mapIsLarge}
         onToggleLarge={() => setMapIsLarge(false)}
         camSelected={camSelected}
         onChangeCam={setCamSelected}
         telemetry={telemetry}
+        gimbalState={gimbalState}
+        onSetRoll={setGimbalRoll}
+        onNudgeRoll={(delta) => setGimbalRoll((gimbalState?.roll || 0) + delta)}
+        onCenterGimbal={() => centerGimbal(telemetry.heading || 0)}
         onCaptureToast={setToast}
         onTriggerDroneFlash={triggerDroneFlash}
         onTriggerScreenFlash={triggerScreenFlash}
         isDroneFlashing={isDroneFlashing}
       />
 
-      {/* FLOATING MAP STYLE SELECTOR HUD (Normal Map / Satellite Map) */}
-      <div
-        id="fly-map-style-selector"
-        className={`absolute right-2 sm:right-4 z-20 flex items-center bg-[#080C14E6] border border-[#1A2633] backdrop-blur-md rounded-lg p-1 shadow-2xl gap-1 pointer-events-auto transition-all duration-300 ${
-          mapIsLarge
-            ? camSelected === "fpv"
-              ? "top-[238px] sm:top-[290px] md:top-[340px]"
-              : "top-[166px] sm:top-[198px] md:top-[230px]"
-            : "bottom-4 right-[200px] sm:right-[245px]"
-        }`}
-      >
-        <div className="flex items-center gap-1 px-1.5 py-0.5 text-[9px] sm:text-[10px] font-mono text-[#64748B] border-r border-[#1E293B] mr-0.5 select-none">
-          <Layers className="w-3 h-3 text-[#35E0FF]" />
-          <span className="hidden xs:inline uppercase tracking-wider font-semibold">Map</span>
-        </div>
-        {mapStyleOptions.map((opt) => (
-          <button
-            key={opt.id}
-            type="button"
-            onClick={() => handleMapStyleChange(opt.id)}
-            className={`px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs font-mono font-semibold rounded-md transition ${
-              mapStyle === opt.id
-                ? "bg-[#35E0FF2E] border border-[#1A5A68] text-[#35E0FF] shadow-[0_0_8px_rgba(53,224,255,0.25)]"
-                : "text-[#5D707C] hover:text-[#94A3B8]"
-            }`}
-          >
-            {opt.label}
-          </button>
-        ))}
-      </div>
-
       {/* FLOATING HUD FLIGHT INSTRUMENTS */}
       <FlightInstrumentsWidget telemetry={telemetry} />
-
-      {/* QGC-INSPIRED FLOATING GIMBAL CONTROL & ORIENTATION WIDGET */}
-      <GimbalControlWidget
-        gimbalState={gimbalState}
-        setGimbalPitch={setGimbalPitch}
-        setGimbalRoll={setGimbalRoll}
-        setGimbalYaw={setGimbalYaw}
-        setGimbalOrientation={setGimbalOrientation}
-        centerGimbal={centerGimbal}
-        droneHeading={telemetry.heading || 0}
-      />
 
       {/* DUAL QGC-STYLE VIRTUAL JOYSTICKS (Left: Throttle/Yaw, Right: Pitch/Roll) */}
       {/* Strictly enabled only for authorized roles (SUPER_ADMIN, FLIGHT_OPERATOR) */}
@@ -450,7 +408,7 @@ const FlyPage = () => {
       {canExecuteFlight && (
         <div
           id="flight-movement-debug-hud"
-          className="absolute top-10 sm:top-12 left-1/2 -translate-x-1/2 z-15 pointer-events-auto flex items-center gap-2 sm:gap-2.5 px-2.5 sm:px-3 py-1 rounded-md bg-[#080C14E6] border border-[#1E293B] shadow-xl backdrop-blur-md text-[8.5px] sm:text-[9.5px] font-mono select-none"
+          className="absolute top-11 sm:top-12 left-1/2 -translate-x-1/2 z-15 pointer-events-auto flex flex-wrap items-center justify-center gap-1.5 sm:gap-2.5 px-2 sm:px-3 py-0.5 sm:py-1 rounded-md bg-[#080C14E6] border border-[#1E293B] shadow-xl backdrop-blur-md text-[8px] sm:text-[9.5px] font-mono select-none max-w-[calc(100vw-24px)] sm:max-w-none"
         >
           <div className="flex items-center gap-1">
             <span className="text-[#8E9EAA]">HEADING:</span>

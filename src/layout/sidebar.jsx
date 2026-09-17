@@ -56,7 +56,7 @@ const Sidebar = ({ collapsed = false, onToggle, mobileOpen = false, onCloseMobil
 
     return (
         <aside
-            className={`flex flex-col h-full min-h-0 shrink-0 bg-[linear-gradient(180deg,#0A0E12_0%,#06090B_100%)] text-white border-r border-[#1A2633] transition-all duration-300 ease-in-out fixed inset-y-0 left-0 z-50 w-[250px] ${
+            className={`flex flex-col h-full min-h-0 shrink-0 bg-[linear-gradient(180deg,#0A0E12_0%,#06090B_100%)] text-white border-r border-[#1A2633] transition-all duration-300 ease-in-out fixed inset-y-0 left-0 z-50 w-[260px] max-w-[85vw] ${
                 mobileOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full"
             } lg:static lg:translate-x-0 lg:z-auto ${
                 collapsed ? "lg:w-[72px]" : "lg:w-[200px] xl:w-[220px]"
@@ -83,7 +83,7 @@ const Sidebar = ({ collapsed = false, onToggle, mobileOpen = false, onCloseMobil
                     <button
                         type="button"
                         onClick={onCloseMobile}
-                        className="flex lg:hidden items-center justify-center w-8 h-8 rounded-md text-[#A0AEC0] hover:bg-[#FFFFFF1A] hover:text-white transition"
+                        className="flex lg:hidden items-center justify-center w-9 h-9 rounded-md text-[#A0AEC0] hover:bg-[#FFFFFF1A] hover:text-white transition cursor-pointer"
                         aria-label="Close sidebar"
                     >
                         <X className="w-5 h-5" />

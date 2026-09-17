@@ -152,8 +152,58 @@ const Dashboard = () => {
           </span>
         </div>
 
-        {/* Responsive Table / Cards */}
-        <div className="overflow-x-auto">
+        {/* Mobile View: Cards (< sm) */}
+        <div className="sm:hidden divide-y divide-[#16212E]">
+          {fleetList.map((d) => (
+            <div key={d.id} className="p-3.5 space-y-2 hover:bg-[#111A26] transition font-mono">
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-semibold text-xs text-[#35E0FF]">{d.id}</span>
+                <span
+                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold ${
+                    d.status === "IN-FLIGHT"
+                      ? "bg-[#2FE0891A] text-[#2FE089] border border-[#2FE0894D]"
+                      : d.status === "STANDBY"
+                      ? "bg-[#35E0FF1A] text-[#35E0FF] border border-[#35E0FF4D]"
+                      : "bg-[#F59E0B1A] text-[#F59E0B] border border-[#F59E0B4D]"
+                  }`}
+                >
+                  {d.status}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-[11px] text-[#94A3B8]">
+                <div>
+                  <span className="text-[#64748B] text-[9px] block">MODEL</span>
+                  <span>{d.model}</span>
+                </div>
+                <div>
+                  <span className="text-[#64748B] text-[9px] block">BATTERY</span>
+                  <span className="text-white font-bold">{d.battery}%</span>
+                </div>
+                <div>
+                  <span className="text-[#64748B] text-[9px] block">ALTITUDE</span>
+                  <span>{d.altitude}</span>
+                </div>
+                <div>
+                  <span className="text-[#64748B] text-[9px] block">LOCATION</span>
+                  <span>{d.location}</span>
+                </div>
+              </div>
+              <div className="pt-1 flex items-center justify-end">
+                <button
+                  type="button"
+                  onClick={() => navigate("/mission")}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-[#1A2634] hover:bg-[#35E0FF] hover:text-[#06090E] transition text-[#35E0FF] text-xs font-semibold min-h-[36px]"
+                >
+                  <span>Control Aircraft</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Desktop / Tablet View: Table (sm+) */}
+        <div className="hidden sm:block overflow-x-auto">
           <table className="w-full text-left text-xs font-mono">
             <thead className="bg-[#0D1420] text-[#8E9EAA] border-b border-[#1A2633] uppercase text-[10px]">
               <tr>

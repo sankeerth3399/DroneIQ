@@ -19,7 +19,7 @@ export default function MissionItemListHUD({
   onMoveOrder,
   onDeleteWaypoint,
 }) {
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => typeof window !== "undefined" && window.innerWidth < 768);
 
   const getItemIcon = (type) => {
     switch (type) {

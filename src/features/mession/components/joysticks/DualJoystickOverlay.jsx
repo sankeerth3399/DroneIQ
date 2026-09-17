@@ -30,16 +30,33 @@ export const DualJoystickOverlay = ({
   const rightStickRef = useRef({ x: 0, y: 0 })
   const springThrottle = true
 
-  // Standard responsive base size and shared bottom positioning
+  // Standard responsive base size and shared bottom positioning with height and width awareness
   const [dimensions, setDimensions] = useState(() => {
     if (typeof window === "undefined") {
-      return { sharedBottom: 28, leftOffset: 28, baseSize: 142 }
+      return { sharedBottom: 98, leftOffset: 28, baseSize: 142 }
     }
     const w = window.innerWidth
     const h = window.innerHeight
-    const bSize = (w < 440 || h < 440) ? 100 : (w < 640 || h < 540) ? 114 : (w < 1024 || h < 720) ? 128 : 142
-    const sBottom = w < 640 ? 16 : w < 1024 ? 22 : 28
-    const lOffset = w < 640 ? 12 : w < 1024 ? 20 : 28
+    const maxByHeight = Math.floor(h * 0.28)
+    const maxByWidth = Math.floor((w - 40) / 3.4)
+    const targetSize = Math.min(142, maxByHeight, maxByWidth)
+    const bSize = Math.max(86, targetSize)
+
+    // Upward shift of ~60-80px from baseline bottom while maintaining responsive safe spacing:
+    // Desktop (w >= 1024): 28 + 70 = 98px (strictly within 60-80px range)
+    // Tablet (768 <= w < 1024): 20 + 65 = 85px
+    // Mobile portrait (w < 768): 14 + 58 = 72px
+    // Short screen / landscape (h < 520): 45px to prevent top-edge HUD collision
+    let sBottom = 98
+    if (h < 520) {
+      sBottom = 45
+    } else if (w < 640) {
+      sBottom = 72
+    } else if (w < 1024) {
+      sBottom = 85
+    }
+
+    const lOffset = w < 440 ? 10 : w < 640 ? 14 : w < 1024 ? 20 : 28
     return { sharedBottom: sBottom, leftOffset: lOffset, baseSize: bSize }
   })
 
@@ -52,9 +69,21 @@ export const DualJoystickOverlay = ({
     const handleResize = () => {
       const w = window.innerWidth
       const h = window.innerHeight
-      const bSize = (w < 440 || h < 440) ? 100 : (w < 640 || h < 540) ? 114 : (w < 1024 || h < 720) ? 128 : 142
-      const sBottom = w < 640 ? 16 : w < 1024 ? 22 : 28
-      const lOffset = w < 640 ? 12 : w < 1024 ? 20 : 28
+      const maxByHeight = Math.floor(h * 0.28)
+      const maxByWidth = Math.floor((w - 40) / 3.4)
+      const targetSize = Math.min(142, maxByHeight, maxByWidth)
+      const bSize = Math.max(86, targetSize)
+
+      let sBottom = 98
+      if (h < 520) {
+        sBottom = 45
+      } else if (w < 640) {
+        sBottom = 72
+      } else if (w < 1024) {
+        sBottom = 85
+      }
+
+      const lOffset = w < 440 ? 10 : w < 640 ? 14 : w < 1024 ? 20 : 28
       setDimensions({ sharedBottom: sBottom, leftOffset: lOffset, baseSize: bSize })
     }
     handleResize()
@@ -182,7 +211,7 @@ export const DualJoystickOverlay = ({
   if (!visible) {
     return (
       <div
-        style={{ bottom: "var(--joystick-bottom, 28px)" }}
+        style={{ bottom: "var(--joystick-bottom, 98px)" }}
         className="absolute left-1/2 -translate-x-1/2 z-20 pointer-events-auto"
       >
         <button
@@ -202,19 +231,19 @@ export const DualJoystickOverlay = ({
     <div
       className="pointer-events-none absolute inset-0 z-20 overflow-hidden"
       style={{
-        "--joystick-bottom": `${dimensions.sharedBottom}px`,
+        "--joystick-bottom": `calc(${dimensions.sharedBottom}px + env(safe-area-inset-bottom, 0px))`,
       }}
     >
       {/* LEFT CIRCULAR JOYSTICK: Throttle & Yaw (Uses shared --joystick-bottom) */}
       <div
         id="fly-left-joystick-container"
         style={{
-          left: `${dimensions.leftOffset}px`,
+          left: `calc(${dimensions.leftOffset}px + env(safe-area-inset-left, 0px))`,
           bottom: "var(--joystick-bottom)",
           width: `${dimensions.baseSize}px`,
           height: `${dimensions.baseSize}px`,
         }}
-        className="pointer-events-auto absolute transition-all duration-300 ease-out select-none"
+        className="pointer-events-auto absolute transition-all duration-300 ease-out select-none touch-none"
       >
         <VirtualJoystick
           label="LEFT"
@@ -252,12 +281,12 @@ export const DualJoystickOverlay = ({
         id="fly-right-joystick-container"
         ref={rightContainerRef}
         style={{
-          right: `${rightOffset}px`,
+          right: `calc(${rightOffset}px + env(safe-area-inset-right, 0px))`,
           bottom: "var(--joystick-bottom)",
           width: `${dimensions.baseSize}px`,
           height: `${dimensions.baseSize}px`,
         }}
-        className="pointer-events-auto absolute transition-all duration-300 ease-out select-none"
+        className="pointer-events-auto absolute transition-all duration-300 ease-out select-none touch-none"
       >
         <VirtualJoystick
           label="RIGHT"

@@ -22,31 +22,51 @@ export const DraggableWidget = ({
   minimizedContent,
   className = "",
   onReset,
+  defaultMinimized = false,
 }) => {
   const storageKey = `aeronexus_widget_pos_${id}`
 
-  // Load persisted position from localStorage or fallback to default
+  // Load persisted position with ratio awareness and viewport boundary clamping
   const [position, setPosition] = useState(() => {
+    const winW = typeof window !== "undefined" ? window.innerWidth : 1024
+    const winH = typeof window !== "undefined" ? window.innerHeight : 768
+
     try {
       const saved = localStorage.getItem(storageKey)
       if (saved) {
         const parsed = JSON.parse(saved)
+        if (typeof parsed.xRatio === "number" && typeof parsed.yRatio === "number") {
+          const calcX = Math.round(parsed.xRatio * winW)
+          const calcY = Math.round(parsed.yRatio * winH)
+          return {
+            x: Math.max(8, Math.min(winW - 120, calcX)),
+            y: Math.max(8, Math.min(winH - 80, calcY)),
+          }
+        }
         if (typeof parsed.x === "number" && typeof parsed.y === "number") {
-          return parsed
+          return {
+            x: Math.max(8, Math.min(winW - 120, parsed.x)),
+            y: Math.max(8, Math.min(winH - 80, parsed.y)),
+          }
         }
       }
     } catch {
       // Fallback
     }
-    return defaultPosition
+    return {
+      x: Math.max(8, Math.min(winW - 120, defaultPosition.x)),
+      y: Math.max(8, Math.min(winH - 80, defaultPosition.y)),
+    }
   })
 
   const [isMinimized, setIsMinimized] = useState(() => {
     try {
-      return localStorage.getItem(`aeronexus_widget_min_${id}`) === "true"
+      const stored = localStorage.getItem(`aeronexus_widget_min_${id}`)
+      if (stored !== null) return stored === "true"
     } catch {
-      return false
+      // Fallback
     }
+    return defaultMinimized || (typeof window !== "undefined" && (window.innerWidth < 640 || window.innerHeight < 540))
   })
 
   const [isDragging, setIsDragging] = useState(false)
@@ -56,11 +76,14 @@ export const DraggableWidget = ({
   // Validate and clamp position within viewport on resize or initial load
   const clampPosition = useCallback((x, y) => {
     const el = widgetRef.current
-    const width = el ? el.offsetWidth : 200
-    const height = el ? el.offsetHeight : 150
+    const width = el ? el.offsetWidth : 180
+    const height = el ? el.offsetHeight : 140
 
-    const maxX = Math.max(8, window.innerWidth - width - 8)
-    const maxY = Math.max(8, window.innerHeight - height - 8)
+    const winW = typeof window !== "undefined" ? window.innerWidth : 1024
+    const winH = typeof window !== "undefined" ? window.innerHeight : 768
+
+    const maxX = Math.max(8, winW - width - 8)
+    const maxY = Math.max(8, winH - height - 8)
 
     return {
       x: Math.max(8, Math.min(maxX, x)),
@@ -75,7 +98,16 @@ export const DraggableWidget = ({
         const clamped = clampPosition(prev.x, prev.y)
         if (clamped.x !== prev.x || clamped.y !== prev.y) {
           try {
-            localStorage.setItem(storageKey, JSON.stringify(clamped))
+            const winW = window.innerWidth || 1024
+            const winH = window.innerHeight || 768
+            localStorage.setItem(
+              storageKey,
+              JSON.stringify({
+                ...clamped,
+                xRatio: clamped.x / winW,
+                yRatio: clamped.y / winH,
+              })
+            )
           } catch {
             // Ignore
           }
@@ -85,7 +117,6 @@ export const DraggableWidget = ({
       })
     }
 
-    // Immediate clamp on initial mount after DOM layout
     const timer = setTimeout(handleResize, 60)
     window.addEventListener("resize", handleResize)
     return () => {

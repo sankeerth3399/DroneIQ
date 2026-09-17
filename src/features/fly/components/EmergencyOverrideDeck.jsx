@@ -17,12 +17,19 @@ export const EmergencyOverrideDeck = ({ hasLeftJoystick = false }) => {
   // Track responsive screen dimensions matching DualJoystickOverlay
   const [dimensions, setDimensions] = useState(() => {
     if (typeof window === "undefined") {
-      return { sharedBottom: 28, leftOffset: 28, baseSize: 142 }
+      return { sharedBottom: 98, leftOffset: 28, baseSize: 142 }
     }
     const w = window.innerWidth
     const h = window.innerHeight
     const bSize = (w < 440 || h < 440) ? 100 : (w < 640 || h < 540) ? 114 : (w < 1024 || h < 720) ? 128 : 142
-    const sBottom = w < 640 ? 16 : w < 1024 ? 22 : 28
+    let sBottom = 98
+    if (h < 520) {
+      sBottom = 45
+    } else if (w < 640) {
+      sBottom = 72
+    } else if (w < 1024) {
+      sBottom = 85
+    }
     const lOffset = w < 640 ? 12 : w < 1024 ? 20 : 28
     return { sharedBottom: sBottom, leftOffset: lOffset, baseSize: bSize }
   })
@@ -32,10 +39,18 @@ export const EmergencyOverrideDeck = ({ hasLeftJoystick = false }) => {
       const w = window.innerWidth
       const h = window.innerHeight
       const bSize = (w < 440 || h < 440) ? 100 : (w < 640 || h < 540) ? 114 : (w < 1024 || h < 720) ? 128 : 142
-      const sBottom = w < 640 ? 16 : w < 1024 ? 22 : 28
+      let sBottom = 98
+      if (h < 520) {
+        sBottom = 45
+      } else if (w < 640) {
+        sBottom = 72
+      } else if (w < 1024) {
+        sBottom = 85
+      }
       const lOffset = w < 640 ? 12 : w < 1024 ? 20 : 28
       setDimensions({ sharedBottom: sBottom, leftOffset: lOffset, baseSize: bSize })
     }
+    handleResize()
     window.addEventListener("resize", handleResize)
     return () => window.removeEventListener("resize", handleResize)
   }, [])
@@ -100,11 +115,19 @@ export const EmergencyOverrideDeck = ({ hasLeftJoystick = false }) => {
   }
 
   // Position:
-  // When hasLeftJoystick is true: positioned safely beside the Left Joystick with a clear 16px gap
-  // When hasLeftJoystick is false: positioned at the bottom-left corner
-  const deckLeft = hasLeftJoystick
+  // On narrow screens (< 540px) with left joystick: anchor vertically above Left Joystick with a 12px clearance
+  // On tablet/desktop: positioned safely beside Left Joystick with 16px gap
+  // When no joystick: positioned at bottom-left corner
+  const isNarrowMobile = typeof window !== "undefined" && window.innerWidth < 540
+  const deckLeft = isNarrowMobile
+    ? dimensions.leftOffset
+    : hasLeftJoystick
     ? dimensions.leftOffset + dimensions.baseSize + 16
     : dimensions.leftOffset
+
+  const deckBottom = isNarrowMobile && hasLeftJoystick
+    ? `calc(${dimensions.sharedBottom}px + ${dimensions.baseSize}px + 10px + env(safe-area-inset-bottom, 0px))`
+    : `calc(${dimensions.sharedBottom}px + env(safe-area-inset-bottom, 0px))`
 
   return (
     <>
@@ -113,15 +136,15 @@ export const EmergencyOverrideDeck = ({ hasLeftJoystick = false }) => {
         ref={deckRef}
         id="emergency-deck-container"
         style={{
-          left: `${deckLeft}px`,
-          bottom: `${dimensions.sharedBottom}px`,
+          left: `calc(${deckLeft}px + env(safe-area-inset-left, 0px))`,
+          bottom: deckBottom,
         }}
         className="absolute z-25 pointer-events-auto select-none font-mono transition-all duration-300 ease-out"
       >
         <button
           type="button"
           onClick={() => setIsOpen((prev) => !prev)}
-          className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md border text-[10px] sm:text-[11px] font-bold tracking-wider uppercase transition backdrop-blur-md shadow-lg cursor-pointer ${
+          className={`flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-md border text-[9.5px] sm:text-[11px] font-bold tracking-wider uppercase transition backdrop-blur-md shadow-lg cursor-pointer ${
             isOpen
               ? "bg-[#2E1414EE] border-[#FF4141] text-[#FF8585] shadow-[0_0_12px_rgba(255,65,65,0.3)]"
               : "bg-[#0B1017CC] hover:bg-[#121A24EE] border-[#5E2222] text-[#FF8585] hover:border-[#FF4141]"
@@ -129,7 +152,7 @@ export const EmergencyOverrideDeck = ({ hasLeftJoystick = false }) => {
           title="Toggle Emergency Flight Override Controls"
         >
           <AlertOctagon className="w-3.5 h-3.5 text-[#FF4141]" />
-          <span>Emergency Deck</span>
+          <span>{isNarrowMobile ? "EMERGENCY" : "Emergency Deck"}</span>
         </button>
 
         {/* Expanded Emergency Actions Panel: Opens UPWARDS into open space, completely clear of the left joystick */}

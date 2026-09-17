@@ -74,18 +74,61 @@ const Logs = () => {
           </span>
         </div>
 
-        {/* Responsive Table */}
-        <div className="overflow-x-auto">
+        {/* Mobile View: Cards (< sm) */}
+        <div className="sm:hidden divide-y divide-[#16212E]">
+          {logsList.map((log) => (
+            <div key={log.id} className="p-3.5 space-y-2.5 hover:bg-[#111A26] transition font-mono">
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-semibold text-xs text-[#35E0FF] truncate">{log.id}</span>
+                <span className="text-[10px] text-[#2FE089] bg-[#2FE0891A] px-1.5 py-0.5 rounded border border-[#2FE08933]">
+                  {log.duration}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-[11px] text-[#94A3B8]">
+                <div>
+                  <span className="text-[#64748B] text-[9px] block">DATE / TIME</span>
+                  <span>{log.date}</span>
+                </div>
+                <div>
+                  <span className="text-[#64748B] text-[9px] block">AIRCRAFT</span>
+                  <span className="text-white font-bold">{log.callsign}</span>
+                </div>
+                <div>
+                  <span className="text-[#64748B] text-[9px] block">MAX ALT / DIST</span>
+                  <span>{log.maxAlt} • {log.dist}</span>
+                </div>
+                <div>
+                  <span className="text-[#64748B] text-[9px] block">BATTERY</span>
+                  <span className="text-[#F59E0B]">{log.batteryDelta}</span>
+                </div>
+              </div>
+              <div className="pt-1 flex items-center justify-between">
+                <span className="text-[10px] text-[#64748B]">{log.size}</span>
+                <button
+                  type="button"
+                  onClick={() => handleExport(log.id)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-[#172230] border border-[#23354A] hover:border-[#35E0FF] hover:text-[#35E0FF] text-[#B7F3FF] text-xs min-h-[36px]"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Download ULog</span>
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Desktop / Tablet View: Table (sm+) */}
+        <div className="hidden sm:block overflow-x-auto">
           <table className="w-full text-left text-xs font-mono">
             <thead className="bg-[#0D1420] text-[#8E9EAA] border-b border-[#1A2633] uppercase text-[10px]">
               <tr>
                 <th className="px-4 py-3">Log ID</th>
                 <th className="px-4 py-3">Date</th>
-                <th className="px-4 py-3 hidden sm:table-cell">Drone</th>
+                <th className="px-4 py-3">Drone</th>
                 <th className="px-4 py-3">Duration</th>
                 <th className="px-4 py-3 hidden md:table-cell">Max Alt</th>
                 <th className="px-4 py-3 hidden lg:table-cell">Distance</th>
-                <th className="px-4 py-3 hidden sm:table-cell">Battery Usage</th>
+                <th className="px-4 py-3">Battery Usage</th>
                 <th className="px-4 py-3 text-right">Download</th>
               </tr>
             </thead>
@@ -96,13 +139,13 @@ const Logs = () => {
                     {log.id}
                   </td>
                   <td className="px-4 py-3 text-[#94A3B8] whitespace-nowrap">{log.date}</td>
-                  <td className="px-4 py-3 hidden sm:table-cell whitespace-nowrap font-bold text-white">
+                  <td className="px-4 py-3 whitespace-nowrap font-bold text-white">
                     {log.callsign}
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap text-[#2FE089]">{log.duration}</td>
                   <td className="px-4 py-3 hidden md:table-cell whitespace-nowrap">{log.maxAlt}</td>
                   <td className="px-4 py-3 hidden lg:table-cell whitespace-nowrap">{log.dist}</td>
-                  <td className="px-4 py-3 hidden sm:table-cell whitespace-nowrap text-[#F59E0B]">
+                  <td className="px-4 py-3 whitespace-nowrap text-[#F59E0B]">
                     {log.batteryDelta}
                   </td>
                   <td className="px-4 py-3 text-right whitespace-nowrap">
@@ -112,7 +155,7 @@ const Logs = () => {
                       className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#172230] border border-[#23354A] hover:border-[#35E0FF] hover:text-[#35E0FF] transition text-[#B7F3FF] text-[11px]"
                     >
                       <Download className="w-3.5 h-3.5" />
-                      <span className="hidden sm:inline">ULog</span>
+                      <span>ULog</span>
                     </button>
                   </td>
                 </tr>

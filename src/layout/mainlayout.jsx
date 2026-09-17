@@ -18,7 +18,8 @@ const MainLayout = () => {
   useEffect(() => {
     const handleResize = () => {
       const isBelow = window.innerWidth < LAPTOP_BREAKPOINT
-      if (isBelow) {
+      // Only close mobile drawer when transitioning UP to desktop size
+      if (!isBelow && wasBelowBreakpoint.current) {
         setMobileOpen(false)
       }
 
@@ -33,7 +34,7 @@ const MainLayout = () => {
   }, [])
 
   return (
-    <div className="relative flex h-screen w-screen overflow-hidden bg-[#06090E]">
+    <div className="relative flex h-[100dvh] min-h-[100dvh] w-full max-w-full overflow-hidden bg-[#06090E]">
       {/* Mobile Drawer Backdrop Overlay */}
       {mobileOpen && (
         <div
@@ -56,11 +57,11 @@ const MainLayout = () => {
         onCloseMobile={() => setMobileOpen(false)}
       />
 
-      <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden relative">
+      <div className="flex-1 flex flex-col min-w-0 min-h-0 w-full overflow-hidden relative">
         {/* Global HUD Flight Safety Notification Toast */}
         <FlightToast />
 
-        <header className="shrink-0 bg-[#0A0E12] border-b border-[#1A2633] px-2.5 sm:px-4 py-2 sm:py-2.5 lg:py-3 z-30">
+        <header className="shrink-0 bg-[#0A0E12] border-b border-[#1A2633] px-2.5 sm:px-4 py-1.5 sm:py-2.5 lg:py-3 z-30 flex flex-col justify-center min-h-[52px] sm:min-h-[56px]">
           <Header
             sidebarCollapsed={collapsed}
             onToggleSidebar={() => setCollapsed((prev) => !prev)}
@@ -69,7 +70,7 @@ const MainLayout = () => {
           />
         </header>
 
-        <main className="flex-1 min-h-0 h-full flex flex-col overflow-hidden relative">
+        <main className="flex-1 min-h-0 w-full h-full flex flex-col overflow-hidden relative">
           <Outlet />
         </main>
       </div>

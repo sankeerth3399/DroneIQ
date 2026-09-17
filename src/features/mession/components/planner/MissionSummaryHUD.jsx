@@ -9,7 +9,7 @@ export default function MissionSummaryHUD({
   geofenceStatus = "ACTIVE",
   boundaryCheckPassed = true,
 }) {
-  const [minimized, setMinimized] = useState(false);
+  const [minimized, setMinimized] = useState(() => typeof window !== "undefined" && window.innerWidth < 768);
 
   return (
     <div className="rounded-xl bg-[#080C14E6] border border-[#1A2633] backdrop-blur-md shadow-2xl text-[10px] sm:text-xs font-mono text-[#EEF4F8] select-none pointer-events-auto overflow-hidden transition-all duration-200">

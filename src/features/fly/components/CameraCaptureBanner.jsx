@@ -187,7 +187,7 @@ const CameraCaptureBanner = ({
 
   return (
     <div
-      className="flex h-[22px] sm:h-[25px] w-full shrink-0 items-stretch bg-[#080C12F8] border-t border-[#1C2834] divide-x divide-[#182330]"
+      className="flex min-h-[26px] sm:min-h-[28px] w-full shrink-0 items-stretch bg-[#080C12F8] border-t border-[#1C2834] divide-x divide-[#182330]"
       onClick={(e) => e.stopPropagation()}
       onKeyDown={(e) => e.stopPropagation()}
     >

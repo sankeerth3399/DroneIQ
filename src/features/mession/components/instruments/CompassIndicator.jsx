@@ -1,4 +1,5 @@
 import { useMemo } from "react"
+import { formatTelemetry } from "@/utils/telemetryFormat.js"
 
 /**
  * High-Tech Rotating Compass Ring Bezel
@@ -15,6 +16,8 @@ export const CompassIndicator = ({
   size = 220,  // outer diameter
   innerSize = 144, // inner hole where attitude indicator fits
 }) => {
+  const numHeading = Number(heading)
+  const safeHeading = Number.isFinite(numHeading) ? ((numHeading % 360) + 360) % 360 : 0
   const radius = size / 2
 
   // Generate 36-tick degree array (every 10 degrees)
@@ -57,13 +60,15 @@ export const CompassIndicator = ({
     <div
       className="relative flex items-center justify-center select-none"
       style={{ width: `${size}px`, height: `${size}px` }}
+      title={`Compass Heading: ${formatTelemetry(safeHeading)}°`}
+      aria-label={`Compass indicator: Heading ${formatTelemetry(safeHeading)}°`}
     >
       {/* ROTATING COMPASS BEZEL */}
       <svg
         className="absolute inset-0 w-full h-full will-change-transform"
         viewBox={`0 0 ${size} ${size}`}
         style={{
-          transform: `rotate(${-heading}deg)`,
+          transform: `rotate(${-safeHeading}deg)`,
           transformOrigin: "center center",
           transition: "transform 0.05s linear",
         }}
