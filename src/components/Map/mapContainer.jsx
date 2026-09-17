@@ -498,12 +498,15 @@ const MapContainer = ({
 
               // Cache reference to the inner rotating and scaling DOM nodes
               setTimeout(() => {
-                const el = markerRef.current?.getElement?.();
+                const el = markerRef.current?.getElement?.() || document.getElementById(mapId);
                 if (el) {
                   markerRotatorRef.current = el.querySelector(".drone-marker-rotator");
                   markerScalerRef.current = el.querySelector(".drone-marker-scaler");
                 }
-              }, 60);
+                if (markerRotatorRef.current) {
+                  markerRotatorRef.current.style.transform = `rotate(${renderedHeadingRef.current}deg)`;
+                }
+              }, 40);
 
               // Responsive zoom scaling listener
               const handleZoom = () => {
@@ -662,25 +665,12 @@ const MapContainer = ({
     const nextContinuousAngle = prevAngle + diff;
     renderedHeadingRef.current = nextContinuousAngle;
 
-    // Rotate the inner marker element
-    if (markerRotatorRef.current) {
-      markerRotatorRef.current.style.transform = `rotate(${nextContinuousAngle}deg)`;
-    } else {
-      const el = markerRef.current?.getElement?.();
-      const rot = el?.querySelector(".drone-marker-rotator");
-      if (rot) {
-        markerRotatorRef.current = rot;
-        rot.style.transform = `rotate(${nextContinuousAngle}deg)`;
-      }
+    // Rotate the inner marker element directly (the single authoritative source of arrow orientation)
+    const rotEl = document.querySelector(`#${mapId} .drone-marker-rotator`) || document.querySelector(".drone-marker-rotator");
+    if (rotEl) {
+      rotEl.style.transform = `rotate(${nextContinuousAngle}deg)`;
     }
-
-    // Call native setRotation fallback if available
-    try {
-      markerRef.current?.setRotation?.(targetHeading);
-    } catch {
-      // Safe catch
-    }
-  }, [heading]);
+  }, [heading, mapId]);
 
   // 60 FPS smooth position lerp interpolation & movement trail manager
   useEffect(() => {

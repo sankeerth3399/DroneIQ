@@ -1,10 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useTelemetry } from "@/hooks/useTelemetry.js";
 import { flightControlService } from "@/services/control/flightControlService.js";
-import { normalizeHeading } from "@/utils/heading.js";
+import { normalizeHeading, getCardinalDirection } from "@/utils/heading.js";
+import { getJoystickDirectionLabel } from "@/utils/joystick.js";
 
 const DEADZONE = 0.04;
 const applyDeadzone = (v) => (Math.abs(v) < DEADZONE ? 0 : v);
+
+export { getJoystickDirectionLabel };
 
 const MAX_SPEED = 24.0; // Max horizontal speed in m/s (crisp and visible on map)
 const MAX_CLIMB_RATE = 7.0; // Max vertical climb/descent rate in m/s
@@ -71,6 +74,21 @@ export function useDroneTelemetry() {
     verticalSpeed: 0.0,
     speed: 0.0,
     flightMode: "GUIDED",
+  });
+
+  // Real-time flight movement debug verification reference
+  const debugFlightInfoRef = useRef({
+    droneHeading: 0.0,
+    arrowDirection: "N",
+    joystickX: 0.0,
+    joystickY: 0.0,
+    joystickDirection: "NEUTRAL",
+    calculatedMovementHeading: 0.0,
+    calculatedMovementDirection: "N",
+    latitude: 17.385000,
+    longitude: 78.486700,
+    speed: 0.0,
+    isArmed: isArmed ?? true,
   });
 
   // Raw joystick input: normalized [-1.00, +1.00]
@@ -247,6 +265,7 @@ export function useDroneTelemetry() {
           if (Math.abs(state.verticalSpeed) < 0.04) state.verticalSpeed = 0;
         }
 
+        let calculatedMovementHeading = state.heading;
         // Apply continuous geographic displacement along heading vector
         if (state.speed > 0.02) {
           const headingRad = (state.heading * Math.PI) / 180;
@@ -258,12 +277,46 @@ export function useDroneTelemetry() {
             state.forwardSpeed * Math.sin(headingRad) +
             state.lateralSpeed * Math.cos(headingRad);
 
+          calculatedMovementHeading = ((Math.atan2(vEast, vNorth) * 180) / Math.PI + 360) % 360;
+
           const metersPerDegLat = 111139;
           const metersPerDegLng =
             111139 * Math.cos((state.latitude * Math.PI) / 180);
 
           state.latitude += (vNorth * dt) / metersPerDegLat;
           state.longitude += (vEast * dt) / metersPerDegLng;
+        }
+
+        const debugInfo = {
+          droneHeading: Number(state.heading.toFixed(1)),
+          arrowDirection: getCardinalDirection(state.heading),
+          joystickX: Number((rawSticks.roll || 0).toFixed(2)),
+          joystickY: Number((rawSticks.pitch || 0).toFixed(2)),
+          joystickDirection: getJoystickDirectionLabel(rawSticks.pitch, rawSticks.roll),
+          calculatedMovementHeading: Number(calculatedMovementHeading.toFixed(1)),
+          calculatedMovementDirection: getCardinalDirection(calculatedMovementHeading),
+          latitude: Number(state.latitude.toFixed(6)),
+          longitude: Number(state.longitude.toFixed(6)),
+          speed: Number(state.speed.toFixed(1)),
+          isArmed,
+        };
+        debugFlightInfoRef.current = debugInfo;
+
+        if (typeof window !== "undefined") {
+          window.__DRONE_STATE__ = {
+            latitude: Number(state.latitude.toFixed(6)),
+            longitude: Number(state.longitude.toFixed(6)),
+            heading: Number(state.heading.toFixed(1)),
+            altitude: Number(state.altitude.toFixed(1)),
+            speed: Number(state.speed.toFixed(1)),
+            roll: Number(state.roll.toFixed(1)),
+            pitch: Number(state.pitch.toFixed(1)),
+            yaw: Number((rawSticks.yaw || 0).toFixed(2)),
+            armed: isArmed,
+            arrowDirection: getCardinalDirection(state.heading),
+            calculatedMovementHeading: Number(calculatedMovementHeading.toFixed(1)),
+            calculatedMovementDirection: getCardinalDirection(calculatedMovementHeading),
+          };
         }
       } else {
         // Autonomous Orbit / Patrol Demo Mode
@@ -286,6 +339,21 @@ export function useDroneTelemetry() {
 
         state.latitude += (vNorth * dt) / metersPerDegLat;
         state.longitude += (vEast * dt) / metersPerDegLng;
+
+        const debugInfo = {
+          droneHeading: Number(state.heading.toFixed(1)),
+          arrowDirection: getCardinalDirection(state.heading),
+          joystickX: 0,
+          joystickY: 0,
+          joystickDirection: "AUTO",
+          calculatedMovementHeading: Number(state.heading.toFixed(1)),
+          calculatedMovementDirection: getCardinalDirection(state.heading),
+          latitude: Number(state.latitude.toFixed(6)),
+          longitude: Number(state.longitude.toFixed(6)),
+          speed: Number(state.speed.toFixed(1)),
+          isArmed,
+        };
+        debugFlightInfoRef.current = debugInfo;
       }
 
       // Synchronize to React state at ~30 FPS only while moving or settling
@@ -320,11 +388,44 @@ export function useDroneTelemetry() {
             isArmed: isArmed,
             flightMode: state.flightMode,
             status: "OK",
+            flightMovementDebug: debugFlightInfoRef.current,
           });
         }
       } else if (!hasSettledRef.current) {
         // Drone reached rest: sync final neutral telemetry once and pause React re-renders
         hasSettledRef.current = true;
+        const debugInfo = {
+          droneHeading: Number(state.heading.toFixed(1)),
+          arrowDirection: getCardinalDirection(state.heading),
+          joystickX: 0,
+          joystickY: 0,
+          joystickDirection: "NEUTRAL",
+          calculatedMovementHeading: Number(state.heading.toFixed(1)),
+          calculatedMovementDirection: getCardinalDirection(state.heading),
+          latitude: Number(state.latitude.toFixed(6)),
+          longitude: Number(state.longitude.toFixed(6)),
+          speed: 0,
+          isArmed,
+        };
+        debugFlightInfoRef.current = debugInfo;
+
+        if (typeof window !== "undefined") {
+          window.__DRONE_STATE__ = {
+            latitude: Number(state.latitude.toFixed(6)),
+            longitude: Number(state.longitude.toFixed(6)),
+            heading: Number(state.heading.toFixed(1)),
+            altitude: Number(state.altitude.toFixed(1)),
+            speed: 0,
+            roll: 0,
+            pitch: 0,
+            yaw: 0,
+            armed: isArmed,
+            arrowDirection: getCardinalDirection(state.heading),
+            calculatedMovementHeading: Number(state.heading.toFixed(1)),
+            calculatedMovementDirection: getCardinalDirection(state.heading),
+          };
+        }
+
         setSimTelemetry({
           latitude: Number(state.latitude.toFixed(6)),
           longitude: Number(state.longitude.toFixed(6)),
@@ -344,6 +445,7 @@ export function useDroneTelemetry() {
           isArmed: isArmed,
           flightMode: "GUIDED",
           status: "OK",
+          flightMovementDebug: debugInfo,
         });
       }
 
@@ -421,6 +523,19 @@ export function useDroneTelemetry() {
           typeof liveTelemetry.longitude === "number"
             ? liveTelemetry.longitude
             : 78.486700,
+        flightMovementDebug: {
+          droneHeading: typeof liveTelemetry.heading === "number" ? liveTelemetry.heading : 0,
+          arrowDirection: getCardinalDirection(typeof liveTelemetry.heading === "number" ? liveTelemetry.heading : 0),
+          joystickX: 0,
+          joystickY: 0,
+          joystickDirection: "LIVE",
+          calculatedMovementHeading: typeof liveTelemetry.heading === "number" ? liveTelemetry.heading : 0,
+          calculatedMovementDirection: getCardinalDirection(typeof liveTelemetry.heading === "number" ? liveTelemetry.heading : 0),
+          latitude: typeof liveTelemetry.latitude === "number" ? liveTelemetry.latitude : 17.385000,
+          longitude: typeof liveTelemetry.longitude === "number" ? liveTelemetry.longitude : 78.486700,
+          speed: typeof liveTelemetry.speed === "number" ? liveTelemetry.speed : 0,
+          isArmed,
+        },
       }
     : {
         ...simTelemetry,

@@ -445,6 +445,42 @@ const FlyPage = () => {
           <span className="hidden sm:inline">Reset</span>
         </button>
       </div>
+
+      {/* REAL-TIME FLIGHT MOVEMENT & HEADING VECTOR DEBUG HUD */}
+      {canExecuteFlight && (
+        <div
+          id="flight-movement-debug-hud"
+          className="absolute top-10 sm:top-12 left-1/2 -translate-x-1/2 z-15 pointer-events-auto flex items-center gap-2 sm:gap-2.5 px-2.5 sm:px-3 py-1 rounded-md bg-[#080C14E6] border border-[#1E293B] shadow-xl backdrop-blur-md text-[8.5px] sm:text-[9.5px] font-mono select-none"
+        >
+          <div className="flex items-center gap-1">
+            <span className="text-[#8E9EAA]">HEADING:</span>
+            <strong className="text-[#EEF4F8]">
+              {telemetry.flightMovementDebug?.droneHeading ?? Math.round(telemetry.heading || 0)}°
+            </strong>
+          </div>
+          <div className="w-[1px] h-2.5 bg-[#223240]" />
+          <div className="flex items-center gap-1">
+            <span className="text-[#8E9EAA]">ARROW:</span>
+            <strong className="text-[#35E0FF]">
+              {telemetry.flightMovementDebug?.arrowDirection || "N"}
+            </strong>
+          </div>
+          <div className="w-[1px] h-2.5 bg-[#223240]" />
+          <div className="flex items-center gap-1">
+            <span className="text-[#8E9EAA]">JOYSTICK:</span>
+            <strong className="text-[#EEF4F8]">
+              {telemetry.flightMovementDebug?.joystickDirection || "NEUTRAL"}
+            </strong>
+          </div>
+          <div className="w-[1px] h-2.5 bg-[#223240]" />
+          <div className="flex items-center gap-1">
+            <span className="text-[#8E9EAA]">MOVEMENT:</span>
+            <strong className="text-[#2FE089]">
+              {telemetry.flightMovementDebug?.calculatedMovementDirection || telemetry.flightMovementDebug?.arrowDirection || "N"}
+            </strong>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

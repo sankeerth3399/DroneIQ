@@ -3,13 +3,25 @@
  * Features 1.5x length directional arrow, dual carbon arms, motor beacons, and callsign chip
  */
 
+/**
+ * Natural orientation offset of the drone SVG asset.
+ * The SVG's directional arrow points directly North / Up (0° in SVG space).
+ * Therefore VISUAL_MARKER_OFFSET is 0°.
+ */
+export const VISUAL_MARKER_OFFSET = 0;
+
+export const getVisualRotation = (heading = 0) => {
+  return ((heading + VISUAL_MARKER_OFFSET) % 360 + 360) % 360;
+};
+
 export const buildDroneMarkerHtml = (callsign, initialHeading = 0) => {
+  const visualRot = getVisualRotation(initialHeading);
   return `
     <div class="drone-marker-shell" style="position: relative; width: 68px; height: 68px; cursor: pointer; pointer-events: auto; z-index: 50;">
       <!-- Scaler wrapper for responsive map zoom scaling -->
       <div class="drone-marker-scaler" style="position: relative; width: 100%; height: 100%; transform: scale(1); transform-origin: 50% 50%; transition: transform 0.2s ease;">
         <!-- Rotator Element: pivots around center (50% 50%), isolates rotation from Mappls translation -->
-        <div class="drone-marker-rotator" style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; transform-origin: 50% 50%; transform: rotate(${initialHeading}deg); transition: transform 0.08s linear; will-change: transform;">
+        <div class="drone-marker-rotator" style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; transform-origin: 50% 50%; transform: rotate(${visualRot}deg); transition: transform 0.08s linear; will-change: transform;">
           <svg width="68" height="68" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style="filter: drop-shadow(0 0 10px rgba(53, 224, 255, 0.75)) drop-shadow(0 3px 6px rgba(0, 0, 0, 0.9));">
             <!-- Subtle Range / Sensor Circle -->
             <circle cx="50" cy="54" r="38" stroke="#35E0FF" stroke-width="1.2" stroke-opacity="0.22" stroke-dasharray="4 4" />
