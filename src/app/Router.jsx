@@ -8,6 +8,7 @@ import WaypointPlanningPage from "@/features/mession/pages/WaypointPlanningPage.
 import CreateGeofencePage from "@/features/mession/pages/CreateGeofencePage.jsx";
 import Logs from "@/features/logs/pages/Logs.jsx";
 import SettingsPage from "@/features/settings/pages/SettingsPage.jsx";
+import UsersPage from "@/features/users/pages/UsersPage.jsx";
 import Landing from "@/features/landing/pages/landingPage.jsx";
 import Login from "@/features/auth/pages/Login.jsx";
 
@@ -60,7 +61,7 @@ const Routing = () => {
           path="/settings"
           element={
             <ProtectedRoute requiredPermission={Permissions.SYSTEM_CONFIG}>
-              <SettingsPage initialTab="system" />
+              <SettingsPage />
             </ProtectedRoute>
           }
         />
@@ -71,12 +72,17 @@ const Routing = () => {
 
         {/* User Management Route (Protected: Super Admin + Fleet Manager) */}
         <Route
-          path="/user-management"
+          path="/users"
           element={
             <ProtectedRoute allowedRoles={[Roles.SUPER_ADMIN, Roles.FLEET_MANAGER]}>
-              <SettingsPage initialTab="users" />
+              <UsersPage />
             </ProtectedRoute>
           }
+        />
+        {/* Redirect legacy /user-management to canonical /users */}
+        <Route
+          path="/user-management"
+          element={<Navigate to="/users" replace />}
         />
       </Route>
     </Routes>

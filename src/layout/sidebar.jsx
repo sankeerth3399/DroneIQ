@@ -16,8 +16,8 @@ const ALL_TABS = [
     { label: "Fly", value: "/fly", img: Fly },
     { label: "Missions", value: "/missions", requiredPermission: Permissions.VIEW_MISSIONS, img: Target, isDropdown: true },
     { label: "Logs", value: "/logs", requiredPermission: Permissions.VIEW_LOGS, img: Logs },
-    { label: "Users", value: "/user-management", requiredPermission: Permissions.INVITE_USERS, icon: UsersIcon },
-    { label: "Settings", value: "/settings", requiredPermission: Permissions.SYSTEM_CONFIG, img: Settings },
+    { label: "Users", value: "/users", icon: UsersIcon },
+    { label: "Settings", value: "/settings", img: Settings },
 ]
 
 const missionSubItems = [
