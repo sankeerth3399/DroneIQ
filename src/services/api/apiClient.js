@@ -60,7 +60,30 @@ export async function apiClient(endpoint, options = {}) {
 
   // Handle 403 Forbidden (Access Denied)
   if (response.status === 403) {
-    if (typeof window !== "undefined") {
+    let isSuperAdmin = false
+    try {
+      const rawUser = typeof window !== "undefined" ? localStorage.getItem(USER_STORAGE_KEY) : null
+      if (rawUser) {
+        const u = JSON.parse(rawUser)
+        const role = String(u?.role || "").toUpperCase()
+        const uname = String(u?.username || "").toLowerCase()
+        if (role === "SUPER_ADMIN" || uname === "superadmin" || uname === "admin") {
+          isSuperAdmin = true
+        }
+      }
+    } catch {
+      // ignore JSON parse error
+    }
+
+    const isUsersEndpoint = typeof endpoint === "string" && endpoint.includes("/users")
+    const isSuppressed = Boolean(
+      options.suppressForbiddenToast ||
+      options.silent ||
+      isSuperAdmin ||
+      isUsersEndpoint
+    )
+
+    if (!isSuppressed && typeof window !== "undefined") {
       window.dispatchEvent(
         new CustomEvent("aeronexus:toast", {
           detail: {

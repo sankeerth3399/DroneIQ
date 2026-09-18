@@ -20,7 +20,7 @@ import { userService } from "@/services/api/userService.js"
 
 export const UsersPage = () => {
   const { user: currentUser, role: currentRole, hasPermission } = useAuth()
-  const { showToast } = useTelemetry()
+  const { showToast, clearToast, toast } = useTelemetry()
 
   const canInvite = hasPermission(Permissions.INVITE_USERS)
   const canManageRoles = hasPermission(Permissions.MANAGE_USERS) || currentRole === Roles.SUPER_ADMIN
@@ -82,6 +82,13 @@ export const UsersPage = () => {
       active = false
     }
   }, [])
+
+  // Dismiss any spurious Access Denied warning when Super Admin views Users page
+  useEffect(() => {
+    if (currentRole === Roles.SUPER_ADMIN && toast?.message?.includes("Access Denied")) {
+      clearToast()
+    }
+  }, [currentRole, toast, clearToast])
 
   // Manual refresh handler
   const handleRefresh = async () => {

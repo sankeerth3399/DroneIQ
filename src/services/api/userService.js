@@ -83,7 +83,11 @@ export const userService = {
    */
   async getUsers() {
     try {
-      const response = await apiClient("/api/users", { method: "GET" })
+      const response = await apiClient("/api/users", {
+        method: "GET",
+        suppressForbiddenToast: true,
+        silent: true,
+      })
       const data = Array.isArray(response)
         ? response
         : response?.data && Array.isArray(response.data)
@@ -124,6 +128,8 @@ export const userService = {
       const response = await apiClient("/api/users", {
         method: "POST",
         body: JSON.stringify(payload),
+        suppressForbiddenToast: true,
+        silent: true,
       })
       const created = response?.data || response
       if (created && created.username) {
@@ -158,6 +164,8 @@ export const userService = {
       await apiClient(`/api/users/${userId}/role`, {
         method: "PATCH",
         body: JSON.stringify({ role: newRole }),
+        suppressForbiddenToast: true,
+        silent: true,
       })
     } catch (err) {
       console.warn(`[UserService] PATCH /api/users/${userId}/role offline fallback:`, err.message)
@@ -178,6 +186,8 @@ export const userService = {
     try {
       await apiClient(`/api/users/${userId}`, {
         method: "DELETE",
+        suppressForbiddenToast: true,
+        silent: true,
       })
     } catch (err) {
       console.warn(`[UserService] DELETE /api/users/${userId} offline fallback:`, err.message)
