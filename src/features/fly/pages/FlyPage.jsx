@@ -4,7 +4,7 @@ import { useDroneTelemetry } from "@/hooks/useDroneTelemetry.js";
 import DualJoystickOverlay from "@/features/mession/components/joysticks/DualJoystickOverlay.jsx";
 import FlightInstrumentsWidget from "@/features/mession/components/widgets/FlightInstrumentsWidget.jsx";
 import CameraWidget from "@/features/fly/components/CameraWidget.jsx";
-import EmergencyOverrideDeck from "@/features/fly/components/EmergencyOverrideDeck.jsx";
+import FlightModeDropdown from "@/features/fly/components/FlightModeDropdown.jsx";
 import CaptureToast from "@/features/mession/components/toast/CaptureToast.jsx";
 import { Plane, LayoutGrid, ShieldAlert } from "lucide-react";
 
@@ -67,12 +67,13 @@ const FlyPage = () => {
       // Ignore
     }
   }, []);
-  const [joysticksVisible, setJoysticksVisible] = useState(true);
+
+  // Dual Virtual Joysticks visibility state (Mandatory Default: HIDDEN / false)
+  const [joysticksVisible, setJoysticksVisible] = useState(false);
 
   // RBAC permissions and role inspection
   const { hasPermission, role } = useAuth();
   const canExecuteFlight = hasPermission(Permissions.EXECUTE_FLIGHT_COMMANDS);
-  const canOverrideFlight = hasPermission(Permissions.OVERRIDE_FLIGHT_COMMANDS);
   const isViewer = role === Roles.VIEWER;
 
   // Single source of truth telemetry & physics simulation hook
@@ -266,14 +267,6 @@ const FlyPage = () => {
           onToggleVisible={() => setJoysticksVisible((prev) => !prev)}
           camSelected={camSelected}
           mapIsLarge={mapIsLarge}
-          hasEmergencyDeck={canOverrideFlight}
-        />
-      )}
-
-      {/* EMERGENCY OVERRIDE DECK (SUPER_ADMIN & FLEET_MANAGER ONLY) */}
-      {canOverrideFlight && (
-        <EmergencyOverrideDeck
-          hasLeftJoystick={canExecuteFlight && joysticksVisible}
         />
       )}
 
@@ -288,7 +281,7 @@ const FlyPage = () => {
       )}
 
       {/* TOP-CENTER MISSION TELEMETRY HUD STRIP */}
-      <div className="absolute top-1.5 sm:top-3 left-1/2 -translate-x-1/2 z-15 pointer-events-auto flex flex-wrap items-center justify-center gap-1.5 sm:gap-2.5 px-2.5 sm:px-3.5 py-1 rounded-md bg-[#080C14CC] border border-[#1A2633] backdrop-blur-md shadow-lg text-[8.5px] sm:text-[10px] font-mono max-w-[calc(100vw-30px)] sm:max-w-none">
+      <div className="absolute top-1.5 sm:top-3 left-1/2 -translate-x-1/2 z-25 pointer-events-auto flex flex-wrap items-center justify-center gap-1.5 sm:gap-2.5 px-2.5 sm:px-3.5 py-1 rounded-md bg-[#080C14CC] border border-[#1A2633] backdrop-blur-md shadow-lg text-[8.5px] sm:text-[10px] font-mono max-w-[calc(100vw-30px)] sm:max-w-none overflow-visible">
         {/* Live Stream vs Sim Status */}
         <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
           <div
@@ -305,10 +298,8 @@ const FlyPage = () => {
 
         <div className="w-[1px] h-2.5 bg-[#223240] shrink-0" />
 
-        {/* Armed & Flight Mode */}
-        <div className="flex items-center gap-1 sm:gap-1.5 text-[#EEF4F8] shrink-0">
-          <span className="font-semibold">{telemetry.flightMode || "GUIDED"}</span>
-        </div>
+        {/* FUNCTIONAL FLIGHT MODE DROPDOWN (10 Canonical Modes) */}
+        <FlightModeDropdown />
 
         <div className="w-[1px] h-2.5 bg-[#223240] shrink-0" />
 

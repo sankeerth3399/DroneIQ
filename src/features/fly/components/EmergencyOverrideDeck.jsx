@@ -1,59 +1,24 @@
 import { useState, useEffect, useRef } from "react"
 import { AlertOctagon, RotateCcw, ArrowDownCircle, Ban, AlertTriangle, PowerOff } from "lucide-react"
 import { useTelemetry } from "@/hooks/useTelemetry.js"
+import { useAuth } from "@/hooks/useAuth.js"
+import { Permissions } from "@/auth/permissions.js"
 import { apiClient } from "@/services/api/apiClient.js"
 
 /**
  * Emergency Override Deck for Super Admin and Fleet Manager
+ * Rendered in the top header bar as a compact flight safety HUD control.
  * Protects dangerous commands with mandatory confirmation dialogs.
- * Features responsive collision avoidance to guarantee zero overlap with the Left Joystick.
  */
-export const EmergencyOverrideDeck = ({ hasLeftJoystick = false }) => {
+export const EmergencyOverrideDeck = () => {
   const { showToast } = useTelemetry()
+  const { hasPermission } = useAuth()
   const [activeModal, setActiveModal] = useState(null) // null | "RTL" | "LAND" | "DISARM" | "ABORT"
   const [isOpen, setIsOpen] = useState(false)
   const deckRef = useRef(null)
 
-  // Track responsive screen dimensions matching DualJoystickOverlay
-  const [dimensions, setDimensions] = useState(() => {
-    if (typeof window === "undefined") {
-      return { sharedBottom: 98, leftOffset: 28, baseSize: 142 }
-    }
-    const w = window.innerWidth
-    const h = window.innerHeight
-    const bSize = (w < 440 || h < 440) ? 100 : (w < 640 || h < 540) ? 114 : (w < 1024 || h < 720) ? 128 : 142
-    let sBottom = 98
-    if (h < 520) {
-      sBottom = 45
-    } else if (w < 640) {
-      sBottom = 72
-    } else if (w < 1024) {
-      sBottom = 85
-    }
-    const lOffset = w < 640 ? 12 : w < 1024 ? 20 : 28
-    return { sharedBottom: sBottom, leftOffset: lOffset, baseSize: bSize }
-  })
-
-  useEffect(() => {
-    const handleResize = () => {
-      const w = window.innerWidth
-      const h = window.innerHeight
-      const bSize = (w < 440 || h < 440) ? 100 : (w < 640 || h < 540) ? 114 : (w < 1024 || h < 720) ? 128 : 142
-      let sBottom = 98
-      if (h < 520) {
-        sBottom = 45
-      } else if (w < 640) {
-        sBottom = 72
-      } else if (w < 1024) {
-        sBottom = 85
-      }
-      const lOffset = w < 640 ? 12 : w < 1024 ? 20 : 28
-      setDimensions({ sharedBottom: sBottom, leftOffset: lOffset, baseSize: bSize })
-    }
-    handleResize()
-    window.addEventListener("resize", handleResize)
-    return () => window.removeEventListener("resize", handleResize)
-  }, [])
+  // Enforce RBAC permission check: strictly SUPER_ADMIN and FLEET_MANAGER
+  const canOverride = typeof hasPermission === "function" ? hasPermission(Permissions.OVERRIDE_FLIGHT_COMMANDS) : false
 
   // Dismiss expanded panel on outside click or Escape
   useEffect(() => {
@@ -75,6 +40,10 @@ export const EmergencyOverrideDeck = ({ hasLeftJoystick = false }) => {
       window.removeEventListener("keydown", handleKeyDown)
     }
   }, [isOpen])
+
+  if (!canOverride) {
+    return null
+  }
 
   const handleConfirmAction = async () => {
     const cmdMap = {
@@ -114,58 +83,47 @@ export const EmergencyOverrideDeck = ({ hasLeftJoystick = false }) => {
     setActiveModal(null)
   }
 
-  // Position:
-  // On narrow screens (< 540px) with left joystick: anchor vertically above Left Joystick with a 12px clearance
-  // On tablet/desktop: positioned safely beside Left Joystick with 16px gap
-  // When no joystick: positioned at bottom-left corner
-  const isNarrowMobile = typeof window !== "undefined" && window.innerWidth < 540
-  const deckLeft = isNarrowMobile
-    ? dimensions.leftOffset
-    : hasLeftJoystick
-    ? dimensions.leftOffset + dimensions.baseSize + 16
-    : dimensions.leftOffset
-
-  const deckBottom = isNarrowMobile && hasLeftJoystick
-    ? `calc(${dimensions.sharedBottom}px + ${dimensions.baseSize}px + 10px + env(safe-area-inset-bottom, 0px))`
-    : `calc(${dimensions.sharedBottom}px + env(safe-area-inset-bottom, 0px))`
-
   return (
     <>
-      {/* Floating Toggle Pill in Dedicated Non-Overlapping Position */}
+      {/* Compact Top Header Control Button */}
       <div
         ref={deckRef}
         id="emergency-deck-container"
-        style={{
-          left: `calc(${deckLeft}px + env(safe-area-inset-left, 0px))`,
-          bottom: deckBottom,
-        }}
-        className="absolute z-25 pointer-events-auto select-none font-mono transition-all duration-300 ease-out"
+        className="relative shrink-0 select-none font-mono"
       >
         <button
           type="button"
           onClick={() => setIsOpen((prev) => !prev)}
-          className={`flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-md border text-[9.5px] sm:text-[11px] font-bold tracking-wider uppercase transition backdrop-blur-md shadow-lg cursor-pointer ${
+          className={`inline-flex items-center gap-1.5 rounded-[4px] px-2 sm:px-2.5 py-1 border shrink-0 transition-all cursor-pointer select-none active:scale-95 ${
             isOpen
-              ? "bg-[#2E1414EE] border-[#FF4141] text-[#FF8585] shadow-[0_0_12px_rgba(255,65,65,0.3)]"
-              : "bg-[#0B1017CC] hover:bg-[#121A24EE] border-[#5E2222] text-[#FF8585] hover:border-[#FF4141]"
+              ? "bg-[#381219] border-[#FF4141] text-[#FFA8A8] shadow-[0_0_12px_rgba(255,65,65,0.35)]"
+              : "bg-[#220E12] border-[#6E1C24] hover:bg-[#321319] hover:border-[#FF4141] text-[#FF8585] shadow-[0_0_8px_rgba(255,65,65,0.15)]"
           }`}
-          title="Toggle Emergency Flight Override Controls"
+          title="Emergency Flight Override Deck (Super Admin / Fleet Manager)"
+          aria-label="Toggle Emergency Flight Override Deck"
+          aria-expanded={isOpen}
         >
-          <AlertOctagon className="w-3.5 h-3.5 text-[#FF4141]" />
-          <span>{isNarrowMobile ? "EMERGENCY" : "Emergency Deck"}</span>
+          <div className="w-[5px] h-[5px] sm:w-[6px] sm:h-[6px] rounded-full bg-[#FF4141] shadow-[0px_0px_5px_0px_#FF4141] animate-pulse shrink-0" />
+          <AlertOctagon className="w-3.5 h-3.5 text-[#FF4141] shrink-0" />
+          <span className="hidden md:inline text-[10px] sm:text-[11px] font-semibold whitespace-nowrap font-mono tracking-wide text-[#FFB3B3]">
+            EMERGENCY DECK
+          </span>
+          <span className="hidden sm:inline md:hidden text-[10px] font-semibold whitespace-nowrap font-mono tracking-wide text-[#FFB3B3]">
+            EMERGENCY
+          </span>
         </button>
 
-        {/* Expanded Emergency Actions Panel: Opens UPWARDS into open space, completely clear of the left joystick */}
+        {/* Downward Dropdown Priority Overrides Panel */}
         {isOpen && (
           <div
-            className="absolute bottom-[calc(100%+8px)] left-0 w-[240px] max-w-[calc(100vw-32px)] rounded-lg bg-[#080C14FA] border border-[#5E2222] shadow-[0_8px_30px_rgba(0,0,0,0.9)] backdrop-blur-md p-3 space-y-2 animate-in fade-in slide-in-from-bottom-2 z-30"
+            className="absolute top-[calc(100%+8px)] right-0 w-[240px] max-w-[calc(100vw-24px)] rounded-lg bg-[#080C14FA] border border-[#5E2222] shadow-[0_8px_30px_rgba(0,0,0,0.9)] backdrop-blur-md p-3 space-y-2 z-50 animate-in fade-in slide-in-from-top-2"
           >
             <div className="flex items-center justify-between pb-1.5 border-b border-[#2E1414] text-[10px] text-[#FF8585] font-bold">
               <span>PRIORITY OVERRIDES</span>
               <button
                 type="button"
                 onClick={() => setIsOpen(false)}
-                className="text-[#8E9EAA] hover:text-white"
+                className="text-[#8E9EAA] hover:text-white transition"
               >
                 ✕
               </button>
@@ -173,8 +131,11 @@ export const EmergencyOverrideDeck = ({ hasLeftJoystick = false }) => {
 
             <button
               type="button"
-              onClick={() => setActiveModal("RTL")}
-              className="w-full flex items-center justify-between px-2.5 py-1.5 rounded bg-[#1A1810] hover:bg-[#2E2814] border border-[#F59E0B66] hover:border-[#F59E0B] text-[#FBBF24] text-[10.5px] font-semibold transition"
+              onClick={() => {
+                setActiveModal("RTL")
+                setIsOpen(false)
+              }}
+              className="w-full flex items-center justify-between px-2.5 py-1.5 rounded bg-[#1A1810] hover:bg-[#2E2814] border border-[#F59E0B66] hover:border-[#F59E0B] text-[#FBBF24] text-[10.5px] font-semibold transition cursor-pointer"
             >
               <div className="flex items-center gap-2">
                 <RotateCcw className="w-3.5 h-3.5" />
@@ -185,8 +146,11 @@ export const EmergencyOverrideDeck = ({ hasLeftJoystick = false }) => {
 
             <button
               type="button"
-              onClick={() => setActiveModal("LAND")}
-              className="w-full flex items-center justify-between px-2.5 py-1.5 rounded bg-[#2E1414] hover:bg-[#451818] border border-[#FF414166] hover:border-[#FF4141] text-[#FF8585] text-[10.5px] font-semibold transition"
+              onClick={() => {
+                setActiveModal("LAND")
+                setIsOpen(false)
+              }}
+              className="w-full flex items-center justify-between px-2.5 py-1.5 rounded bg-[#2E1414] hover:bg-[#451818] border border-[#FF414166] hover:border-[#FF4141] text-[#FF8585] text-[10.5px] font-semibold transition cursor-pointer"
             >
               <div className="flex items-center gap-2">
                 <ArrowDownCircle className="w-3.5 h-3.5 text-[#FF4141]" />
@@ -197,8 +161,11 @@ export const EmergencyOverrideDeck = ({ hasLeftJoystick = false }) => {
 
             <button
               type="button"
-              onClick={() => setActiveModal("DISARM")}
-              className="w-full flex items-center justify-between px-2.5 py-1.5 rounded bg-[#2A1212] hover:bg-[#3D1A1A] border border-[#DC262666] hover:border-[#DC2626] text-[#F87171] text-[10.5px] font-semibold transition"
+              onClick={() => {
+                setActiveModal("DISARM")
+                setIsOpen(false)
+              }}
+              className="w-full flex items-center justify-between px-2.5 py-1.5 rounded bg-[#2A1212] hover:bg-[#3D1A1A] border border-[#DC262666] hover:border-[#DC2626] text-[#F87171] text-[10.5px] font-semibold transition cursor-pointer"
             >
               <div className="flex items-center gap-2">
                 <PowerOff className="w-3.5 h-3.5 text-[#EF4444]" />
@@ -209,8 +176,11 @@ export const EmergencyOverrideDeck = ({ hasLeftJoystick = false }) => {
 
             <button
               type="button"
-              onClick={() => setActiveModal("ABORT")}
-              className="w-full flex items-center justify-between px-2.5 py-1.5 rounded bg-[#1B1424] hover:bg-[#2D1E3D] border border-[#A855F766] hover:border-[#A855F7] text-[#C084FC] text-[10.5px] font-semibold transition"
+              onClick={() => {
+                setActiveModal("ABORT")
+                setIsOpen(false)
+              }}
+              className="w-full flex items-center justify-between px-2.5 py-1.5 rounded bg-[#1B1424] hover:bg-[#2D1E3D] border border-[#A855F766] hover:border-[#A855F7] text-[#C084FC] text-[10.5px] font-semibold transition cursor-pointer"
             >
               <div className="flex items-center gap-2">
                 <Ban className="w-3.5 h-3.5 text-[#C084FC]" />

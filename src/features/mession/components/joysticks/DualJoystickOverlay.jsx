@@ -208,19 +208,35 @@ export const DualJoystickOverlay = ({
     [onStickUpdate]
   )
 
+  const handleHideJoysticks = useCallback(() => {
+    leftStickRef.current = { x: 0, y: 0 }
+    rightStickRef.current = { x: 0, y: 0 }
+    onStickUpdate?.({
+      yaw: 0,
+      throttle: 0,
+      pitch: 0,
+      roll: 0,
+    })
+    onToggleVisible?.()
+  }, [onStickUpdate, onToggleVisible])
+
   if (!visible) {
     return (
       <div
-        style={{ bottom: "var(--joystick-bottom, 98px)" }}
-        className="absolute left-1/2 -translate-x-1/2 z-20 pointer-events-auto"
+        style={{
+          bottom: `calc(${dimensions.sharedBottom}px + env(safe-area-inset-bottom, 0px))`,
+        }}
+        className="absolute left-1/2 -translate-x-1/2 z-20 pointer-events-auto select-none"
       >
         <button
           type="button"
+          id="show-joysticks-btn"
           onClick={onToggleVisible}
-          className="flex items-center gap-1.5 px-3 py-1 rounded-md bg-[#080C14CC] hover:bg-[#0A0E16EE] border border-[#1E293B] hover:border-[#35E0FF] text-[#35E0FF] text-[10px] sm:text-[10.5px] font-mono backdrop-blur-md shadow-md transition group"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#080C14E6] hover:bg-[#0E1624] border border-[#1E293B] hover:border-[#35E0FF] text-[#35E0FF] text-[10px] sm:text-[11px] font-mono font-semibold backdrop-blur-md shadow-[0_4px_16px_rgba(0,0,0,0.6)] transition-all group cursor-pointer active:scale-95"
           title="Show Virtual Joysticks"
+          aria-label="Show Virtual Joysticks"
         >
-          <Gamepad2 className="w-3.5 h-3.5 text-[#35E0FF] group-hover:scale-105 transition-transform" />
+          <Gamepad2 className="w-3.5 h-3.5 text-[#35E0FF] group-hover:scale-110 transition-transform" />
           <span>Show Joysticks</span>
         </button>
       </div>
@@ -261,16 +277,18 @@ export const DualJoystickOverlay = ({
       {/* MINIMAL HIDE JOYSTICKS BUTTON (Centered at bottom) */}
       {onToggleVisible && (
         <div
-          style={{ bottom: "calc(var(--joystick-bottom) - 8px)" }}
-          className="pointer-events-auto absolute left-1/2 -translate-x-1/2"
+          style={{ bottom: "calc(var(--joystick-bottom) - 12px)" }}
+          className="pointer-events-auto absolute left-1/2 -translate-x-1/2 select-none"
         >
           <button
             type="button"
-            onClick={onToggleVisible}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#080C14B3] hover:bg-[#0A0E16EE] border border-[#1E293B] hover:border-[#35E0FF66] text-[#8E9EAA] hover:text-[#35E0FF] text-[9.5px] font-mono backdrop-blur-sm shadow-sm transition group"
+            id="hide-joysticks-btn"
+            onClick={handleHideJoysticks}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#080C14D9] hover:bg-[#0E1624] border border-[#1E293B] hover:border-[#35E0FF88] text-[#8E9EAA] hover:text-[#35E0FF] text-[9.5px] sm:text-[10px] font-mono font-medium backdrop-blur-md shadow-md transition-all group cursor-pointer active:scale-95"
             title="Hide Virtual Joysticks"
+            aria-label="Hide Virtual Joysticks"
           >
-            <EyeOff className="w-3 h-3 text-[#35E0FF] group-hover:scale-105 transition-transform" />
+            <EyeOff className="w-3 h-3 text-[#35E0FF] group-hover:scale-110 transition-transform" />
             <span>Hide Joysticks</span>
           </button>
         </div>

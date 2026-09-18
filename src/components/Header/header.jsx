@@ -4,12 +4,15 @@ import { useTelemetry } from "@/hooks/useTelemetry.js"
 import { useAuth } from "@/hooks/useAuth.js"
 import { ConnectionState } from "@/services/telemetry/telemetryTypes.js"
 import { ROLE_METADATA, Roles } from "@/auth/roleConfig.js"
+import { Permissions } from "@/auth/permissions.js"
 import ArmStatusButton from "./ArmStatusButton.jsx"
+import EmergencyOverrideDeck from "@/features/fly/components/EmergencyOverrideDeck.jsx"
 
 const Header = ({ onToggleMobile, mobileOpen }) => {
-    const { telemetry, selectedDroneId, connectionState, isLive } = useTelemetry()
-    const { role } = useAuth()
+    const { telemetry, flightMode: contextFlightMode, selectedDroneId, connectionState, isLive } = useTelemetry()
+    const { role, hasPermission } = useAuth()
     const roleMeta = ROLE_METADATA[role] || ROLE_METADATA[Roles.VIEWER]
+    const canOverrideFlight = typeof hasPermission === "function" ? hasPermission(Permissions.OVERRIDE_FLIGHT_COMMANDS) : false
 
     // Determine link display text and color based on connection state
     const getLinkDisplay = () => {
@@ -30,7 +33,7 @@ const Header = ({ onToggleMobile, mobileOpen }) => {
 
     const linkInfo = getLinkDisplay()
     const battery = typeof telemetry.batteryPercentage === "number" ? Math.round(telemetry.batteryPercentage) : 84
-    const flightMode = telemetry.flightMode || "AUTO"
+    const flightMode = contextFlightMode || telemetry.flightMode || "GUIDED"
     const satellites = telemetry.gpsSatellites || 16
 
     return (
@@ -120,8 +123,11 @@ const Header = ({ onToggleMobile, mobileOpen }) => {
                 </div>
             </div>
 
-            {/* RIGHT: Active Role Badge, Notifications & Profile Details */}
+            {/* RIGHT: Emergency Override Deck, Active Role Badge, Notifications & Profile Details */}
             <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+                {/* EMERGENCY FLIGHT OVERRIDE DECK (Super Admin & Fleet Manager) */}
+                {canOverrideFlight && <EmergencyOverrideDeck />}
+
                 {/* COMPACT ACTIVE ROLE BADGE (AeroNexus Aerospace Design) */}
                 <div
                     className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-[4px] border text-[10px] sm:text-[11px] font-mono font-bold shrink-0 select-none shadow-sm ${roleMeta.badgeColor}`}

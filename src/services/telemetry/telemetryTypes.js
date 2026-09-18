@@ -25,8 +25,8 @@ export const createDefaultTelemetry = (droneId = "DRONE-001") => ({
   yaw: 42.0,
   batteryPercentage: 84.0,
   gpsSatellites: 16,
-  flightMode: "AUTO",
-  armed: true,
+  flightMode: "GUIDED",
+  armed: false,
   status: "OK",
   metadata: {
     simulator: true,
