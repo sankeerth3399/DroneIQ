@@ -2,7 +2,12 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { TelemetryContext } from "./telemetryContextCore.js"
 import { useAuth } from "@/hooks/useAuth.js"
 import { telemetryClient } from "@/services/telemetry/telemetryClient.js"
-import { ConnectionState, createDefaultTelemetry } from "@/services/telemetry/telemetryTypes.js"
+import {
+  ConnectionState,
+  createDefaultTelemetry,
+  DEFAULT_FLIGHT_MODE,
+  DEFAULT_ARMED_STATE,
+} from "@/services/telemetry/telemetryTypes.js"
 
 export const TelemetryProvider = ({ children }) => {
   const { token, isAuthenticated } = useAuth()
@@ -23,10 +28,10 @@ export const TelemetryProvider = ({ children }) => {
   }
 
   // Centralized ARM/DISARM Flight Safety State (Initial state: false — strictly unarmed by default)
-  const [isArmed, setIsArmed] = useState(false)
+  const [isArmed, setIsArmedState] = useState(DEFAULT_ARMED_STATE)
 
-  // Centralized Canonical Flight Mode State (Default: "GUIDED")
-  const [flightMode, setFlightModeState] = useState("GUIDED")
+  // Centralized Canonical Flight Mode State (Mandatory Default: "GUIDED")
+  const [flightMode, setFlightModeState] = useState(DEFAULT_FLIGHT_MODE)
 
   // Centralized Flight Control Notification Toast
   const [toast, setToast] = useState(null)
@@ -49,19 +54,13 @@ export const TelemetryProvider = ({ children }) => {
     }, 2800)
   }, [])
 
-  // Handle incoming live telemetry event
+  // Handle incoming live telemetry event (OBSERVED STATE ONLY - never mutate user command state)
   const handleTelemetryUpdate = useCallback((data) => {
     if (!data || !data.droneId) return
 
     setLastTelemetryTime(Date.now())
-    if (data.droneId === selectedDroneId) {
-      if (data.flightMode) {
-        setFlightModeState(String(data.flightMode).toUpperCase().replace(/\s+/g, "_"))
-      }
-      if (typeof data.armed === "boolean") {
-        setIsArmed(data.armed)
-      }
-    }
+
+    // Update fleet telemetry store with incoming observed metrics (GPS, battery, altitude, etc.)
     setFleetTelemetry((prev) => ({
       ...prev,
       [data.droneId]: {
@@ -70,7 +69,7 @@ export const TelemetryProvider = ({ children }) => {
         timestamp: data.timestamp || new Date().toISOString(),
       },
     }))
-  }, [selectedDroneId])
+  }, [])
 
   // Subscribe to WebSocket client events
   useEffect(() => {
@@ -125,14 +124,18 @@ export const TelemetryProvider = ({ children }) => {
     return () => clearInterval(interval)
   }, [connectionState, lastTelemetryTime])
 
-  // Centralized Flight Mode Switcher
-  const setFlightMode = useCallback((newMode) => {
+  // Centralized Flight Mode Switcher (USER ACTION ONLY)
+  const handleFlightModeChange = useCallback((newMode, source = "USER") => {
     if (!newMode) return false
     const normalized = String(newMode).toUpperCase().replace(/\s+/g, "_")
     const validModes = ["STABILIZE", "ALT_HOLD", "POS_HOLD", "LOITER", "GUIDED", "RTL", "LAND", "AUTO", "BRAKE", "MANUAL"]
     if (!validModes.includes(normalized)) {
       console.warn(`[TelemetryContext] Unknown flight mode requested: ${newMode}`)
       return false
+    }
+
+    if (import.meta.env?.DEV) {
+      console.log(`[FLIGHT MODE] previous: ${flightMode} -> next: ${normalized} | source: ${source}`)
     }
 
     setFlightModeState(normalized)
@@ -146,7 +149,7 @@ export const TelemetryProvider = ({ children }) => {
 
     // Dispatch global custom event for drone simulation and UI components
     window.dispatchEvent(new CustomEvent("aeronexus:flight-mode-change", {
-      detail: { mode: normalized, droneId: selectedDroneId },
+      detail: { mode: normalized, droneId: selectedDroneId, source },
     }))
 
     const friendlyLabels = {
@@ -164,7 +167,9 @@ export const TelemetryProvider = ({ children }) => {
     const label = friendlyLabels[normalized] || normalized
     showToast(`Flight mode changed to ${label}`, "info")
     return true
-  }, [selectedDroneId, showToast])
+  }, [flightMode, selectedDroneId, showToast])
+
+  const setFlightMode = handleFlightModeChange
 
   // Listen for global toast notifications (e.g. from 403 Forbidden or API events)
   useEffect(() => {
@@ -175,49 +180,23 @@ export const TelemetryProvider = ({ children }) => {
     }
 
     const handleRtl = () => {
-      setFlightModeState("RTL")
-      setFleetTelemetry((prev) => {
-        const current = prev[selectedDroneId] || {}
-        return {
-          ...prev,
-          [selectedDroneId]: {
-            ...current,
-            flightMode: "RTL",
-          },
-        }
-      })
+      handleFlightModeChange("RTL", "EMERGENCY_OVERRIDE")
     }
 
     const handleLand = () => {
-      setFlightModeState("LAND")
-      setFleetTelemetry((prev) => {
-        const current = prev[selectedDroneId] || {}
-        return {
-          ...prev,
-          [selectedDroneId]: {
-            ...current,
-            flightMode: "LAND",
-          },
-        }
-      })
+      handleFlightModeChange("LAND", "EMERGENCY_OVERRIDE")
     }
 
     const handleAbort = () => {
-      setFlightModeState("BRAKE")
-      setFleetTelemetry((prev) => {
-        const current = prev[selectedDroneId] || {}
-        return {
-          ...prev,
-          [selectedDroneId]: {
-            ...current,
-            flightMode: "BRAKE",
-          },
-        }
-      })
+      handleFlightModeChange("BRAKE", "EMERGENCY_OVERRIDE")
     }
 
     const handleDisarm = () => {
-      setIsArmed(false)
+      setIsArmedState(false)
+      if (import.meta.env?.DEV) {
+        console.log("[ARM STATE] previous: ARMED -> next: UNARMED | source: EMERGENCY_OVERRIDE")
+      }
+      showToast("Motors Force Disarmed", "warning")
     }
 
     window.addEventListener("aeronexus:toast", handleToastEvent)
@@ -233,11 +212,14 @@ export const TelemetryProvider = ({ children }) => {
       window.removeEventListener("aeronexus:emergency-abort", handleAbort)
       window.removeEventListener("aeronexus:emergency-disarm", handleDisarm)
     }
-  }, [showToast, selectedDroneId])
+  }, [showToast, handleFlightModeChange])
 
-  const toggleArmed = useCallback(() => {
-    setIsArmed((prev) => {
+  const toggleArmed = useCallback((source = "USER") => {
+    setIsArmedState((prev) => {
       const next = !prev
+      if (import.meta.env?.DEV) {
+        console.log(`[ARM STATE] previous: ${prev ? "ARMED" : "UNARMED"} -> next: ${next ? "ARMED" : "UNARMED"} | source: ${source}`)
+      }
       if (next) {
         showToast("Drone Armed Successfully", "success")
       } else {
@@ -247,10 +229,13 @@ export const TelemetryProvider = ({ children }) => {
     })
   }, [showToast])
 
-  const setArmed = useCallback((val) => {
-    setIsArmed((prev) => {
+  const setArmed = useCallback((val, source = "USER") => {
+    setIsArmedState((prev) => {
       const next = Boolean(val)
       if (prev !== next) {
+        if (import.meta.env?.DEV) {
+          console.log(`[ARM STATE] previous: ${prev ? "ARMED" : "UNARMED"} -> next: ${next ? "ARMED" : "UNARMED"} | source: ${source}`)
+        }
         if (next) {
           showToast("Drone Armed Successfully", "success")
         } else {
@@ -260,6 +245,10 @@ export const TelemetryProvider = ({ children }) => {
       return next
     })
   }, [showToast])
+
+  const setIsArmed = useCallback((val) => {
+    setArmed(val, "USER")
+  }, [setArmed])
 
   // Centralized Camera Gimbal State (Independent from Drone Attitude)
   const [gimbalState, setGimbalState] = useState({
@@ -383,9 +372,13 @@ export const TelemetryProvider = ({ children }) => {
   // Centralized telemetry object with authoritative isArmed, flightMode, and gimbal state
   const telemetry = useMemo(() => ({
     ...rawTelemetry,
-    flightMode: flightMode || rawTelemetry.flightMode || "GUIDED",
+    flightMode: flightMode || DEFAULT_FLIGHT_MODE,
     armed: isArmed,
     isArmed,
+    speed: isArmed ? (rawTelemetry.speed || 0) : 0,
+    groundSpeed: isArmed ? (rawTelemetry.groundSpeed || 0) : 0,
+    verticalSpeed: isArmed ? (rawTelemetry.verticalSpeed || 0) : 0,
+    climbRate: isArmed ? (rawTelemetry.climbRate || 0) : 0,
     gimbal: gimbalState,
   }), [rawTelemetry, flightMode, isArmed, gimbalState])
 
@@ -397,6 +390,7 @@ export const TelemetryProvider = ({ children }) => {
     telemetry,
     flightMode,
     setFlightMode,
+    handleFlightModeChange: setFlightMode,
     isArmed,
     setIsArmed,
     setArmed,

@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from "react"
 import { Gamepad2, EyeOff } from "lucide-react"
 import VirtualJoystick from "./VirtualJoystick.jsx"
+import { DEFAULT_SHOW_JOYSTICKS } from "@/services/telemetry/telemetryTypes.js"
 
 /**
  * Dual Joystick Overlay (Mode 2 standard)
@@ -20,7 +21,7 @@ import VirtualJoystick from "./VirtualJoystick.jsx"
  */
 export const DualJoystickOverlay = ({
   onStickUpdate,
-  visible = true,
+  visible = DEFAULT_SHOW_JOYSTICKS,
   onToggleVisible,
   camSelected = "main",
   mapIsLarge = true,

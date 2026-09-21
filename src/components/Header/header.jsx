@@ -2,7 +2,7 @@ import { Menu, Bell } from "lucide-react"
 import ProfileDetails from "@/components/profile/profileDetails.jsx"
 import { useTelemetry } from "@/hooks/useTelemetry.js"
 import { useAuth } from "@/hooks/useAuth.js"
-import { ConnectionState } from "@/services/telemetry/telemetryTypes.js"
+import { ConnectionState, DEFAULT_FLIGHT_MODE } from "@/services/telemetry/telemetryTypes.js"
 import { ROLE_METADATA, Roles } from "@/auth/roleConfig.js"
 import { Permissions } from "@/auth/permissions.js"
 import ArmStatusButton from "./ArmStatusButton.jsx"
@@ -33,7 +33,7 @@ const Header = ({ onToggleMobile, mobileOpen }) => {
 
     const linkInfo = getLinkDisplay()
     const battery = typeof telemetry.batteryPercentage === "number" ? Math.round(telemetry.batteryPercentage) : 84
-    const flightMode = contextFlightMode || telemetry.flightMode || "GUIDED"
+    const flightMode = contextFlightMode || DEFAULT_FLIGHT_MODE
     const satellites = telemetry.gpsSatellites || 16
 
     return (

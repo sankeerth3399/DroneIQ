@@ -4,12 +4,13 @@ import { useTelemetry } from "@/hooks/useTelemetry.js"
 import { useAuth } from "@/hooks/useAuth.js"
 import { Permissions } from "@/auth/permissions.js"
 import { FLIGHT_MODES, getFlightModeLabel } from "../constants/flightModes.js"
+import { DEFAULT_FLIGHT_MODE } from "@/services/telemetry/telemetryTypes.js"
 
 /**
  * Functional Flight Mode Dropdown for AeroNexus Top Telemetry Bar
  */
 export const FlightModeDropdown = () => {
-  const { telemetry, flightMode, setFlightMode, showToast } = useTelemetry()
+  const { flightMode, setFlightMode, handleFlightModeChange, showToast } = useTelemetry()
   const { hasPermission } = useAuth()
   const [isOpen, setIsOpen] = useState(false)
   const dropdownRef = useRef(null)
@@ -20,9 +21,9 @@ export const FlightModeDropdown = () => {
 
   // Determine current active mode from canonical context
   const activeModeId = useMemo(() => {
-    const raw = flightMode || telemetry.flightMode || "GUIDED"
+    const raw = flightMode || DEFAULT_FLIGHT_MODE
     return String(raw).toUpperCase().replace(/\s+/g, "_")
-  }, [flightMode, telemetry.flightMode])
+  }, [flightMode])
 
   const activeModeLabel = getFlightModeLabel(activeModeId)
 
@@ -59,7 +60,9 @@ export const FlightModeDropdown = () => {
       return
     }
 
-    if (typeof setFlightMode === "function") {
+    if (typeof handleFlightModeChange === "function") {
+      handleFlightModeChange(mode.id, "USER")
+    } else if (typeof setFlightMode === "function") {
       setFlightMode(mode.id)
     }
     setIsOpen(false)

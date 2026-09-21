@@ -3,6 +3,7 @@ import { useTelemetry } from "@/hooks/useTelemetry.js";
 import { flightControlService } from "@/services/control/flightControlService.js";
 import { normalizeHeading, getCardinalDirection } from "@/utils/heading.js";
 import { getJoystickDirectionLabel } from "@/utils/joystick.js";
+import { DEFAULT_FLIGHT_MODE } from "@/services/telemetry/telemetryTypes.js";
 
 const DEADZONE = 0.04;
 const applyDeadzone = (v) => (Math.abs(v) < DEADZONE ? 0 : v);
@@ -82,7 +83,7 @@ export function useDroneTelemetry() {
     gpsFix: "3D Fix",
     armed: isArmed ?? false,
     isArmed: isArmed ?? false,
-    flightMode: canonicalFlightMode || "GUIDED",
+    flightMode: canonicalFlightMode || DEFAULT_FLIGHT_MODE,
     status: "OK",
   });
 
@@ -105,7 +106,7 @@ export function useDroneTelemetry() {
     lateralSpeed: 0.0,
     verticalSpeed: 0.0,
     speed: 0.0,
-    flightMode: canonicalFlightMode || "GUIDED",
+    flightMode: canonicalFlightMode || DEFAULT_FLIGHT_MODE,
   });
 
   // Synchronize canonical flightMode from TelemetryContext
@@ -653,35 +654,39 @@ export function useDroneTelemetry() {
 
   const activeTelemetry = isActivelyLive
     ? {
-        pitch: typeof liveTelemetry.pitch === "number" ? liveTelemetry.pitch : 0,
-        roll: typeof liveTelemetry.roll === "number" ? liveTelemetry.roll : 0,
+        pitch: isArmed ? (typeof liveTelemetry.pitch === "number" ? liveTelemetry.pitch : 0) : 0,
+        roll: isArmed ? (typeof liveTelemetry.roll === "number" ? liveTelemetry.roll : 0) : 0,
         heading:
           typeof liveTelemetry.heading === "number"
             ? liveTelemetry.heading
             : liveTelemetry.yaw || 0,
         altitude:
           typeof liveTelemetry.altitude === "number" ? liveTelemetry.altitude : 0,
-        verticalSpeed:
-          typeof liveTelemetry.verticalSpeed === "number"
-            ? liveTelemetry.verticalSpeed
-            : liveTelemetry.climbRate || 0,
-        climbRate:
-          typeof liveTelemetry.climbRate === "number"
-            ? liveTelemetry.climbRate
-            : liveTelemetry.verticalSpeed || 0,
-        speed:
-          typeof liveTelemetry.speed === "number"
-            ? liveTelemetry.speed
-            : liveTelemetry.groundSpeed || 0,
-        groundSpeed:
-          typeof liveTelemetry.groundSpeed === "number"
-            ? liveTelemetry.groundSpeed
-            : liveTelemetry.speed || 0,
+        verticalSpeed: isArmed
+          ? (typeof liveTelemetry.verticalSpeed === "number"
+              ? liveTelemetry.verticalSpeed
+              : liveTelemetry.climbRate || 0)
+          : 0,
+        climbRate: isArmed
+          ? (typeof liveTelemetry.climbRate === "number"
+              ? liveTelemetry.climbRate
+              : liveTelemetry.verticalSpeed || 0)
+          : 0,
+        speed: isArmed
+          ? (typeof liveTelemetry.speed === "number"
+              ? liveTelemetry.speed
+              : liveTelemetry.groundSpeed || 0)
+          : 0,
+        groundSpeed: isArmed
+          ? (typeof liveTelemetry.groundSpeed === "number"
+              ? liveTelemetry.groundSpeed
+              : liveTelemetry.speed || 0)
+          : 0,
         battery:
           typeof liveTelemetry.batteryPercentage === "number"
             ? liveTelemetry.batteryPercentage
             : 84,
-        flightMode: liveTelemetry.flightMode || canonicalFlightMode || "GUIDED",
+        flightMode: canonicalFlightMode || DEFAULT_FLIGHT_MODE,
         armed: isArmed,
         isArmed: isArmed,
         status: liveTelemetry.status || "OK",

@@ -12,6 +12,7 @@ import { useTelemetry } from "@/hooks/useTelemetry.js";
 import { useAuth } from "@/hooks/useAuth.js";
 import { Permissions } from "@/auth/permissions.js";
 import { Roles } from "@/auth/roleConfig.js";
+import { DEFAULT_SHOW_JOYSTICKS } from "@/services/telemetry/telemetryTypes.js";
 
 const pipClass =
   "absolute right-2 top-2 sm:right-4 sm:top-4 z-20 flex cursor-pointer flex-col overflow-hidden rounded-xl border border-[#223240] bg-[#171F27B2] shadow-2xl backdrop-blur-md transition-all duration-300 h-[124px] w-[155px] sm:h-[156px] sm:w-[205px] md:h-[188px] md:w-[245px]";
@@ -69,7 +70,7 @@ const FlyPage = () => {
   }, []);
 
   // Dual Virtual Joysticks visibility state (Mandatory Default: HIDDEN / false)
-  const [joysticksVisible, setJoysticksVisible] = useState(false);
+  const [joysticksVisible, setJoysticksVisible] = useState(DEFAULT_SHOW_JOYSTICKS);
 
   // RBAC permissions and role inspection
   const { hasPermission, role } = useAuth();

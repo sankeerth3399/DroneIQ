@@ -614,3 +614,19 @@ export function saveProjectMission(projectId, missionData = {}) {
 
   return updateProject(projectId, { mission: formattedMission });
 }
+
+export const projectService = {
+  getProjects,
+  saveProjects,
+  getActiveProjectId,
+  setActiveProjectId,
+  getProjectById,
+  createProject,
+  updateProject,
+  deleteProject,
+  saveProjectGeofence,
+  clearProjectGeofence,
+  saveProjectMission,
+};
+
+export default projectService;

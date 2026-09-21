@@ -9,6 +9,7 @@ import CreateGeofencePage from "@/features/mession/pages/CreateGeofencePage.jsx"
 import Logs from "@/features/logs/pages/Logs.jsx";
 import SettingsPage from "@/features/settings/pages/SettingsPage.jsx";
 import UsersPage from "@/features/users/pages/UsersPage.jsx";
+import AnalyticsPage from "@/features/analytics/pages/AnalyticsPage.jsx";
 import Landing from "@/features/landing/pages/landingPage.jsx";
 import Login from "@/features/auth/pages/Login.jsx";
 
@@ -65,9 +66,14 @@ const Routing = () => {
             </ProtectedRoute>
           }
         />
+        {/* Operational Analytics & Telemetry Intelligence */}
         <Route
           path="/analytics"
-          element={<Navigate to="/settings" replace />}
+          element={
+            <ProtectedRoute>
+              <AnalyticsPage />
+            </ProtectedRoute>
+          }
         />
 
         {/* User Management Route (Protected: Super Admin + Fleet Manager) */}

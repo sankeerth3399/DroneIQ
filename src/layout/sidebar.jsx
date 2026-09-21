@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react"
 import { NavLink, useLocation, useNavigate } from "react-router-dom"
-import { X, ChevronDown, FileText, MapPin, ShieldAlert, Users as UsersIcon } from "lucide-react"
+import { X, ChevronDown, FileText, MapPin, ShieldAlert, Users as UsersIcon, BarChart3 } from "lucide-react"
 import Fly from "../assets/images/drone.svg"
 import Settings from "../assets/images/settings.svg"
 import Logs from "../assets/images/logs.svg"
@@ -15,6 +15,7 @@ const ALL_TABS = [
     { label: "Dashboard", value: "/dashboard", img: Dashboard },
     { label: "Fly", value: "/fly", img: Fly },
     { label: "Missions", value: "/missions", requiredPermission: Permissions.VIEW_MISSIONS, img: Target, isDropdown: true },
+    { label: "Analytics", value: "/analytics", icon: BarChart3 },
     { label: "Logs", value: "/logs", requiredPermission: Permissions.VIEW_LOGS, img: Logs },
     { label: "Users", value: "/users", icon: UsersIcon },
     { label: "Settings", value: "/settings", img: Settings },
@@ -217,14 +218,18 @@ const Sidebar = ({ collapsed = false, onToggle, mobileOpen = false, onCloseMobil
                                 }`
                             }
                         >
-                            {tab.icon ? (
-                                <tab.icon className="w-[18px] h-[18px] shrink-0 text-[#8E9EAA]" />
-                            ) : (
-                                <img src={tab.img} className="w-[18px] h-[18px] shrink-0" alt={tab.label} />
+                            {({ isActive }) => (
+                                <>
+                                    {tab.icon ? (
+                                        <tab.icon className={`w-[18px] h-[18px] shrink-0 transition-colors ${isActive ? "text-[#35E0FF]" : "text-[#8E9EAA]"}`} />
+                                    ) : (
+                                        <img src={tab.img} className="w-[18px] h-[18px] shrink-0" alt={tab.label} />
+                                    )}
+                                    <span className={`truncate ${collapsed ? "lg:hidden block" : "block"}`}>
+                                        {tab.label}
+                                    </span>
+                                </>
                             )}
-                            <span className={`truncate ${collapsed ? "lg:hidden block" : "block"}`}>
-                                {tab.label}
-                            </span>
                         </NavLink>
                     )
                 })}
