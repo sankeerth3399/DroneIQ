@@ -1,169 +1,363 @@
-import { FileText, Download, HardDrive } from "lucide-react"
+import { useState, useMemo } from "react"
+import {
+  FileText,
+  Download,
+  FileSpreadsheet,
+  FileJson,
+  ChevronDown,
+} from "lucide-react"
+import { useTelemetry } from "@/hooks/useTelemetry.js"
+import { logService } from "@/services/api/logService.js"
+import { projectService } from "@/services/projectService.js"
+import { LogCategoryTabs } from "../components/LogCategoryTabs.jsx"
+import { MissionLogSummary } from "../components/MissionLogSummary.jsx"
+import { MissionLogFilters } from "../components/MissionLogFilters.jsx"
+import { MissionLogTable } from "../components/MissionLogTable.jsx"
+import { FlightLogsTable } from "../components/FlightLogsTable.jsx"
+import { GenericLogsTable } from "../components/GenericLogsTable.jsx"
+import { MissionLogDetailDrawer } from "../components/MissionLogDetailDrawer.jsx"
 
-const logsList = [
-  {
-    id: "FLIGHT-LOG-20260910-001",
-    date: "2026-09-10 15:42",
-    callsign: "DRONE-001",
-    duration: "18m 34s",
-    maxAlt: "64.2m",
-    dist: "3.42 km",
-    batteryDelta: "84% -> 38%",
-    size: "4.8 MB",
-  },
-  {
-    id: "FLIGHT-LOG-20260909-003",
-    date: "2026-09-09 11:20",
-    callsign: "DRONE-001",
-    duration: "24m 10s",
-    maxAlt: "82.0m",
-    dist: "5.18 km",
-    batteryDelta: "98% -> 22%",
-    size: "6.2 MB",
-  },
-  {
-    id: "FLIGHT-LOG-20260908-002",
-    date: "2026-09-08 17:05",
-    callsign: "DRONE-002",
-    duration: "12m 45s",
-    maxAlt: "45.0m",
-    dist: "2.10 km",
-    batteryDelta: "95% -> 58%",
-    size: "3.1 MB",
-  },
-]
+const INITIAL_FILTERS = {
+  search: "",
+  missionId: "ALL",
+  droneId: "ALL",
+  operator: "ALL",
+  event: "ALL",
+  status: "ALL",
+  flightMode: "ALL",
+  range: "ALL",
+}
 
-const Logs = () => {
-  const handleExport = (logId) => {
+export const Logs = () => {
+  const { isLive } = useTelemetry()
+
+  // Active category tab
+  const [activeCategory, setActiveCategory] = useState("all")
+
+  // Filter state
+  const [filters, setFilters] = useState(INITIAL_FILTERS)
+
+  // Drawer state for mission details
+  const [selectedMissionLog, setSelectedMissionLog] = useState(null)
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false)
+
+  // Export dropdown state
+  const [showExportMenu, setShowExportMenu] = useState(false)
+
+  // Original handler for ULog downloads
+  const handleExportUlog = (logId) => {
     alert(`Downloading telemetry binary log ${logId}.ulg / .tlog...`)
   }
 
+  // Fetch summary metrics
+  const missionSummary = useMemo(() => {
+    return logService.getMissionSummary()
+  }, [])
+
+  // Dynamic filter options based on authentic project and flight data
+  const { missions, drones, operators, eventTypes, flightModes, statuses } = useMemo(() => {
+    const rawProjects = projectService.getProjects() || []
+    const rawMissionLogs = logService.getMissionLogs()
+    const rawFlightLogs = logService.getFlightLogs()
+
+    const mList = rawProjects.map((p) => ({
+      id: p.id,
+      name: p.name || p.projectName || p.id,
+    }))
+
+    const dList = Array.from(
+      new Set(
+        [
+          ...rawMissionLogs.map((l) => l.droneId),
+          ...rawFlightLogs.map((l) => l.droneId || l.callsign),
+        ].filter(Boolean)
+      )
+    )
+
+    const opList = Array.from(
+      new Set(
+        [
+          ...rawMissionLogs.map((l) => l.operator),
+          ...rawFlightLogs.map((l) => l.operator),
+        ].filter(Boolean)
+      )
+    )
+
+    const evList = Array.from(
+      new Set(rawMissionLogs.map((l) => l.event).filter(Boolean))
+    )
+
+    const fmList = ["GUIDED", "AUTO", "RTL", "LOITER", "POSHOLD", "MANUAL"]
+    const stList = ["Ready", "Running", "Completed", "Failed", "Cancelled", "Draft"]
+
+    return {
+      missions: mList,
+      drones: dList,
+      operators: opList,
+      eventTypes: evList,
+      flightModes: fmList,
+      statuses: stList,
+    }
+  }, [])
+
+  // Datasets per category with filters applied
+  const missionLogs = useMemo(() => {
+    return logService.getMissionLogs(filters)
+  }, [filters])
+
+  const flightLogs = useMemo(() => {
+    return logService.getFlightLogs(filters)
+  }, [filters])
+
+  const telemetryLogs = useMemo(() => {
+    return logService.getTelemetryLogs(filters)
+  }, [filters])
+
+  const commandLogs = useMemo(() => {
+    return logService.getCommandLogs(filters)
+  }, [filters])
+
+  const systemLogs = useMemo(() => {
+    return logService.getSystemLogs(filters)
+  }, [filters])
+
+  const incidentLogs = useMemo(() => {
+    return logService.getIncidentLogs(filters)
+  }, [filters])
+
+  const allLogs = useMemo(() => {
+    return logService.getAllLogs(filters)
+  }, [filters])
+
+  // Dynamic count badges for each tab
+  const categoryCounts = useMemo(() => {
+    return {
+      all: logService.getAllLogs().length,
+      flight: logService.getFlightLogs().length,
+      mission: logService.getMissionLogs().length,
+      telemetry: logService.getTelemetryLogs().length,
+      command: logService.getCommandLogs().length,
+      system: logService.getSystemLogs().length,
+      incident: logService.getIncidentLogs().length,
+    }
+  }, [])
+
+  // Current active dataset for exports
+  const currentDataset = useMemo(() => {
+    switch (activeCategory) {
+      case "mission":
+        return missionLogs
+      case "flight":
+        return flightLogs
+      case "telemetry":
+        return telemetryLogs
+      case "command":
+        return commandLogs
+      case "system":
+        return systemLogs
+      case "incident":
+        return incidentLogs
+      case "all":
+      default:
+        return allLogs
+    }
+  }, [
+    activeCategory,
+    missionLogs,
+    flightLogs,
+    telemetryLogs,
+    commandLogs,
+    systemLogs,
+    incidentLogs,
+    allLogs,
+  ])
+
+  // Bidirectional navigation handlers
+  const handleOpenMissionDrawer = (log) => {
+    setSelectedMissionLog(log)
+    setIsDrawerOpen(true)
+  }
+
+  const handleViewFlightFromMission = (flightId) => {
+    setIsDrawerOpen(false)
+    setActiveCategory("flight")
+    setFilters((prev) => ({
+      ...prev,
+      search: flightId || "",
+    }))
+  }
+
+  const handleViewMissionFromFlight = (missionId) => {
+    setActiveCategory("mission")
+    setFilters((prev) => ({
+      ...prev,
+      missionId: missionId || "ALL",
+      search: "",
+    }))
+    const matchedLog = missionLogs.find((l) => l.missionId === missionId)
+    if (matchedLog) {
+      setSelectedMissionLog(matchedLog)
+      setIsDrawerOpen(true)
+    }
+  }
+
+  const handleResetFilters = () => {
+    setFilters(INITIAL_FILTERS)
+  }
+
+  // Export handlers
+  const handleTriggerExport = (format) => {
+    setShowExportMenu(false)
+    logService.exportLogs(format, activeCategory, currentDataset)
+  }
+
   return (
-    <div className="p-3.5 sm:p-6 lg:p-8 space-y-5 sm:space-y-6 max-w-6xl mx-auto text-[#EEF4F8] select-none font-sans">
-      {/* Page Header */}
+    <div className="p-3.5 sm:p-6 lg:p-8 space-y-5 sm:space-y-6 max-w-7xl mx-auto text-[#EEF4F8] select-none font-sans">
+      {/* Top Header & Global Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-[#1A2633]">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white flex items-center gap-2">
-            <FileText className="w-6 h-6 text-[#35E0FF]" />
-            Flight Operations & Telemetry Logs
-          </h1>
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white flex items-center gap-2">
+              <FileText className="w-6 h-6 text-[#35E0FF]" />
+              Operations, Flight & Mission Logs
+            </h1>
+
+            {/* Live Telemetry Indicator */}
+            <div
+              className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold border ${
+                isLive
+                  ? "bg-[#2FE0891F] text-[#2FE089] border-[#2FE0894D]"
+                  : "bg-[#1E293B] text-[#94A3B8] border-[#334155]"
+              }`}
+            >
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${
+                  isLive ? "bg-[#2FE089] animate-pulse" : "bg-[#64748B]"
+                }`}
+              />
+              <span>{isLive ? "LIVE STREAM" : "OFFLINE"}</span>
+            </div>
+          </div>
+
           <p className="text-xs sm:text-sm text-[#8E9EAA] mt-1">
-            Browse, inspect, and export recorded MAVLink flight telemetry, incident traces, and battery profiles.
+            Audit autonomous waypoint missions, inspect recorded MAVLink telemetry, track pilot commands, and export binary flight records.
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => handleExport("ALL_LATEST")}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-[#1A2634] text-[#35E0FF] border border-[#35E0FF4D] text-xs sm:text-sm font-semibold hover:bg-[#35E0FF] hover:text-[#06090E] transition shrink-0 self-start sm:self-auto font-mono"
-        >
-          <Download className="w-4 h-4" />
-          <span>Export All Logs (.zip)</span>
-        </button>
-      </div>
+        {/* Action Buttons: Export Dropdown + Export All Zips */}
+        <div className="flex items-center gap-2 self-start sm:self-auto font-mono">
+          {/* Format Export Dropdown */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setShowExportMenu((prev) => !prev)}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#0F1622] text-[#CBD5E1] border border-[#1E293B] hover:border-[#35E0FF] hover:text-[#35E0FF] text-xs font-semibold transition cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Export</span>
+              <ChevronDown className="w-3 h-3 ml-0.5 text-[#64748B]" />
+            </button>
 
-      {/* Logs Table Card */}
-      <div className="rounded-xl bg-[#0A0E16] border border-[#1A2633] overflow-hidden shadow-lg">
-        <div className="px-4 py-3 sm:px-5 sm:py-4 border-b border-[#1A2633] flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <HardDrive className="w-4 h-4 text-[#35E0FF]" />
-            <h2 className="text-sm sm:text-base font-semibold text-white">Recorded Flight Sorties</h2>
-          </div>
-          <span className="text-[11px] font-mono text-[#8E9EAA]">
-            3 Sorties on Local Disk
-          </span>
-        </div>
-
-        {/* Mobile View: Cards (< sm) */}
-        <div className="sm:hidden divide-y divide-[#16212E]">
-          {logsList.map((log) => (
-            <div key={log.id} className="p-3.5 space-y-2.5 hover:bg-[#111A26] transition font-mono">
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-semibold text-xs text-[#35E0FF] truncate">{log.id}</span>
-                <span className="text-[10px] text-[#2FE089] bg-[#2FE0891A] px-1.5 py-0.5 rounded border border-[#2FE08933]">
-                  {log.duration}
-                </span>
-              </div>
-              <div className="grid grid-cols-2 gap-2 text-[11px] text-[#94A3B8]">
-                <div>
-                  <span className="text-[#64748B] text-[9px] block">DATE / TIME</span>
-                  <span>{log.date}</span>
-                </div>
-                <div>
-                  <span className="text-[#64748B] text-[9px] block">AIRCRAFT</span>
-                  <span className="text-white font-bold">{log.callsign}</span>
-                </div>
-                <div>
-                  <span className="text-[#64748B] text-[9px] block">MAX ALT / DIST</span>
-                  <span>{log.maxAlt} • {log.dist}</span>
-                </div>
-                <div>
-                  <span className="text-[#64748B] text-[9px] block">BATTERY</span>
-                  <span className="text-[#F59E0B]">{log.batteryDelta}</span>
-                </div>
-              </div>
-              <div className="pt-1 flex items-center justify-between">
-                <span className="text-[10px] text-[#64748B]">{log.size}</span>
+            {showExportMenu && (
+              <div className="absolute right-0 mt-1 w-44 rounded-xl bg-[#090D14] border border-[#1A2633] shadow-2xl p-1 z-20 space-y-0.5">
                 <button
                   type="button"
-                  onClick={() => handleExport(log.id)}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-[#172230] border border-[#23354A] hover:border-[#35E0FF] hover:text-[#35E0FF] text-[#B7F3FF] text-xs min-h-[36px]"
+                  onClick={() => handleTriggerExport("csv")}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs text-[#CBD5E1] hover:text-white hover:bg-[#131C28] transition cursor-pointer"
                 >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Download ULog</span>
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-[#2FE089]" />
+                  <span>Export as CSV</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleTriggerExport("json")}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs text-[#CBD5E1] hover:text-white hover:bg-[#131C28] transition cursor-pointer"
+                >
+                  <FileJson className="w-3.5 h-3.5 text-[#35E0FF]" />
+                  <span>Export as JSON</span>
                 </button>
               </div>
-            </div>
-          ))}
-        </div>
+            )}
+          </div>
 
-        {/* Desktop / Tablet View: Table (sm+) */}
-        <div className="hidden sm:block overflow-x-auto">
-          <table className="w-full text-left text-xs font-mono">
-            <thead className="bg-[#0D1420] text-[#8E9EAA] border-b border-[#1A2633] uppercase text-[10px]">
-              <tr>
-                <th className="px-4 py-3">Log ID</th>
-                <th className="px-4 py-3">Date</th>
-                <th className="px-4 py-3">Drone</th>
-                <th className="px-4 py-3">Duration</th>
-                <th className="px-4 py-3 hidden md:table-cell">Max Alt</th>
-                <th className="px-4 py-3 hidden lg:table-cell">Distance</th>
-                <th className="px-4 py-3">Battery Usage</th>
-                <th className="px-4 py-3 text-right">Download</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#16212E] text-[#EEF4F8]">
-              {logsList.map((log) => (
-                <tr key={log.id} className="hover:bg-[#111A26] transition">
-                  <td className="px-4 py-3 font-semibold text-[#35E0FF] whitespace-nowrap">
-                    {log.id}
-                  </td>
-                  <td className="px-4 py-3 text-[#94A3B8] whitespace-nowrap">{log.date}</td>
-                  <td className="px-4 py-3 whitespace-nowrap font-bold text-white">
-                    {log.callsign}
-                  </td>
-                  <td className="px-4 py-3 whitespace-nowrap text-[#2FE089]">{log.duration}</td>
-                  <td className="px-4 py-3 hidden md:table-cell whitespace-nowrap">{log.maxAlt}</td>
-                  <td className="px-4 py-3 hidden lg:table-cell whitespace-nowrap">{log.dist}</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-[#F59E0B]">
-                    {log.batteryDelta}
-                  </td>
-                  <td className="px-4 py-3 text-right whitespace-nowrap">
-                    <button
-                      type="button"
-                      onClick={() => handleExport(log.id)}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#172230] border border-[#23354A] hover:border-[#35E0FF] hover:text-[#35E0FF] transition text-[#B7F3FF] text-[11px]"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                      <span>ULog</span>
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          {/* Original Export All Logs (.zip) button */}
+          <button
+            type="button"
+            onClick={() => handleExportUlog("ALL_LATEST")}
+            className="inline-flex items-center justify-center gap-2 px-3.5 py-2 rounded-lg bg-[#1A2634] text-[#35E0FF] border border-[#35E0FF4D] text-xs font-semibold hover:bg-[#35E0FF] hover:text-[#06090E] transition shrink-0 font-mono cursor-pointer"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Export All Logs (.zip)</span>
+            <span className="sm:hidden">.ZIP</span>
+          </button>
         </div>
       </div>
+
+      {/* 7 Log Category Tabs Navigation */}
+      <LogCategoryTabs
+        activeCategory={activeCategory}
+        onSelectCategory={(cat) => {
+          setActiveCategory(cat)
+          // Maintain or adjust filters
+        }}
+        categoryCounts={categoryCounts}
+      />
+
+      {/* Mission KPI Summary Cards (visible for 'mission' and 'all' views) */}
+      {(activeCategory === "mission" || activeCategory === "all") && (
+        <MissionLogSummary summary={missionSummary} />
+      )}
+
+      {/* Filter and Search Bar */}
+      <MissionLogFilters
+        filters={filters}
+        onChange={setFilters}
+        onReset={handleResetFilters}
+        missions={missions}
+        drones={drones}
+        operators={operators}
+        eventTypes={eventTypes}
+        flightModes={flightModes}
+        statuses={statuses}
+        totalCount={categoryCounts[activeCategory] || 0}
+        filteredCount={currentDataset.length}
+      />
+
+      {/* Main Table Content based on active category */}
+      <div>
+        {activeCategory === "mission" && (
+          <MissionLogTable
+            logs={missionLogs}
+            onSelectLog={handleOpenMissionDrawer}
+            onViewFlight={handleViewFlightFromMission}
+          />
+        )}
+
+        {activeCategory === "flight" && (
+          <FlightLogsTable
+            flightLogs={flightLogs}
+            onExport={handleExportUlog}
+            onViewMission={handleViewMissionFromFlight}
+          />
+        )}
+
+        {activeCategory !== "mission" && activeCategory !== "flight" && (
+          <GenericLogsTable
+            category={activeCategory}
+            logs={currentDataset}
+            onInspectMission={handleOpenMissionDrawer}
+            onViewFlight={handleViewFlightFromMission}
+          />
+        )}
+      </div>
+
+      {/* Mission Detail Drawer */}
+      <MissionLogDetailDrawer
+        log={selectedMissionLog}
+        isOpen={isDrawerOpen}
+        onClose={() => setIsDrawerOpen(false)}
+        onViewFlight={handleViewFlightFromMission}
+      />
     </div>
   )
 }
