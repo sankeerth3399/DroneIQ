@@ -1,24 +1,32 @@
 import { useState, useEffect, useRef } from "react"
-import { AlertOctagon, RotateCcw, ArrowDownCircle, Ban, AlertTriangle, PowerOff } from "lucide-react"
+import { AlertOctagon, RotateCcw, ArrowDownCircle, Ban, PowerOff, PlaneTakeoff } from "lucide-react"
 import { useTelemetry } from "@/hooks/useTelemetry.js"
 import { useAuth } from "@/hooks/useAuth.js"
 import { Permissions } from "@/auth/permissions.js"
 import { apiClient } from "@/services/api/apiClient.js"
+import { ConnectionState } from "@/services/telemetry/telemetryTypes.js"
+import { logService } from "@/services/api/logService.js"
+import { useFlyConfirmation } from "@/hooks/useFlyConfirmation.js"
+import { useMission } from "@/hooks/useMission.js"
 
 /**
- * Emergency Override Deck for Super Admin and Fleet Manager
+ * Emergency Override Deck for Super Admin, Fleet Manager, and Flight Operator
  * Rendered in the top header bar as a compact flight safety HUD control.
- * Protects dangerous commands with mandatory confirmation dialogs.
+ * Protects dangerous commands with mandatory centralized confirmation dialogs.
  */
 export const EmergencyOverrideDeck = () => {
-  const { showToast } = useTelemetry()
-  const { hasPermission } = useAuth()
-  const [activeModal, setActiveModal] = useState(null) // null | "RTL" | "LAND" | "DISARM" | "ABORT"
+  const { showToast, selectedDroneId, telemetry, connectionState, isLive } = useTelemetry()
+  const { hasPermission, isAuthenticated, user } = useAuth()
+  const { requestActionConfirmation } = useFlyConfirmation()
+  const { currentProject } = useMission()
   const [isOpen, setIsOpen] = useState(false)
   const deckRef = useRef(null)
 
-  // Enforce RBAC permission check: strictly SUPER_ADMIN and FLEET_MANAGER
+  // Enforce canonical RBAC permissions:
+  // - canOverride: strictly SUPER_ADMIN and FLEET_MANAGER (priority emergency overrides)
+  // - canExecuteFlight: strictly SUPER_ADMIN and FLIGHT_OPERATOR (routine flight commands such as TAKEOFF)
   const canOverride = typeof hasPermission === "function" ? hasPermission(Permissions.OVERRIDE_FLIGHT_COMMANDS) : false
+  const canExecuteFlight = typeof hasPermission === "function" ? hasPermission(Permissions.EXECUTE_FLIGHT_COMMANDS) : false
 
   // Dismiss expanded panel on outside click or Escape
   useEffect(() => {
@@ -41,46 +49,170 @@ export const EmergencyOverrideDeck = () => {
     }
   }, [isOpen])
 
-  if (!canOverride) {
+  // Deny completely if user has neither permission (e.g. VIEWER)
+  if (!canOverride && !canExecuteFlight) {
     return null
   }
 
-  const handleConfirmAction = async () => {
-    const cmdMap = {
-      RTL: "OVERRIDE_RTL",
-      LAND: "EMERGENCY_LAND",
-      DISARM: "FORCE_DISARM",
-      ABORT: "ABORT_MISSION",
-    }
-    const backendCommand = cmdMap[activeModal] || activeModal
-
-    // Dispatch backend API command with Authorization: Bearer <token>
-    try {
-      await apiClient("/api/commands/override", {
-        method: "POST",
-        body: JSON.stringify({
-          command: backendCommand,
-          timestamp: new Date().toISOString(),
-        }),
-      })
-    } catch (err) {
-      console.warn("[EmergencyDeck] Override API dispatched (backend response):", err.message)
+  // Pre-flight state validation & confirmation request for TAKEOFF
+  const handleInitiateTakeoff = () => {
+    // 1. Authenticated user check
+    if (!isAuthenticated) {
+      showToast("Takeoff unavailable: user is not authenticated.", "warning")
+      return
     }
 
-    if (activeModal === "RTL") {
-      showToast("EMERGENCY OVERRIDE: Return-to-Launch (RTL) initiated.", "warning")
-      window.dispatchEvent(new CustomEvent("aeronexus:emergency-rtl"))
-    } else if (activeModal === "LAND") {
-      showToast("EMERGENCY OVERRIDE: Immediate Emergency Land executed.", "error")
-      window.dispatchEvent(new CustomEvent("aeronexus:emergency-land"))
-    } else if (activeModal === "DISARM") {
-      showToast("EMERGENCY OVERRIDE: Motors Force Disarmed.", "error")
-      window.dispatchEvent(new CustomEvent("aeronexus:emergency-disarm"))
-    } else if (activeModal === "ABORT") {
-      showToast("EMERGENCY OVERRIDE: Active Mission Aborted. Aircraft in Hold.", "error")
-      window.dispatchEvent(new CustomEvent("aeronexus:emergency-abort"))
+    // 2. Authorized role check
+    if (!canExecuteFlight) {
+      showToast("Takeoff unavailable: unauthorized role.", "error")
+      return
     }
-    setActiveModal(null)
+
+    // 3. Drone connection & telemetry validity check
+    const isDroneConnected = Boolean(
+      telemetry?.droneConnected ||
+      connectionState === ConnectionState.AUTHENTICATED ||
+      isLive
+    )
+    if (!isDroneConnected && telemetry?.status === "DISCONNECTED") {
+      showToast("Takeoff unavailable: drone is not ready (disconnected).", "warning")
+      return
+    }
+
+    if (!telemetry) {
+      showToast("Takeoff unavailable: valid telemetry not received.", "warning")
+      return
+    }
+
+    // 4. Pre-takeoff flight state: verify drone is currently on ground
+    const alt = typeof telemetry.altitude === "number" ? telemetry.altitude : 0
+    const vSpeed = typeof telemetry.verticalSpeed === "number" ? telemetry.verticalSpeed : (telemetry.climbRate || 0)
+    if (alt > 2.5 || vSpeed > 1.5) {
+      showToast("Takeoff unavailable: drone is already airborne.", "warning")
+      return
+    }
+
+    // 5. Flight mode validation: ensure not in abort/landing/RTL modes
+    const currentMode = String(telemetry.flightMode || "").toUpperCase()
+    if (currentMode === "RTL" || currentMode === "LAND" || currentMode === "BRAKE") {
+      showToast(`Takeoff unavailable: drone is in ${currentMode} mode.`, "warning")
+      return
+    }
+
+    setIsOpen(false)
+    const droneId = selectedDroneId || "DRONE-001"
+
+    requestActionConfirmation({
+      action: "TAKEOFF",
+      droneId,
+      targetAltitude: "10 m",
+      currentState: telemetry?.flightMode || "GUIDED",
+      validateState: () => {
+        const currentAlt = typeof telemetry?.altitude === "number" ? telemetry.altitude : 0
+        if (currentAlt > 2.5) {
+          return "Drone is already airborne."
+        }
+        return true
+      },
+      onConfirm: async () => {
+        try {
+          await apiClient("/api/commands/override", {
+            method: "POST",
+            body: JSON.stringify({
+              command: "TAKEOFF",
+              droneId,
+              timestamp: new Date().toISOString(),
+            }),
+          })
+
+          showToast(`Takeoff command sent to ${droneId}.`, "success")
+          window.dispatchEvent(
+            new CustomEvent("aeronexus:takeoff", {
+              detail: { droneId, timestamp: new Date().toISOString() },
+            })
+          )
+
+          if (typeof logService?.recordCommandEvent === "function") {
+            logService.recordCommandEvent({
+              droneId,
+              operator: user?.username || "Alex Vance",
+              event: "COMMAND_TAKEOFF",
+              details: `MAV_CMD_NAV_TAKEOFF initiated for ${droneId}.`,
+              status: "Executed",
+              severity: "INFO",
+              flightMode: telemetry?.flightMode || "GUIDED",
+            })
+          }
+        } catch (err) {
+          if (err?.isNetworkError || err?.status === 0) {
+            showToast("Unable to send takeoff command.", "error")
+          } else {
+            const backendMsg = err?.message || err?.data?.message || "Command rejected"
+            showToast(`Takeoff rejected: ${backendMsg}`, "error")
+          }
+        }
+      },
+    })
+  }
+
+  // Pre-flight validation & confirmation request for Priority Emergency Overrides
+  const handleInitiateOverride = (actionKey) => {
+    if (!canOverride) {
+      showToast("Emergency override unauthorized: Requires Fleet Manager or Super Admin role.", "warning")
+      return
+    }
+
+    setIsOpen(false)
+    const droneId = selectedDroneId || telemetry?.droneId || "DRONE-001"
+    const isAbort = actionKey === "ABORT_MISSION" || actionKey === "ABORT"
+
+    requestActionConfirmation({
+      action: actionKey,
+      droneId,
+      currentState: telemetry?.flightMode || "GUIDED",
+      missionId: isAbort ? (currentProject?.id || telemetry?.missionId || "MSN-0104") : undefined,
+      missionName: isAbort ? (currentProject?.name || telemetry?.missionName || "Survey Alfa") : undefined,
+      onConfirm: async () => {
+        const cmdMap = {
+          OVERRIDE_RTL: "OVERRIDE_RTL",
+          RTL: "OVERRIDE_RTL",
+          EMERGENCY_LAND: "EMERGENCY_LAND",
+          LAND: "EMERGENCY_LAND",
+          FORCE_DISARM: "FORCE_DISARM",
+          DISARM: "FORCE_DISARM",
+          ABORT_MISSION: "ABORT_MISSION",
+          ABORT: "ABORT_MISSION",
+        }
+        const backendCommand = cmdMap[actionKey] || actionKey
+
+        try {
+          await apiClient("/api/commands/override", {
+            method: "POST",
+            body: JSON.stringify({
+              command: backendCommand,
+              droneId,
+              timestamp: new Date().toISOString(),
+            }),
+          })
+        } catch (err) {
+          console.warn("[EmergencyDeck] Override API dispatched (backend response):", err.message)
+        }
+
+        if (actionKey === "OVERRIDE_RTL" || actionKey === "RTL") {
+          showToast("EMERGENCY OVERRIDE: Return-to-Launch (RTL) initiated.", "warning")
+          window.dispatchEvent(new CustomEvent("aeronexus:emergency-rtl"))
+        } else if (actionKey === "EMERGENCY_LAND" || actionKey === "LAND") {
+          showToast("EMERGENCY OVERRIDE: Immediate Emergency Land executed.", "error")
+          window.dispatchEvent(new CustomEvent("aeronexus:emergency-land"))
+        } else if (actionKey === "FORCE_DISARM" || actionKey === "DISARM") {
+          showToast("EMERGENCY OVERRIDE: Motors Force Disarmed.", "error")
+          window.dispatchEvent(new CustomEvent("aeronexus:emergency-disarm"))
+        } else if (actionKey === "ABORT_MISSION" || actionKey === "ABORT") {
+          showToast("EMERGENCY OVERRIDE: Active Mission Aborted. Aircraft in Hold.", "error")
+          window.dispatchEvent(new CustomEvent("aeronexus:emergency-abort"))
+        }
+      },
+    })
   }
 
   return (
@@ -99,7 +231,7 @@ export const EmergencyOverrideDeck = () => {
               ? "bg-[#381219] border-[#FF4141] text-[#FFA8A8] shadow-[0_0_12px_rgba(255,65,65,0.35)]"
               : "bg-[#220E12] border-[#6E1C24] hover:bg-[#321319] hover:border-[#FF4141] text-[#FF8585] shadow-[0_0_8px_rgba(255,65,65,0.15)]"
           }`}
-          title="Emergency Flight Override Deck (Super Admin / Fleet Manager)"
+          title="Emergency Flight Override Deck"
           aria-label="Toggle Emergency Flight Override Deck"
           aria-expanded={isOpen}
         >
@@ -129,13 +261,29 @@ export const EmergencyOverrideDeck = () => {
               </button>
             </div>
 
+            {/* 1. TAKEOFF (Gated by EXECUTE_FLIGHT_COMMANDS: Super Admin & Flight Operator) */}
+            {canExecuteFlight && (
+              <button
+                type="button"
+                onClick={handleInitiateTakeoff}
+                className="w-full flex items-center justify-between px-2.5 py-1.5 rounded bg-[#0A1A24] hover:bg-[#122A3A] border border-[#35E0FF66] hover:border-[#35E0FF] text-[#35E0FF] text-[10.5px] font-semibold transition cursor-pointer"
+                title="Initiate aircraft launch and takeoff sequence"
+              >
+                <div className="flex items-center gap-2">
+                  <PlaneTakeoff className="w-3.5 h-3.5 text-[#35E0FF]" />
+                  <span>TAKEOFF</span>
+                </div>
+                <span className="text-[8.5px] opacity-60">EXECUTE</span>
+              </button>
+            )}
+
+            {/* 2. OVERRIDE RTL */}
             <button
               type="button"
-              onClick={() => {
-                setActiveModal("RTL")
-                setIsOpen(false)
-              }}
-              className="w-full flex items-center justify-between px-2.5 py-1.5 rounded bg-[#1A1810] hover:bg-[#2E2814] border border-[#F59E0B66] hover:border-[#F59E0B] text-[#FBBF24] text-[10.5px] font-semibold transition cursor-pointer"
+              onClick={() => handleInitiateOverride("OVERRIDE_RTL")}
+              className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded bg-[#1A1810] hover:bg-[#2E2814] border border-[#F59E0B66] hover:border-[#F59E0B] text-[#FBBF24] text-[10.5px] font-semibold transition ${
+                canOverride ? "cursor-pointer" : "cursor-not-allowed opacity-60"
+              }`}
             >
               <div className="flex items-center gap-2">
                 <RotateCcw className="w-3.5 h-3.5" />
@@ -144,13 +292,13 @@ export const EmergencyOverrideDeck = () => {
               <span className="text-[8.5px] opacity-60">RETURN</span>
             </button>
 
+            {/* 3. EMERGENCY LAND */}
             <button
               type="button"
-              onClick={() => {
-                setActiveModal("LAND")
-                setIsOpen(false)
-              }}
-              className="w-full flex items-center justify-between px-2.5 py-1.5 rounded bg-[#2E1414] hover:bg-[#451818] border border-[#FF414166] hover:border-[#FF4141] text-[#FF8585] text-[10.5px] font-semibold transition cursor-pointer"
+              onClick={() => handleInitiateOverride("EMERGENCY_LAND")}
+              className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded bg-[#2E1414] hover:bg-[#451818] border border-[#FF414166] hover:border-[#FF4141] text-[#FF8585] text-[10.5px] font-semibold transition ${
+                canOverride ? "cursor-pointer" : "cursor-not-allowed opacity-60"
+              }`}
             >
               <div className="flex items-center gap-2">
                 <ArrowDownCircle className="w-3.5 h-3.5 text-[#FF4141]" />
@@ -159,13 +307,13 @@ export const EmergencyOverrideDeck = () => {
               <span className="text-[8.5px] opacity-60">IMMEDIATE</span>
             </button>
 
+            {/* 4. FORCE DISARM */}
             <button
               type="button"
-              onClick={() => {
-                setActiveModal("DISARM")
-                setIsOpen(false)
-              }}
-              className="w-full flex items-center justify-between px-2.5 py-1.5 rounded bg-[#2A1212] hover:bg-[#3D1A1A] border border-[#DC262666] hover:border-[#DC2626] text-[#F87171] text-[10.5px] font-semibold transition cursor-pointer"
+              onClick={() => handleInitiateOverride("FORCE_DISARM")}
+              className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded bg-[#2A1212] hover:bg-[#3D1A1A] border border-[#DC262666] hover:border-[#DC2626] text-[#F87171] text-[10.5px] font-semibold transition ${
+                canOverride ? "cursor-pointer" : "cursor-not-allowed opacity-60"
+              }`}
             >
               <div className="flex items-center gap-2">
                 <PowerOff className="w-3.5 h-3.5 text-[#EF4444]" />
@@ -174,13 +322,13 @@ export const EmergencyOverrideDeck = () => {
               <span className="text-[8.5px] opacity-60">KILL MOTORS</span>
             </button>
 
+            {/* 5. ABORT MISSION */}
             <button
               type="button"
-              onClick={() => {
-                setActiveModal("ABORT")
-                setIsOpen(false)
-              }}
-              className="w-full flex items-center justify-between px-2.5 py-1.5 rounded bg-[#1B1424] hover:bg-[#2D1E3D] border border-[#A855F766] hover:border-[#A855F7] text-[#C084FC] text-[10.5px] font-semibold transition cursor-pointer"
+              onClick={() => handleInitiateOverride("ABORT_MISSION")}
+              className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded bg-[#1B1424] hover:bg-[#2D1E3D] border border-[#A855F766] hover:border-[#A855F7] text-[#C084FC] text-[10.5px] font-semibold transition ${
+                canOverride ? "cursor-pointer" : "cursor-not-allowed opacity-60"
+              }`}
             >
               <div className="flex items-center gap-2">
                 <Ban className="w-3.5 h-3.5 text-[#C084FC]" />
@@ -191,54 +339,6 @@ export const EmergencyOverrideDeck = () => {
           </div>
         )}
       </div>
-
-      {/* CONFIRMATION MODAL (Mandatory Safety Check) */}
-      {activeModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 font-mono select-none animate-in fade-in">
-          <div className="w-full max-w-sm rounded-xl bg-[#080C14] border border-[#5E2222] p-5 shadow-[0_12px_40px_rgba(255,65,65,0.2)] space-y-4 text-white">
-            <div className="flex items-center gap-2.5 text-[#FF4141]">
-              <AlertTriangle className="w-5 h-5 shrink-0" />
-              <h3 className="text-sm font-bold uppercase tracking-wider">
-                {activeModal === "RTL"
-                  ? "Confirm Override RTL?"
-                  : activeModal === "LAND"
-                  ? "Confirm Emergency Land?"
-                  : activeModal === "DISARM"
-                  ? "Confirm Force Disarm?"
-                  : "Confirm Abort Mission?"}
-              </h3>
-            </div>
-
-            <p className="text-xs text-[#8E9EAA] leading-relaxed">
-              {activeModal === "RTL" &&
-                "This action will supersede routine pilot control and immediately route the drone to its designated home location."}
-              {activeModal === "LAND" &&
-                "CAUTION: Immediate descent will initiate at current coordinates. Ensure clear clearance underneath the aircraft."}
-              {activeModal === "DISARM" &&
-                "CRITICAL WARNING: Immediate motor cutoff will execute. The aircraft will drop from current altitude without control."}
-              {activeModal === "ABORT" &&
-                "This action terminates the autonomous waypoint sequence immediately and commands the aircraft to hover/hold position."}
-            </p>
-
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#1A2633]">
-              <button
-                type="button"
-                onClick={() => setActiveModal(null)}
-                className="px-3 py-1.5 rounded text-xs text-[#8E9EAA] hover:text-white transition cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmAction}
-                className="px-4 py-1.5 rounded bg-[#FF4141] hover:bg-[#E03030] text-[#0A0E16] text-xs font-bold transition cursor-pointer shadow-[0_0_12px_rgba(255,65,65,0.4)]"
-              >
-                Confirm Override
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   )
 }

@@ -317,3 +317,28 @@
 .scrollbar-none::-webkit-scrollbar {
   display: none;
 }
+
+/* AeroNexus Minimal Dark Custom Scrollbar */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: #1C2836 #080C14;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: #080C14;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: #1C2836;
+  border-radius: 4px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: #35E0FF66;
+}
+

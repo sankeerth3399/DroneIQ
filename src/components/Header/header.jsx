@@ -13,6 +13,7 @@ const Header = ({ onToggleMobile, mobileOpen }) => {
     const { role, hasPermission } = useAuth()
     const roleMeta = ROLE_METADATA[role] || ROLE_METADATA[Roles.VIEWER]
     const canOverrideFlight = typeof hasPermission === "function" ? hasPermission(Permissions.OVERRIDE_FLIGHT_COMMANDS) : false
+    const canExecuteFlight = typeof hasPermission === "function" ? hasPermission(Permissions.EXECUTE_FLIGHT_COMMANDS) : false
 
     // Determine link display text and color based on connection state
     const getLinkDisplay = () => {
@@ -125,8 +126,8 @@ const Header = ({ onToggleMobile, mobileOpen }) => {
 
             {/* RIGHT: Emergency Override Deck, Active Role Badge, Notifications & Profile Details */}
             <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
-                {/* EMERGENCY FLIGHT OVERRIDE DECK (Super Admin & Fleet Manager) */}
-                {canOverrideFlight && <EmergencyOverrideDeck />}
+                {/* EMERGENCY FLIGHT OVERRIDE DECK (Super Admin, Fleet Manager & Flight Operator) */}
+                {(canOverrideFlight || canExecuteFlight) && <EmergencyOverrideDeck />}
 
                 {/* COMPACT ACTIVE ROLE BADGE (AeroNexus Aerospace Design) */}
                 <div

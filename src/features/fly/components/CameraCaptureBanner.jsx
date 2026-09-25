@@ -10,9 +10,9 @@ import liveDroneImg from "@/assets/images/image4.svg"
  * [ 🔴 Record | 📷 Photo | ▣ Screen ]
  * 
  * Takes minimal vertical space while providing full capture capabilities:
- * - Record: live drone video recording with live timer and MP4 download
- * - Photo: still frame capture from drone camera with GCS telemetry watermark
- * - Screen: full operator application screenshot
+ * - Record: live drone video recording with live timer and MP4 download (immediate execution)
+ * - Photo: still frame capture from drone camera with GCS telemetry watermark (immediate execution)
+ * - Screen: full operator application screenshot (immediate execution)
  */
 const CameraCaptureBanner = ({
   telemetry = { altitude: 48.5, heading: 42 },
@@ -47,115 +47,102 @@ const CameraCaptureBanner = ({
     return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`
   }
 
-  // 1. RECORD: Toggle live drone video recording
-  const handleToggleRecord = (e) => {
-    e.stopPropagation()
-    if (!isRecording) {
-      setRecordSeconds(0)
-      setIsRecording(true)
-      onCaptureToast?.({
-        type: "video",
-        title: "Drone Feed Recording Started",
-        message: "Recording live drone stream in 4K 60FPS (H.265)",
-      })
-    } else {
-      setIsRecording(false)
-      const durationStr = formatTimer(recordSeconds)
+  // Actual Photo capture implementation (Immediate, no confirmation modal)
+  const executePhotoCapture = () => {
+    try {
+      onTriggerDroneFlash?.()
+
       const timestamp = new Date().toISOString().replace(/[-:T.]/g, "").slice(0, 14)
-      const filename = `DRONE_RECORDING_${timestamp}.mp4`
+      const filename = `DRONE_PHOTO_${timestamp}.jpg`
 
-      // Compile simulated stream video blob
-      const blob = new Blob(["AeroNexus Simulated Drone Stream Video Data"], { type: "video/mp4" })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement("a")
-      a.href = url
-      a.download = filename
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
+      const img = new Image()
+      img.crossOrigin = "anonymous"
+      img.src = liveDroneImg
+      img.onload = () => {
+        try {
+          const canvas = document.createElement("canvas")
+          canvas.width = 1920
+          canvas.height = 1080
+          const ctx = canvas.getContext("2d")
 
-      onCaptureToast?.({
-        type: "video",
-        title: "Drone Video Saved",
-        message: `${filename} (${durationStr} • ${(recordSeconds * 5.8).toFixed(1)} MB)`,
-      })
-    }
-  }
+          // Draw drone feed frame
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
 
-  // 2. PHOTO: Capture still frame from live drone camera with telemetry watermark
-  const handleDronePhoto = (e) => {
-    e.stopPropagation()
-    onTriggerDroneFlash?.()
+          // Telemetry watermark footer
+          ctx.fillStyle = "rgba(8, 12, 20, 0.75)"
+          ctx.fillRect(0, canvas.height - 48, canvas.width, 48)
 
-    const timestamp = new Date().toISOString().replace(/[-:T.]/g, "").slice(0, 14)
-    const filename = `DRONE_PHOTO_${timestamp}.jpg`
+          ctx.font = "bold 18px monospace"
+          ctx.fillStyle = "#35E0FF"
+          ctx.fillText(
+            `AERONEXUS GCS | DRONE CAM 1 | ALT: ${telemetry.altitude}m | HDG: ${telemetry.heading}° | ${new Date().toLocaleString()}`,
+            24,
+            canvas.height - 18
+          )
 
-    const img = new Image()
-    img.crossOrigin = "anonymous"
-    img.src = liveDroneImg
-    img.onload = () => {
-      try {
-        const canvas = document.createElement("canvas")
-        canvas.width = 1920
-        canvas.height = 1080
-        const ctx = canvas.getContext("2d")
+          const a = document.createElement("a")
+          a.href = canvas.toDataURL("image/jpeg", 0.95)
+          a.download = filename
+          document.body.appendChild(a)
+          a.click()
+          document.body.removeChild(a)
 
-        // Draw drone feed frame
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+          onCaptureToast?.({
+            type: "photo",
+            title: "Drone Photo Captured",
+            message: `${filename} (Still frame from live stream)`,
+          })
+        } catch {
+          try {
+            const a = document.createElement("a")
+            a.href = liveDroneImg
+            a.download = filename
+            document.body.appendChild(a)
+            a.click()
+            document.body.removeChild(a)
 
-        // Telemetry watermark footer
-        ctx.fillStyle = "rgba(8, 12, 20, 0.75)"
-        ctx.fillRect(0, canvas.height - 48, canvas.width, 48)
-
-        ctx.font = "bold 18px monospace"
-        ctx.fillStyle = "#35E0FF"
-        ctx.fillText(
-          `AERONEXUS GCS | DRONE CAM 1 | ALT: ${telemetry.altitude}m | HDG: ${telemetry.heading}° | ${new Date().toLocaleString()}`,
-          24,
-          canvas.height - 18
-        )
-
-        const a = document.createElement("a")
-        a.href = canvas.toDataURL("image/jpeg", 0.95)
-        a.download = filename
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
-      } catch {
-        const a = document.createElement("a")
-        a.href = liveDroneImg
-        a.download = filename
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
+            onCaptureToast?.({
+              type: "photo",
+              title: "Drone Photo Captured",
+              message: `${filename} (Still frame from live stream)`,
+            })
+          } catch (downloadErr) {
+            console.error("[CameraCapture] Photo export failed:", downloadErr)
+            onCaptureToast?.({
+              type: "error",
+              title: "Photo Capture Failed",
+              message: downloadErr?.message || "Failed to save photo snapshot",
+            })
+          }
+        }
       }
 
+      img.onerror = (err) => {
+        console.error("[CameraCapture] Drone camera stream frame unavailable:", err)
+        onCaptureToast?.({
+          type: "error",
+          title: "Photo Capture Failed",
+          message: "Drone camera stream frame unavailable",
+        })
+      }
+    } catch (err) {
+      console.error("[CameraCapture] Photo capture error:", err)
       onCaptureToast?.({
-        type: "photo",
-        title: "Drone Photo Captured",
-        message: `${filename} (Still frame from live stream)`,
-      })
-    }
-
-    img.onerror = () => {
-      onCaptureToast?.({
-        type: "photo",
-        title: "Drone Photo Captured",
-        message: `${filename} (Captured from drone stream)`,
+        type: "error",
+        title: "Photo Capture Failed",
+        message: err?.message || "Unable to capture photo",
       })
     }
   }
 
-  // 3. SCREENSHOT: Capture full operator application screen
-  const handleScreenshot = async (e) => {
-    e.stopPropagation()
-    onTriggerScreenFlash?.()
-
-    const timestamp = new Date().toISOString().replace(/[-:T.]/g, "").slice(0, 14)
-    const filename = `AERONEXUS_GCS_SCREEN_${timestamp}.png`
-
+  // Actual Screenshot capture implementation (Immediate, no confirmation modal)
+  const executeScreenshotCapture = async () => {
     try {
+      onTriggerScreenFlash?.()
+
+      const timestamp = new Date().toISOString().replace(/[-:T.]/g, "").slice(0, 14)
+      const filename = `AERONEXUS_GCS_SCREEN_${timestamp}.png`
+
       const targetElement = document.getElementById("root") || document.body
       const canvas = await html2canvas(targetElement, {
         useCORS: true,
@@ -176,13 +163,71 @@ const CameraCaptureBanner = ({
         title: "Screen Capture Saved",
         message: `${filename} (Full operator application UI)`,
       })
-    } catch {
+    } catch (err) {
+      console.error("[CameraCapture] Screenshot capture failed:", err)
       onCaptureToast?.({
-        type: "screenshot",
-        title: "Screen Capture Saved",
-        message: `${filename} (Full application screenshot)`,
+        type: "error",
+        title: "Screenshot Failed",
+        message: err?.message || "Failed to capture application screenshot",
       })
     }
+  }
+
+  // 1. RECORD / STOP RECORD: Immediate execution without confirmation
+  const handleToggleRecord = (e) => {
+    e.stopPropagation()
+    try {
+      if (!isRecording) {
+        setRecordSeconds(0)
+        setIsRecording(true)
+        onCaptureToast?.({
+          type: "video",
+          title: "Drone Feed Recording Started",
+          message: "Recording live drone stream in 4K 60FPS (H.265)",
+        })
+      } else {
+        setIsRecording(false)
+        const durationStr = formatTimer(recordSeconds)
+        const timestamp = new Date().toISOString().replace(/[-:T.]/g, "").slice(0, 14)
+        const filename = `DRONE_RECORDING_${timestamp}.mp4`
+
+        // Compile simulated stream video blob
+        const blob = new Blob(["AeroNexus Simulated Drone Stream Video Data"], { type: "video/mp4" })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement("a")
+        a.href = url
+        a.download = filename
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+
+        onCaptureToast?.({
+          type: "video",
+          title: "Drone Video Saved",
+          message: `${filename} (${durationStr} • ${(recordSeconds * 5.8).toFixed(1)} MB)`,
+        })
+      }
+    } catch (err) {
+      console.error("[CameraCapture] Recording error:", err)
+      onCaptureToast?.({
+        type: "error",
+        title: "Recording Error",
+        message: err?.message || "Failed to toggle video recording",
+      })
+    }
+  }
+
+  // 2. PHOTO: Capture still frame from live drone camera immediately without confirmation
+  const handleDronePhoto = (e) => {
+    e.stopPropagation()
+    executePhotoCapture()
+  }
+
+  // 3. SCREENSHOT: Capture full operator application screen immediately without confirmation
+  const handleScreenshot = (e) => {
+    e.stopPropagation()
+    executeScreenshotCapture()
   }
 
   return (

@@ -7,6 +7,10 @@ import {
   createDefaultTelemetry,
   DEFAULT_FLIGHT_MODE,
   DEFAULT_ARMED_STATE,
+  isValidGpsCoordinate,
+  TELEMETRY_STALE_THRESHOLD_MS,
+  FALLBACK_DRONE_LOCATION,
+  PositionSource,
 } from "@/services/telemetry/telemetryTypes.js"
 
 export const TelemetryProvider = ({ children }) => {
@@ -76,6 +80,14 @@ export const TelemetryProvider = ({ children }) => {
     const unsubTelemetry = telemetryClient.onTelemetry(handleTelemetryUpdate)
     const unsubState = telemetryClient.onStateChange((state) => {
       setConnectionState(state)
+      if (
+        state === ConnectionState.DISCONNECTED ||
+        state === ConnectionState.AUTH_FAILURE ||
+        state === ConnectionState.BACKEND_UNAVAILABLE
+      ) {
+        setLastTelemetryTime(null)
+        setFleetTelemetry({})
+      }
     })
 
     return () => {
@@ -114,7 +126,7 @@ export const TelemetryProvider = ({ children }) => {
     if (connectionState !== ConnectionState.AUTHENTICATED) return
 
     const interval = setInterval(() => {
-      if (lastTelemetryTime && Date.now() - lastTelemetryTime > 6000) {
+      if (lastTelemetryTime && Date.now() - lastTelemetryTime > TELEMETRY_STALE_THRESHOLD_MS) {
         setConnectionState((curr) =>
           curr === ConnectionState.AUTHENTICATED ? ConnectionState.STALE : curr
         )
@@ -362,32 +374,53 @@ export const TelemetryProvider = ({ children }) => {
     }
   }, [])
 
+  const isConnected = connectionState === ConnectionState.AUTHENTICATED
+  const isStale = connectionState === ConnectionState.STALE
+  const isLive = Boolean(
+    lastTelemetryTime && isConnected && !isStale
+  )
+
   // Extract selected drone's latest telemetry with safe fallback
   const rawTelemetry = useMemo(() => {
-    const activeData = fleetTelemetry[selectedDroneId]
-    if (activeData) return activeData
+    if (isConnected || isStale) {
+      const activeData = fleetTelemetry[selectedDroneId]
+      if (activeData) return activeData
+    }
     return createDefaultTelemetry(selectedDroneId)
-  }, [fleetTelemetry, selectedDroneId])
+  }, [fleetTelemetry, selectedDroneId, isConnected, isStale])
+
+  const droneGPSValid = useMemo(() => {
+    return isValidGpsCoordinate(rawTelemetry.latitude, rawTelemetry.longitude)
+  }, [rawTelemetry.latitude, rawTelemetry.longitude])
 
   // Centralized telemetry object with authoritative isArmed, flightMode, and gimbal state
-  const telemetry = useMemo(() => ({
-    ...rawTelemetry,
-    flightMode: flightMode || DEFAULT_FLIGHT_MODE,
-    armed: isArmed,
-    isArmed,
-    speed: isArmed ? (rawTelemetry.speed || 0) : 0,
-    groundSpeed: isArmed ? (rawTelemetry.groundSpeed || 0) : 0,
-    verticalSpeed: isArmed ? (rawTelemetry.verticalSpeed || 0) : 0,
-    climbRate: isArmed ? (rawTelemetry.climbRate || 0) : 0,
-    gimbal: gimbalState,
-  }), [rawTelemetry, flightMode, isArmed, gimbalState])
-
-  const isLive = Boolean(
-    lastTelemetryTime && connectionState === ConnectionState.AUTHENTICATED
-  )
+  const telemetry = useMemo(() => {
+    const hasLiveFix = isConnected && !isStale && droneGPSValid
+    const positionSource = hasLiveFix ? PositionSource.LIVE : PositionSource.HYDERABAD_FALLBACK
+    return {
+      ...rawTelemetry,
+      latitude: hasLiveFix ? rawTelemetry.latitude : FALLBACK_DRONE_LOCATION.latitude,
+      longitude: hasLiveFix ? rawTelemetry.longitude : FALLBACK_DRONE_LOCATION.longitude,
+      positionSource,
+      droneConnected: isConnected,
+      droneGPSValid: hasLiveFix,
+      isLive,
+      isStale,
+      status: !isConnected ? "DISCONNECTED" : isStale ? "STALE" : rawTelemetry.status || "OK",
+      flightMode: flightMode || DEFAULT_FLIGHT_MODE,
+      armed: isArmed,
+      isArmed,
+      speed: isArmed ? (rawTelemetry.speed || 0) : 0,
+      groundSpeed: isArmed ? (rawTelemetry.groundSpeed || 0) : 0,
+      verticalSpeed: isArmed ? (rawTelemetry.verticalSpeed || 0) : 0,
+      climbRate: isArmed ? (rawTelemetry.climbRate || 0) : 0,
+      gimbal: gimbalState,
+    }
+  }, [rawTelemetry, flightMode, isArmed, gimbalState, isConnected, isStale, droneGPSValid, isLive])
 
   const value = {
     telemetry,
+    positionSource: telemetry.positionSource,
     flightMode,
     setFlightMode,
     handleFlightModeChange: setFlightMode,
@@ -414,6 +447,9 @@ export const TelemetryProvider = ({ children }) => {
     selectDrone,
     subscribeAll,
     connectionState,
+    droneConnected: isConnected,
+    droneGPSValid: Boolean(isConnected && !isStale && droneGPSValid),
+    isStale,
     isLive,
     lastTelemetryTime,
   }

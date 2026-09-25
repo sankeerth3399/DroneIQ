@@ -18,6 +18,7 @@ export const AnalyticsMap = ({
           geofence={geofence}
           telemetry={telemetry}
           showMissionRoute={true}
+          pageType="analytics"
         />
       </div>
     </div>

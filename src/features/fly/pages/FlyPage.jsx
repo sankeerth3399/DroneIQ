@@ -6,13 +6,13 @@ import FlightInstrumentsWidget from "@/features/mession/components/widgets/Fligh
 import CameraWidget from "@/features/fly/components/CameraWidget.jsx";
 import FlightModeDropdown from "@/features/fly/components/FlightModeDropdown.jsx";
 import CaptureToast from "@/features/mession/components/toast/CaptureToast.jsx";
-import { Plane, LayoutGrid, ShieldAlert } from "lucide-react";
+import { LayoutGrid, ShieldAlert } from "lucide-react";
 
-import { useTelemetry } from "@/hooks/useTelemetry.js";
 import { useAuth } from "@/hooks/useAuth.js";
 import { Permissions } from "@/auth/permissions.js";
 import { Roles } from "@/auth/roleConfig.js";
 import { DEFAULT_SHOW_JOYSTICKS } from "@/services/telemetry/telemetryTypes.js";
+import { useFlyConfirmation } from "@/hooks/useFlyConfirmation.js";
 
 const pipClass =
   "absolute right-2 top-2 sm:right-4 sm:top-4 z-20 flex cursor-pointer flex-col overflow-hidden rounded-xl border border-[#223240] bg-[#171F27B2] shadow-2xl backdrop-blur-md transition-all duration-300 h-[124px] w-[155px] sm:h-[156px] sm:w-[205px] md:h-[188px] md:w-[245px]";
@@ -81,15 +81,34 @@ const FlyPage = () => {
   const {
     telemetry,
     updateStickInputs,
-    simMode,
-    setSimMode,
-    isLive,
-    isArmed,
     gimbalState,
     setGimbalRoll,
     centerGimbal,
+    selectedDroneId,
   } = useDroneTelemetry();
-  const { showToast } = useTelemetry();
+
+  // Centralized action confirmation request hook
+  const { requestActionConfirmation } = useFlyConfirmation();
+
+  const handleRequestCenterGimbal = useCallback(() => {
+    requestActionConfirmation({
+      action: "GIMBAL_CENTER",
+      droneId: selectedDroneId || telemetry?.droneId || "DRONE-001",
+      onConfirm: async () => {
+        centerGimbal(telemetry.heading || 0);
+      },
+    });
+  }, [requestActionConfirmation, selectedDroneId, telemetry, centerGimbal]);
+
+  const handleRequestLevelRoll = useCallback(() => {
+    requestActionConfirmation({
+      action: "GIMBAL_LEVEL_ROLL",
+      droneId: selectedDroneId || telemetry?.droneId || "DRONE-001",
+      onConfirm: async () => {
+        setGimbalRoll(0);
+      },
+    });
+  }, [requestActionConfirmation, selectedDroneId, telemetry, setGimbalRoll]);
 
   // Desktop Keyboard Flight Controls (WASD: Throttle/Yaw, Arrow Keys: Pitch/Roll, Space: Hover)
   // Strictly gated by EXECUTE_FLIGHT_COMMANDS permission
@@ -216,7 +235,7 @@ const FlyPage = () => {
       {/* MAP LAYER (Full screen or PiP) */}
       <div className={mapIsLarge ? fullClass : pipClass}>
         <div className={`relative ${mapIsLarge ? "h-full w-full" : "min-h-0 flex-1"}`}>
-          <MapLoad mapStyle={mapStyle} telemetry={telemetry} />
+          <MapLoad mapStyle={mapStyle} telemetry={telemetry} pageType="fly" />
           {!mapIsLarge && (
             <button
               type="button"
@@ -247,13 +266,14 @@ const FlyPage = () => {
         onChangeCam={setCamSelected}
         telemetry={telemetry}
         gimbalState={gimbalState}
-        onSetRoll={setGimbalRoll}
+        onSetRoll={handleRequestLevelRoll}
         onNudgeRoll={(delta) => setGimbalRoll((gimbalState?.roll || 0) + delta)}
-        onCenterGimbal={() => centerGimbal(telemetry.heading || 0)}
+        onCenterGimbal={handleRequestCenterGimbal}
         onCaptureToast={setToast}
         onTriggerDroneFlash={triggerDroneFlash}
         onTriggerScreenFlash={triggerScreenFlash}
         isDroneFlashing={isDroneFlashing}
+        droneId={selectedDroneId || telemetry?.droneId || "DRONE-001"}
       />
 
       {/* FLOATING HUD FLIGHT INSTRUMENTS */}
@@ -283,17 +303,31 @@ const FlyPage = () => {
 
       {/* TOP-CENTER MISSION TELEMETRY HUD STRIP */}
       <div className="absolute top-1.5 sm:top-3 left-1/2 -translate-x-1/2 z-25 pointer-events-auto flex flex-wrap items-center justify-center gap-1.5 sm:gap-2.5 px-2.5 sm:px-3.5 py-1 rounded-md bg-[#080C14CC] border border-[#1A2633] backdrop-blur-md shadow-lg text-[8.5px] sm:text-[10px] font-mono max-w-[calc(100vw-30px)] sm:max-w-none overflow-visible">
-        {/* Live Stream vs Sim Status */}
+        {/* Live Stream vs Stale vs Disconnected / Hyderabad Fallback Status */}
         <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
           <div
             className={`w-1.5 h-1.5 rounded-full ${
-              isLive
+              telemetry.isLive
                 ? "bg-[#2FE089] shadow-[0_0_6px_#2FE089] animate-pulse"
-                : "bg-[#35E0FF] shadow-[0_0_6px_#35E0FF]"
+                : telemetry.isStale
+                ? "bg-[#F59E0B] shadow-[0_0_6px_#F59E0B] animate-pulse"
+                : "bg-[#38BDF8]"
             }`}
           />
-          <span className={`font-semibold hidden xs:inline ${isLive ? "text-[#2FE089]" : "text-[#B7F3FF]"}`}>
-            {isLive ? "LIVE" : "SIM"}
+          <span
+            className={`font-semibold hidden xs:inline ${
+              telemetry.isLive
+                ? "text-[#2FE089]"
+                : telemetry.isStale
+                ? "text-[#F59E0B]"
+                : "text-[#38BDF8]"
+            }`}
+          >
+            {telemetry.isLive
+              ? "LIVE"
+              : telemetry.isStale
+              ? "STALE"
+              : "FALLBACK (HYD)"}
           </span>
         </div>
 
@@ -319,38 +353,12 @@ const FlyPage = () => {
         {/* Live GPS Coordinates (LAT & LNG) */}
         <div className="flex items-center gap-1.5 sm:gap-2 text-[#8E9EAA] shrink-0">
           <span>
-            LAT: <strong className="text-[#35E0FF] font-mono">{typeof telemetry.latitude === "number" ? telemetry.latitude.toFixed(6) : (telemetry.lat !== undefined ? Number(telemetry.lat).toFixed(6) : "17.385590")}</strong>
+            LAT: <strong className="text-[#35E0FF] font-mono">{typeof telemetry.latitude === "number" ? telemetry.latitude.toFixed(6) : "—"}</strong>
           </span>
           <span>
-            LNG: <strong className="text-[#35E0FF] font-mono">{typeof telemetry.longitude === "number" ? telemetry.longitude.toFixed(6) : (telemetry.lng !== undefined ? Number(telemetry.lng).toFixed(6) : "78.485519")}</strong>
+            LNG: <strong className="text-[#35E0FF] font-mono">{typeof telemetry.longitude === "number" ? telemetry.longitude.toFixed(6) : "—"}</strong>
           </span>
         </div>
-
-        {/* Interactive Simulation Mode Switcher (Authorized flight execution roles only) */}
-        {!isLive && canExecuteFlight && (
-          <>
-            <div className="w-[1px] h-2.5 bg-[#223240] hidden md:block shrink-0" />
-            <button
-              type="button"
-              onClick={() => {
-                if (!isArmed) {
-                  showToast("Drone is UNARMED — Arm the drone before flying.", "warning");
-                  return;
-                }
-                setSimMode((prev) => (prev === "interactive" ? "patrol" : "interactive"));
-              }}
-              className={`hidden md:flex items-center gap-1 px-1.5 py-0.5 rounded text-[8.5px] sm:text-[9.5px] transition ${
-                simMode === "interactive"
-                  ? "bg-[#35E0FF1A] text-[#35E0FF] border border-[#35E0FF4D]"
-                  : "bg-[#2FE0891A] text-[#2FE089] border border-[#2FE0894D]"
-              }`}
-              title="Click to toggle between Manual Joysticks and Autonomous Orbit Demo"
-            >
-              <Plane className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
-              <span>{simMode === "interactive" ? "Manual Sticks" : "Auto Patrol"}</span>
-            </button>
-          </>
-        )}
 
         <div className="w-[1px] h-2.5 bg-[#223240] hidden sm:block shrink-0" />
 

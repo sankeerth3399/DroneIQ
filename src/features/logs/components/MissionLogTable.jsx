@@ -21,11 +21,12 @@ export const MissionLogTable = ({
   onViewFlight,
 }) => {
   const [currentPage, setCurrentPage] = useState(1)
-  const pageSize = 15
+  const [pageSize, setPageSize] = useState(25)
   const [expandedRowId, setExpandedRowId] = useState(null)
 
-  const totalPages = Math.ceil(logs.length / pageSize) || 1
-  const paginatedLogs = logs.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+  const actualPageSize = pageSize === "ALL" ? Math.max(1, logs.length) : Number(pageSize) || 25
+  const totalPages = Math.ceil(logs.length / actualPageSize) || 1
+  const paginatedLogs = logs.slice((currentPage - 1) * actualPageSize, currentPage * actualPageSize)
 
   const toggleExpand = (id, e) => {
     e.stopPropagation()
@@ -395,11 +396,32 @@ export const MissionLogTable = ({
       </div>
 
       {/* Pagination Bar */}
-      <div className="px-4 py-3 bg-[#0B1017] border-t border-[#1A2633] flex items-center justify-between text-xs">
-        <span className="text-[#8E9EAA] text-[11px]">
-          Page <span className="text-white font-bold">{currentPage}</span> of{" "}
-          <span className="text-white font-bold">{totalPages}</span> ({logs.length} Total Logs)
-        </span>
+      <div className="px-4 py-3 bg-[#0B1017] border-t border-[#1A2633] flex flex-wrap items-center justify-between gap-2.5 text-xs">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-[#8E9EAA] text-[11px]">
+            Page <span className="text-white font-bold">{currentPage}</span> of{" "}
+            <span className="text-white font-bold">{totalPages}</span> ({logs.length} Total Logs)
+          </span>
+
+          <div className="flex items-center gap-1.5 text-[11px] text-[#8E9EAA]">
+            <span>Rows:</span>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                const val = e.target.value === "ALL" ? "ALL" : Number(e.target.value)
+                setPageSize(val)
+                setCurrentPage(1)
+              }}
+              className="bg-[#16212E] text-white border border-[#23354A] rounded px-1.5 py-0.5 text-xs focus:outline-none focus:border-[#35E0FF] cursor-pointer"
+            >
+              <option value={15}>15</option>
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+              <option value="ALL">All</option>
+            </select>
+          </div>
+        </div>
 
         <div className="flex items-center gap-1.5">
           <button

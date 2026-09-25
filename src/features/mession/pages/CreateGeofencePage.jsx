@@ -266,6 +266,7 @@ const CreateGeofencePage = () => {
           onGeofenceVertexDragEnd={handleVertexDragEnd}
           onMapClick={handleMapClick}
           showMissionRoute={false}
+          pageType="geofence"
         />
       </div>
 

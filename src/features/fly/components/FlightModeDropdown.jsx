@@ -5,13 +5,16 @@ import { useAuth } from "@/hooks/useAuth.js"
 import { Permissions } from "@/auth/permissions.js"
 import { FLIGHT_MODES, getFlightModeLabel } from "../constants/flightModes.js"
 import { DEFAULT_FLIGHT_MODE } from "@/services/telemetry/telemetryTypes.js"
+import { useFlyConfirmation } from "@/hooks/useFlyConfirmation.js"
 
 /**
  * Functional Flight Mode Dropdown for AeroNexus Top Telemetry Bar
+ * Requires explicit user confirmation before sending any flight mode change command.
  */
 export const FlightModeDropdown = () => {
-  const { flightMode, setFlightMode, handleFlightModeChange, showToast } = useTelemetry()
+  const { flightMode, setFlightMode, handleFlightModeChange, showToast, selectedDroneId, telemetry } = useTelemetry()
   const { hasPermission } = useAuth()
+  const { requestActionConfirmation } = useFlyConfirmation()
   const [isOpen, setIsOpen] = useState(false)
   const dropdownRef = useRef(null)
 
@@ -26,6 +29,7 @@ export const FlightModeDropdown = () => {
   }, [flightMode])
 
   const activeModeLabel = getFlightModeLabel(activeModeId)
+  const activeDroneId = selectedDroneId || telemetry?.droneId || "DRONE-001"
 
   // Close dropdown on outside click or Escape key
   useEffect(() => {
@@ -52,20 +56,44 @@ export const FlightModeDropdown = () => {
   }, [isOpen])
 
   const handleSelectMode = (mode) => {
+    setIsOpen(false)
+
     if (!canChangeMode) {
       if (typeof showToast === "function") {
         showToast("Flight mode change inhibited: Viewer role is read-only.", "warning")
       }
-      setIsOpen(false)
       return
     }
 
-    if (typeof handleFlightModeChange === "function") {
-      handleFlightModeChange(mode.id, "USER")
-    } else if (typeof setFlightMode === "function") {
-      setFlightMode(mode.id)
+    // If selecting current active mode, no-op
+    if (mode.id === activeModeId) {
+      return
     }
-    setIsOpen(false)
+
+    requestActionConfirmation({
+      action: "FLIGHT_MODE_CHANGE",
+      title: "Confirm Flight Mode Change",
+      message: `Change flight mode from ${activeModeLabel} to ${mode.label}?`,
+      warning: `Ensure aircraft is trimmed and ready for ${mode.label} mode dynamics.`,
+      confirmLabel: "Confirm Mode Change",
+      severity: mode.id === "BRAKE" || mode.id === "LAND" ? "danger" : "warning",
+      droneId: activeDroneId,
+      currentState: activeModeLabel,
+      validateState: () => {
+        const latestMode = String(flightMode || DEFAULT_FLIGHT_MODE).toUpperCase().replace(/\s+/g, "_")
+        if (latestMode === mode.id) {
+          return `Drone is already in ${mode.label} mode.`
+        }
+        return true
+      },
+      onConfirm: async () => {
+        if (typeof handleFlightModeChange === "function") {
+          handleFlightModeChange(mode.id, "USER")
+        } else if (typeof setFlightMode === "function") {
+          setFlightMode(mode.id)
+        }
+      },
+    })
   }
 
   // Visual status color for the indicator dot based on mode category

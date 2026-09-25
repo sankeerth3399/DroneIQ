@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
+import { DEFAULT_MAP_CENTER } from "@/services/telemetry/telemetryTypes.js";
 
-const MapSearch = ({ onPlaceSelect }) => {
+const MapSearch = ({ onPlaceSelect, location = DEFAULT_MAP_CENTER }) => {
   const searchRef = useRef(null);
 
   useEffect(() => {
@@ -15,7 +16,7 @@ const MapSearch = ({ onPlaceSelect }) => {
     }
 
     const placeOptions = {
-      location: [17.385, 78.4867],
+      location: location,
 
       // Search only cities
       // pod: "City",
@@ -55,7 +56,7 @@ const MapSearch = ({ onPlaceSelect }) => {
     return () => {
       searchRef.current = null;
     };
-  }, [onPlaceSelect]);
+  }, [location, onPlaceSelect]);
 
   return (
     <div

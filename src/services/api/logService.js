@@ -2,6 +2,7 @@ import { projectService } from "../projectService.js"
 import { SEEDED_FLIGHT_HISTORY, SEEDED_INCIDENTS } from "./analyticsService.js"
 
 export const STORAGE_KEY_MISSION_LOGS = "aeronexus_mission_logs"
+export const STORAGE_KEY_COMMAND_LOGS = "aeronexus_command_logs"
 
 /**
  * Helper to parse and format dates
@@ -485,12 +486,12 @@ export const logService = {
         event: "GNSS_FIX_ACQUIRED",
         category: "TELEMETRY",
         severity: "SUCCESS",
-        details: "3D RTK Differential fix acquired (18 satellites). HDOP 0.6.",
+        details: "3D RTK Differential fix acquired (18 satellites). HDOP 0.6. Lat: 17.3850, Lng: 78.4867.",
         status: "Healthy",
       },
       {
         id: "TEL-20260918-002",
-        timestamp: "2026-09-18T10:25:00.000Z",
+        timestamp: "2026-09-18T10:28:40.000Z",
         droneId: "DRONE-001",
         missionId: "AERO-MSN-0001",
         event: "STREAM_RATE_SAMPLE",
@@ -500,7 +501,40 @@ export const logService = {
         status: "Healthy",
       },
       {
-        id: "TEL-20260917-003",
+        id: "TEL-20260918-003",
+        timestamp: "2026-09-18T10:25:12.000Z",
+        droneId: "DRONE-001",
+        missionId: "AERO-MSN-0001",
+        event: "IMU_VIBRATION_SAMPLE",
+        category: "TELEMETRY",
+        severity: "INFO",
+        details: "VibeX: 1.2 m/s², VibeY: 1.4 m/s², VibeZ: 3.1 m/s². Clipping count: 0. Dampening optimal.",
+        status: "Healthy",
+      },
+      {
+        id: "TEL-20260918-004",
+        timestamp: "2026-09-18T10:22:05.000Z",
+        droneId: "DRONE-001",
+        missionId: "AERO-MSN-0001",
+        event: "COMPASS_VARIANCE_CHECK",
+        category: "TELEMETRY",
+        severity: "INFO",
+        details: "Compass variance 0.04 within threshold (<0.3). EKF heading alignment locked.",
+        status: "Healthy",
+      },
+      {
+        id: "TEL-20260918-005",
+        timestamp: "2026-09-18T10:18:30.000Z",
+        droneId: "DRONE-001",
+        missionId: "AERO-MSN-0001",
+        event: "BARO_PRESSURE_CAL",
+        category: "TELEMETRY",
+        severity: "INFO",
+        details: "Barometer MS5611 ground reference calibrated. Ambient pressure 1013.25 hPa.",
+        status: "Healthy",
+      },
+      {
+        id: "TEL-20260917-006",
         timestamp: "2026-09-17T14:40:00.000Z",
         droneId: "DRONE-001",
         missionId: "AERO-MSN-0001",
@@ -511,14 +545,102 @@ export const logService = {
         status: "Warning",
       },
       {
-        id: "TEL-20260916-004",
+        id: "TEL-20260917-007",
+        timestamp: "2026-09-17T14:32:10.000Z",
+        droneId: "DRONE-001",
+        missionId: "AERO-MSN-0001",
+        event: "OPTICAL_FLOW_LOCKED",
+        category: "TELEMETRY",
+        severity: "SUCCESS",
+        details: "Downward optical flow sensor quality 92%. Ground speed measurement validated at 12 m/s.",
+        status: "Healthy",
+      },
+      {
+        id: "TEL-20260917-008",
+        timestamp: "2026-09-17T14:24:45.000Z",
+        droneId: "DRONE-001",
+        missionId: "AERO-MSN-0001",
+        event: "LIDAR_ALTITUDE_READ",
+        category: "TELEMETRY",
+        severity: "INFO",
+        details: "TF-Luna Lidar rangefinder distance: 48.2m AGL. Terrain clearance confirmed.",
+        status: "Healthy",
+      },
+      {
+        id: "TEL-20260916-009",
         timestamp: "2026-09-16T09:15:00.000Z",
         droneId: "DRONE-002",
         missionId: "AERO-MSN-0002",
         event: "BATTERY_CELL_CHECK",
         category: "TELEMETRY",
         severity: "INFO",
-        details: "6S LiPo cell delta 0.012V. Internal resistance 1.8 mOhm nominal.",
+        details: "6S LiPo cell delta 0.012V. Internal resistance 1.8 mOhm nominal. Remaining capacity 88%.",
+        status: "Healthy",
+      },
+      {
+        id: "TEL-20260916-010",
+        timestamp: "2026-09-16T09:08:22.000Z",
+        droneId: "DRONE-002",
+        missionId: "AERO-MSN-0002",
+        event: "ESC_RPM_TELEMETRY",
+        category: "TELEMETRY",
+        severity: "INFO",
+        details: "DShot600 ESC telemetry: M1: 5820 RPM, M2: 5840 RPM, M3: 5810 RPM, M4: 5830 RPM.",
+        status: "Healthy",
+      },
+      {
+        id: "TEL-20260915-011",
+        timestamp: "2026-09-15T11:32:00.000Z",
+        droneId: "DRONE-003",
+        missionId: "AERO-MSN-0001",
+        event: "RADIO_RSSI_SNR",
+        category: "TELEMETRY",
+        severity: "INFO",
+        details: "Crossfire telemetry uplink RSSI -68 dBm, SNR 14 dB. 150Hz packet rate steady.",
+        status: "Healthy",
+      },
+      {
+        id: "TEL-20260915-012",
+        timestamp: "2026-09-15T11:20:15.000Z",
+        droneId: "DRONE-003",
+        missionId: "AERO-MSN-0001",
+        event: "WIND_ESTIMATION",
+        category: "TELEMETRY",
+        severity: "INFO",
+        details: "Estimated wind vector: 3.4 m/s from 220° SW. Aircraft drift compensated.",
+        status: "Healthy",
+      },
+      {
+        id: "TEL-20260914-013",
+        timestamp: "2026-09-14T16:45:00.000Z",
+        droneId: "DRONE-001",
+        missionId: "AERO-MSN-0001",
+        event: "GIMBAL_ORIENTATION",
+        category: "TELEMETRY",
+        severity: "INFO",
+        details: "3-axis gimbal pitch -45.0°, roll 0.0°, yaw 82.4° following flight path target.",
+        status: "Healthy",
+      },
+      {
+        id: "TEL-20260914-014",
+        timestamp: "2026-09-14T16:30:10.000Z",
+        droneId: "DRONE-001",
+        missionId: "AERO-MSN-0001",
+        event: "COMPANION_CPU_LOAD",
+        category: "TELEMETRY",
+        severity: "INFO",
+        details: "Jetson Orin companion computer CPU 38%, GPU 62%, Temp 48°C. AI perception active.",
+        status: "Healthy",
+      },
+      {
+        id: "TEL-20260913-015",
+        timestamp: "2026-09-13T10:15:00.000Z",
+        droneId: "DRONE-002",
+        missionId: "AERO-MSN-0002",
+        event: "LTE_NETWORK_PING",
+        category: "TELEMETRY",
+        severity: "INFO",
+        details: "Cellular 5G fallback connection ping 28ms to GCS gateway. Throughput 42 Mbps.",
         status: "Healthy",
       },
     ]
@@ -529,7 +651,20 @@ export const logService = {
    * Fetch Command Logs
    */
   getCommandLogs(filters = {}) {
+    let userLogs = []
+    try {
+      if (typeof window !== "undefined") {
+        const stored = localStorage.getItem(STORAGE_KEY_COMMAND_LOGS)
+        if (stored) {
+          userLogs = JSON.parse(stored)
+        }
+      }
+    } catch {
+      userLogs = []
+    }
+
     const cmdLogs = [
+      ...userLogs,
       {
         id: "CMD-20260918-101",
         timestamp: "2026-09-18T10:14:02.000Z",
@@ -570,7 +705,33 @@ export const logService = {
         status: "Executed",
       },
       {
-        id: "CMD-20260917-104",
+        id: "CMD-20260918-104",
+        timestamp: "2026-09-18T10:18:45.000Z",
+        droneId: "DRONE-001",
+        missionId: "AERO-MSN-0001",
+        operator: "Alex Vance",
+        event: "COMMAND_GIMBAL_PITCH",
+        category: "COMMAND",
+        severity: "INFO",
+        flightMode: "AUTO",
+        details: "MAV_CMD_DO_MOUNT_CONTROL (Pitch=-45.0°, Roll=0.0°, Yaw=0.0°). Survey angle set.",
+        status: "Executed",
+      },
+      {
+        id: "CMD-20260918-105",
+        timestamp: "2026-09-18T10:20:10.000Z",
+        droneId: "DRONE-001",
+        missionId: "AERO-MSN-0001",
+        operator: "Alex Vance",
+        event: "COMMAND_CAMERA_TRIGGER",
+        category: "COMMAND",
+        severity: "SUCCESS",
+        flightMode: "AUTO",
+        details: "MAV_CMD_DO_DIGICAM_CONTROL (Shutter=1). Survey photo captured and geo-tagged.",
+        status: "Executed",
+      },
+      {
+        id: "CMD-20260917-106",
         timestamp: "2026-09-17T14:44:00.000Z",
         droneId: "DRONE-001",
         missionId: "AERO-MSN-0001",
@@ -580,6 +741,84 @@ export const logService = {
         severity: "WARNING",
         flightMode: "RTL",
         details: "MAV_CMD_NAV_RETURN_TO_LAUNCH executed following low-battery warning.",
+        status: "Executed",
+      },
+      {
+        id: "CMD-20260917-107",
+        timestamp: "2026-09-17T14:20:00.000Z",
+        droneId: "DRONE-001",
+        missionId: "AERO-MSN-0001",
+        operator: "Sarah Chen",
+        event: "COMMAND_SET_SPEED",
+        category: "COMMAND",
+        severity: "INFO",
+        flightMode: "AUTO",
+        details: "MAV_CMD_DO_CHANGE_SPEED (Speed=12.0 m/s, Throttle=-1). Cruise speed updated.",
+        status: "Executed",
+      },
+      {
+        id: "CMD-20260916-108",
+        timestamp: "2026-09-16T09:22:15.000Z",
+        droneId: "DRONE-002",
+        missionId: "AERO-MSN-0002",
+        operator: "Alex Vance",
+        event: "COMMAND_LOITER_HOLD",
+        category: "COMMAND",
+        severity: "INFO",
+        flightMode: "LOITER",
+        details: "MAV_CMD_NAV_LOITER_UNLIM commanded. Aircraft hovering at current coordinates.",
+        status: "Executed",
+      },
+      {
+        id: "CMD-20260916-109",
+        timestamp: "2026-09-16T09:28:40.000Z",
+        droneId: "DRONE-002",
+        missionId: "AERO-MSN-0002",
+        operator: "Alex Vance",
+        event: "COMMAND_RESUME_MISSION",
+        category: "COMMAND",
+        severity: "INFO",
+        flightMode: "AUTO",
+        details: "MAV_CMD_MISSION_START from waypoint 3. Autonomous navigation resumed.",
+        status: "Executed",
+      },
+      {
+        id: "CMD-20260915-110",
+        timestamp: "2026-09-15T11:12:00.000Z",
+        droneId: "DRONE-003",
+        missionId: "AERO-MSN-0001",
+        operator: "Sarah Chen",
+        event: "COMMAND_SET_ALTITUDE",
+        category: "COMMAND",
+        severity: "INFO",
+        flightMode: "GUIDED",
+        details: "MAV_CMD_CONDITION_CHANGE_ALT (Alt=50m, ClimbRate=2.5m/s). Altitude adjusted.",
+        status: "Executed",
+      },
+      {
+        id: "CMD-20260915-111",
+        timestamp: "2026-09-15T11:45:10.000Z",
+        droneId: "DRONE-003",
+        missionId: "AERO-MSN-0001",
+        operator: "Sarah Chen",
+        event: "COMMAND_LAND",
+        category: "COMMAND",
+        severity: "INFO",
+        flightMode: "LAND",
+        details: "MAV_CMD_NAV_LAND executed at designated landing pad coordinates.",
+        status: "Executed",
+      },
+      {
+        id: "CMD-20260914-112",
+        timestamp: "2026-09-14T16:50:00.000Z",
+        droneId: "DRONE-001",
+        missionId: "AERO-MSN-0001",
+        operator: "Alex Vance",
+        event: "COMMAND_DISARM_MOTORS",
+        category: "COMMAND",
+        severity: "SUCCESS",
+        flightMode: "MANUAL",
+        details: "MAV_CMD_COMPONENT_ARM_DISARM (Param1=0). Post-landing motor safety lock engaged.",
         status: "Executed",
       },
     ]
@@ -629,6 +868,66 @@ export const logService = {
         severity: "INFO",
         operator: "System Daemon",
         details: "Synchronized local survey projects storage with active mission schemas.",
+        status: "Success",
+      },
+      {
+        id: "SYS-20260920-005",
+        timestamp: "2026-09-20T14:10:00.000Z",
+        event: "WEBRTC_WHEP_READY",
+        category: "SYSTEM",
+        severity: "SUCCESS",
+        operator: "Media Subsystem",
+        details: "WHEP endpoint negotiated at http://127.0.0.1:8889/live/drone/whep. 1080p 30fps stream active.",
+        status: "Healthy",
+      },
+      {
+        id: "SYS-20260920-006",
+        timestamp: "2026-09-20T11:05:00.000Z",
+        event: "MAVLINK_ROUTER_BIND",
+        category: "SYSTEM",
+        severity: "INFO",
+        operator: "Network Daemon",
+        details: "MAVLink UDP bridge bound to 0.0.0.0:14550. Client listener threads spawned.",
+        status: "Success",
+      },
+      {
+        id: "SYS-20260919-007",
+        timestamp: "2026-09-19T08:30:00.000Z",
+        event: "GEOFENCE_SAFETY_DAEMON",
+        category: "SYSTEM",
+        severity: "INFO",
+        operator: "Safety Monitor",
+        details: "Automated geofence collision detection loop initialized at 10Hz sampling frequency.",
+        status: "Active",
+      },
+      {
+        id: "SYS-20260919-008",
+        timestamp: "2026-09-19T08:35:00.000Z",
+        event: "BATTERY_FAILSAFE_ACTIVE",
+        category: "SYSTEM",
+        severity: "INFO",
+        operator: "Safety Monitor",
+        details: "Smart RTL battery consumption algorithm loaded (reserve: 20% landing power).",
+        status: "Active",
+      },
+      {
+        id: "SYS-20260918-009",
+        timestamp: "2026-09-18T16:00:00.000Z",
+        event: "MAP_TILE_CACHE_PRELOAD",
+        category: "SYSTEM",
+        severity: "INFO",
+        operator: "GIS Subsystem",
+        details: "Preloaded 420 vector and satellite map tiles for Hyderabad operational grid sector.",
+        status: "Success",
+      },
+      {
+        id: "SYS-20260918-010",
+        timestamp: "2026-09-18T18:00:00.000Z",
+        event: "REGISTRY_BACKUP_SAVED",
+        category: "SYSTEM",
+        severity: "SUCCESS",
+        operator: "Backup Daemon",
+        details: "Mission archive snapshot encrypted and synchronized to secure local storage vault.",
         status: "Success",
       },
     ]
@@ -691,6 +990,31 @@ export const logService = {
       return newEntry
     } catch (err) {
       console.error("[logService] Failed recording mission event:", err)
+    }
+  },
+
+  /**
+   * Appends a user-initiated flight/override command event into localStorage
+   */
+  recordCommandEvent(entry) {
+    if (typeof window === "undefined" || !entry) return
+    try {
+      const existing = localStorage.getItem(STORAGE_KEY_COMMAND_LOGS)
+      const list = existing ? JSON.parse(existing) : []
+      const newEntry = {
+        id: `CMD-USER-${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        category: "COMMAND",
+        severity: "INFO",
+        flightMode: "GUIDED",
+        status: "Executed",
+        ...entry,
+      }
+      list.unshift(newEntry)
+      localStorage.setItem(STORAGE_KEY_COMMAND_LOGS, JSON.stringify(list.slice(0, 500)))
+      return newEntry
+    } catch (err) {
+      console.error("[logService] Failed recording command event:", err)
     }
   },
 

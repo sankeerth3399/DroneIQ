@@ -3,7 +3,12 @@ import { useTelemetry } from "@/hooks/useTelemetry.js";
 import { flightControlService } from "@/services/control/flightControlService.js";
 import { normalizeHeading, getCardinalDirection } from "@/utils/heading.js";
 import { getJoystickDirectionLabel } from "@/utils/joystick.js";
-import { DEFAULT_FLIGHT_MODE } from "@/services/telemetry/telemetryTypes.js";
+import {
+  DEFAULT_FLIGHT_MODE,
+  isValidGpsCoordinate,
+  FALLBACK_DRONE_LOCATION,
+  PositionSource,
+} from "@/services/telemetry/telemetryTypes.js";
 
 const DEADZONE = 0.04;
 const applyDeadzone = (v) => (Math.abs(v) < DEADZONE ? 0 : v);
@@ -67,9 +72,9 @@ export function useDroneTelemetry() {
 
   // Local simulated telemetry state (Single Source of Truth when offline)
   const [simTelemetry, setSimTelemetry] = useState({
-    latitude: 17.385000,
-    longitude: 78.486700,
-    altitude: 48.5,
+    latitude: FALLBACK_DRONE_LOCATION.latitude,
+    longitude: FALLBACK_DRONE_LOCATION.longitude,
+    altitude: 0.0,
     heading: 0.0,
     pitch: 0.0,
     roll: 0.0,
@@ -77,28 +82,31 @@ export function useDroneTelemetry() {
     groundSpeed: 0.0,
     verticalSpeed: 0.0,
     climbRate: 0.0,
-    battery: 84,
-    voltage: 24.2,
-    satellites: 18,
-    gpsFix: "3D Fix",
+    battery: null,
+    voltage: null,
+    satellites: 0,
+    gpsFix: "No Fix",
     armed: isArmed ?? false,
     isArmed: isArmed ?? false,
     flightMode: canonicalFlightMode || DEFAULT_FLIGHT_MODE,
-    status: "OK",
+    status: "DISCONNECTED",
+    droneConnected: false,
+    droneGPSValid: false,
+    isLive: false,
   });
 
   // Stored home / launch location for RTL return
   const homePositionRef = useRef({
-    latitude: 17.385000,
-    longitude: 78.486700,
-    altitude: 48.5,
+    latitude: FALLBACK_DRONE_LOCATION.latitude,
+    longitude: FALLBACK_DRONE_LOCATION.longitude,
+    altitude: 0.0,
   });
 
   // Authoritative simulation state reference for 60 FPS physics integration
   const simStateRef = useRef({
-    latitude: 17.385000,
-    longitude: 78.486700,
-    altitude: 48.5,
+    latitude: FALLBACK_DRONE_LOCATION.latitude,
+    longitude: FALLBACK_DRONE_LOCATION.longitude,
+    altitude: 0.0,
     heading: 0.0,
     pitch: 0.0,
     roll: 0.0,
@@ -110,6 +118,9 @@ export function useDroneTelemetry() {
   });
 
   // Synchronize canonical flightMode from TelemetryContext
+  const hasSettledRef = useRef(false);
+  const lastUnarmedWarnRef = useRef(0);
+
   useEffect(() => {
     if (canonicalFlightMode) {
       simStateRef.current.flightMode = canonicalFlightMode;
@@ -137,8 +148,8 @@ export function useDroneTelemetry() {
     joystickDirection: "NEUTRAL",
     calculatedMovementHeading: 0.0,
     calculatedMovementDirection: "N",
-    latitude: 17.385000,
-    longitude: 78.486700,
+    latitude: FALLBACK_DRONE_LOCATION.latitude,
+    longitude: FALLBACK_DRONE_LOCATION.longitude,
     speed: 0.0,
     isArmed: isArmed ?? false,
   });
@@ -150,19 +161,24 @@ export function useDroneTelemetry() {
     pitch: 0,
     roll: 0,
   });
-
-  const hasSettledRef = useRef(false);
-  const lastUnarmedWarnRef = useRef(0);
+  const [stickInputs, setStickInputs] = useState({
+    throttle: 0,
+    yaw: 0,
+    pitch: 0,
+    roll: 0,
+  });
 
   // Mode: 'interactive' (joystick control) vs 'patrol' (autonomous orbit demo)
   const [simMode, setSimMode] = useState("interactive");
 
   // Immediate disarm flight stoppage: freeze position and zero all velocities immediately
   useEffect(() => {
+    hasSettledRef.current = false;
     if (!isArmed) {
       // 1. Reset stick inputs & notify flight control service
-      stickInputRef.current = { throttle: 0, yaw: 0, pitch: 0, roll: 0 };
-      flightControlService.sendControlCommand(stickInputRef.current);
+      const zeroSticks = { throttle: 0, yaw: 0, pitch: 0, roll: 0 };
+      stickInputRef.current = zeroSticks;
+      flightControlService.sendControlCommand(zeroSticks);
 
       // 2. Zero all physics velocities in simStateRef
       const state = simStateRef.current;
@@ -198,8 +214,10 @@ export function useDroneTelemetry() {
         }
       }
 
-      stickInputRef.current = { throttle: 0, yaw: 0, pitch: 0, roll: 0 };
-      flightControlService.sendControlCommand(stickInputRef.current);
+      const zeroSticks = { throttle: 0, yaw: 0, pitch: 0, roll: 0 };
+      stickInputRef.current = zeroSticks;
+      setStickInputs(zeroSticks);
+      flightControlService.sendControlCommand(zeroSticks);
       return;
     }
 
@@ -212,18 +230,22 @@ export function useDroneTelemetry() {
       activeMode === "BRAKE";
 
     if (isAutonomousMode) {
-      stickInputRef.current = { throttle: 0, yaw: 0, pitch: 0, roll: 0 };
-      flightControlService.sendControlCommand(stickInputRef.current);
+      const zeroSticks = { throttle: 0, yaw: 0, pitch: 0, roll: 0 };
+      stickInputRef.current = zeroSticks;
+      setStickInputs(zeroSticks);
+      flightControlService.sendControlCommand(zeroSticks);
       return;
     }
 
-    stickInputRef.current = {
+    const nextSticks = {
       ...stickInputRef.current,
       ...sticks,
     };
+    stickInputRef.current = nextSticks;
+    setStickInputs(nextSticks);
 
     // Forward to flight control service abstraction
-    flightControlService.sendControlCommand(stickInputRef.current);
+    flightControlService.sendControlCommand(nextSticks);
   }, [isArmed, showToast]);
 
   // Authoritative Physics Simulation Loop
@@ -255,16 +277,21 @@ export function useDroneTelemetry() {
 
         if (!hasSettledRef.current) {
           hasSettledRef.current = true;
+          const safeLat = typeof state.latitude === "number" ? state.latitude : FALLBACK_DRONE_LOCATION.latitude;
+          const safeLng = typeof state.longitude === "number" ? state.longitude : FALLBACK_DRONE_LOCATION.longitude;
+          const safeHeading = typeof state.heading === "number" ? state.heading : 0;
+          const safeAlt = typeof state.altitude === "number" ? state.altitude : 0;
+
           const settledDebug = {
-            droneHeading: Number(state.heading.toFixed(1)),
-            arrowDirection: getCardinalDirection(state.heading),
+            droneHeading: Number(safeHeading.toFixed(1)),
+            arrowDirection: getCardinalDirection(safeHeading),
             joystickX: 0,
             joystickY: 0,
             joystickDirection: "NEUTRAL",
-            calculatedMovementHeading: Number(state.heading.toFixed(1)),
-            calculatedMovementDirection: getCardinalDirection(state.heading),
-            latitude: Number(state.latitude.toFixed(6)),
-            longitude: Number(state.longitude.toFixed(6)),
+            calculatedMovementHeading: Number(safeHeading.toFixed(1)),
+            calculatedMovementDirection: getCardinalDirection(safeHeading),
+            latitude: Number(safeLat.toFixed(6)),
+            longitude: Number(safeLng.toFixed(6)),
             speed: 0,
             isArmed: false,
           };
@@ -272,26 +299,26 @@ export function useDroneTelemetry() {
 
           if (typeof window !== "undefined") {
             window.__DRONE_STATE__ = {
-              latitude: Number(state.latitude.toFixed(6)),
-              longitude: Number(state.longitude.toFixed(6)),
-              heading: Number(state.heading.toFixed(1)),
-              altitude: Number(state.altitude.toFixed(1)),
+              latitude: Number(safeLat.toFixed(6)),
+              longitude: Number(safeLng.toFixed(6)),
+              heading: Number(safeHeading.toFixed(1)),
+              altitude: Number(safeAlt.toFixed(1)),
               speed: 0,
               roll: 0,
               pitch: 0,
               yaw: 0,
               armed: false,
-              arrowDirection: getCardinalDirection(state.heading),
-              calculatedMovementHeading: Number(state.heading.toFixed(1)),
-              calculatedMovementDirection: getCardinalDirection(state.heading),
+              arrowDirection: getCardinalDirection(safeHeading),
+              calculatedMovementHeading: Number(safeHeading.toFixed(1)),
+              calculatedMovementDirection: getCardinalDirection(safeHeading),
             };
           }
 
           setSimTelemetry({
-            latitude: Number(state.latitude.toFixed(6)),
-            longitude: Number(state.longitude.toFixed(6)),
-            altitude: Number(state.altitude.toFixed(1)),
-            heading: Number(state.heading.toFixed(1)),
+            latitude: Number(safeLat.toFixed(6)),
+            longitude: Number(safeLng.toFixed(6)),
+            altitude: Number(safeAlt.toFixed(1)),
+            heading: Number(safeHeading.toFixed(1)),
             pitch: 0,
             roll: 0,
             speed: 0,
@@ -543,11 +570,16 @@ export function useDroneTelemetry() {
         hasSettledRef.current = false;
         if (currentTime - lastUiSync >= 33) {
           lastUiSync = currentTime;
+          const safeLat = typeof state.latitude === "number" ? state.latitude : FALLBACK_DRONE_LOCATION.latitude;
+          const safeLng = typeof state.longitude === "number" ? state.longitude : FALLBACK_DRONE_LOCATION.longitude;
+          const safeHeading = typeof state.heading === "number" ? state.heading : 0;
+          const safeAlt = typeof state.altitude === "number" ? state.altitude : 0;
+
           setSimTelemetry({
-            latitude: Number(state.latitude.toFixed(6)),
-            longitude: Number(state.longitude.toFixed(6)),
-            altitude: Number(state.altitude.toFixed(1)),
-            heading: Number(state.heading.toFixed(1)),
+            latitude: Number(safeLat.toFixed(6)),
+            longitude: Number(safeLng.toFixed(6)),
+            altitude: Number(safeAlt.toFixed(1)),
+            heading: Number(safeHeading.toFixed(1)),
             pitch: Number(state.pitch.toFixed(1)),
             roll: Number(state.roll.toFixed(1)),
             speed: Number(state.speed.toFixed(1)),
@@ -568,16 +600,21 @@ export function useDroneTelemetry() {
       } else if (!hasSettledRef.current) {
         // Drone reached rest: sync final neutral telemetry once and pause React re-renders
         hasSettledRef.current = true;
+        const safeLat = typeof state.latitude === "number" ? state.latitude : FALLBACK_DRONE_LOCATION.latitude;
+        const safeLng = typeof state.longitude === "number" ? state.longitude : FALLBACK_DRONE_LOCATION.longitude;
+        const safeHeading = typeof state.heading === "number" ? state.heading : 0;
+        const safeAlt = typeof state.altitude === "number" ? state.altitude : 0;
+
         const settledDebug = {
-          droneHeading: Number(state.heading.toFixed(1)),
-          arrowDirection: getCardinalDirection(state.heading),
+          droneHeading: Number(safeHeading.toFixed(1)),
+          arrowDirection: getCardinalDirection(safeHeading),
           joystickX: 0,
           joystickY: 0,
           joystickDirection: "NEUTRAL",
-          calculatedMovementHeading: Number(state.heading.toFixed(1)),
-          calculatedMovementDirection: getCardinalDirection(state.heading),
-          latitude: Number(state.latitude.toFixed(6)),
-          longitude: Number(state.longitude.toFixed(6)),
+          calculatedMovementHeading: Number(safeHeading.toFixed(1)),
+          calculatedMovementDirection: getCardinalDirection(safeHeading),
+          latitude: Number(safeLat.toFixed(6)),
+          longitude: Number(safeLng.toFixed(6)),
           speed: 0,
           isArmed,
         };
@@ -585,26 +622,26 @@ export function useDroneTelemetry() {
 
         if (typeof window !== "undefined") {
           window.__DRONE_STATE__ = {
-            latitude: Number(state.latitude.toFixed(6)),
-            longitude: Number(state.longitude.toFixed(6)),
-            heading: Number(state.heading.toFixed(1)),
-            altitude: Number(state.altitude.toFixed(1)),
+            latitude: Number(safeLat.toFixed(6)),
+            longitude: Number(safeLng.toFixed(6)),
+            heading: Number(safeHeading.toFixed(1)),
+            altitude: Number(safeAlt.toFixed(1)),
             speed: 0,
             roll: 0,
             pitch: 0,
             yaw: 0,
             armed: isArmed,
-            arrowDirection: getCardinalDirection(state.heading),
-            calculatedMovementHeading: Number(state.heading.toFixed(1)),
-            calculatedMovementDirection: getCardinalDirection(state.heading),
+            arrowDirection: getCardinalDirection(safeHeading),
+            calculatedMovementHeading: Number(safeHeading.toFixed(1)),
+            calculatedMovementDirection: getCardinalDirection(safeHeading),
           };
         }
 
         setSimTelemetry({
-          latitude: Number(state.latitude.toFixed(6)),
-          longitude: Number(state.longitude.toFixed(6)),
-          altitude: Number(state.altitude.toFixed(1)),
-          heading: Number(state.heading.toFixed(1)),
+          latitude: Number(safeLat.toFixed(6)),
+          longitude: Number(safeLng.toFixed(6)),
+          altitude: Number(safeAlt.toFixed(1)),
+          heading: Number(safeHeading.toFixed(1)),
           pitch: 0,
           roll: 0,
           speed: 0,
@@ -644,16 +681,16 @@ export function useDroneTelemetry() {
     return true;
   }, [isArmed, showToast]);
 
-  // Active authoritative telemetry: Live WebSocket data takes priority ONLY if active packets are flowing
-  const isActivelyLive = Boolean(
+  // Active authoritative telemetry: Live WebSocket data takes priority ONLY if real connection and valid GPS fix exist
+  const hasLiveGps = Boolean(
     isLive &&
     liveTelemetry &&
-    typeof liveTelemetry.latitude === "number" &&
-    liveTelemetry.latitude !== 0
+    isValidGpsCoordinate(liveTelemetry.latitude, liveTelemetry.longitude)
   );
 
-  const activeTelemetry = isActivelyLive
+  const activeTelemetry = hasLiveGps
     ? {
+        ...liveTelemetry,
         pitch: isArmed ? (typeof liveTelemetry.pitch === "number" ? liveTelemetry.pitch : 0) : 0,
         roll: isArmed ? (typeof liveTelemetry.roll === "number" ? liveTelemetry.roll : 0) : 0,
         heading:
@@ -693,39 +730,59 @@ export function useDroneTelemetry() {
         satellites: liveTelemetry.gpsSatellites || 18,
         gpsSatellites: liveTelemetry.gpsSatellites || 18,
         gpsFix: "3D Fix",
-        latitude:
-          typeof liveTelemetry.latitude === "number"
-            ? liveTelemetry.latitude
-            : 17.385000,
-        longitude:
-          typeof liveTelemetry.longitude === "number"
-            ? liveTelemetry.longitude
-            : 78.486700,
+        latitude: liveTelemetry.latitude,
+        longitude: liveTelemetry.longitude,
+        positionSource: PositionSource.LIVE,
+        droneConnected: true,
+        droneGPSValid: true,
+        isLive: true,
         flightMovementDebug: {
           droneHeading: typeof liveTelemetry.heading === "number" ? liveTelemetry.heading : 0,
           arrowDirection: getCardinalDirection(typeof liveTelemetry.heading === "number" ? liveTelemetry.heading : 0),
-          joystickX: 0,
-          joystickY: 0,
+          joystickX: stickInputs.roll || 0,
+          joystickY: stickInputs.pitch || 0,
           joystickDirection: "LIVE",
           calculatedMovementHeading: typeof liveTelemetry.heading === "number" ? liveTelemetry.heading : 0,
           calculatedMovementDirection: getCardinalDirection(typeof liveTelemetry.heading === "number" ? liveTelemetry.heading : 0),
-          latitude: typeof liveTelemetry.latitude === "number" ? liveTelemetry.latitude : 17.385000,
-          longitude: typeof liveTelemetry.longitude === "number" ? liveTelemetry.longitude : 78.486700,
+          latitude: liveTelemetry.latitude,
+          longitude: liveTelemetry.longitude,
           speed: typeof liveTelemetry.speed === "number" ? liveTelemetry.speed : 0,
           isArmed,
         },
       }
     : {
         ...simTelemetry,
-        speed: isArmed ? simTelemetry.speed : 0,
-        groundSpeed: isArmed ? simTelemetry.groundSpeed : 0,
-        verticalSpeed: isArmed ? simTelemetry.verticalSpeed : 0,
-        climbRate: isArmed ? simTelemetry.climbRate : 0,
-        pitch: isArmed ? simTelemetry.pitch : 0,
-        roll: isArmed ? simTelemetry.roll : 0,
+        latitude: typeof simTelemetry.latitude === "number" ? simTelemetry.latitude : FALLBACK_DRONE_LOCATION.latitude,
+        longitude: typeof simTelemetry.longitude === "number" ? simTelemetry.longitude : FALLBACK_DRONE_LOCATION.longitude,
+        heading: typeof simTelemetry.heading === "number" ? simTelemetry.heading : 0,
+        altitude: typeof simTelemetry.altitude === "number" ? simTelemetry.altitude : 0,
+        positionSource: PositionSource.HYDERABAD_FALLBACK,
+        droneConnected: Boolean(isLive),
+        droneGPSValid: false,
+        isLive: false,
+        status: isLive ? "NO_GPS" : "DISCONNECTED",
+        speed: isArmed ? (simTelemetry.speed || 0) : 0,
+        groundSpeed: isArmed ? (simTelemetry.groundSpeed || 0) : 0,
+        verticalSpeed: isArmed ? (simTelemetry.verticalSpeed || 0) : 0,
+        climbRate: isArmed ? (simTelemetry.climbRate || 0) : 0,
+        pitch: isArmed ? (simTelemetry.pitch || 0) : 0,
+        roll: isArmed ? (simTelemetry.roll || 0) : 0,
         armed: isArmed,
         isArmed: isArmed,
         gimbal: gimbalState,
+        flightMovementDebug: simTelemetry.flightMovementDebug || {
+          droneHeading: simTelemetry.heading || 0,
+          arrowDirection: getCardinalDirection(simTelemetry.heading || 0),
+          joystickX: stickInputs.roll || 0,
+          joystickY: stickInputs.pitch || 0,
+          joystickDirection: getJoystickDirectionLabel(stickInputs.roll || 0, stickInputs.pitch || 0),
+          calculatedMovementHeading: simTelemetry.heading || 0,
+          calculatedMovementDirection: getCardinalDirection(simTelemetry.heading || 0),
+          latitude: simTelemetry.latitude ?? FALLBACK_DRONE_LOCATION.latitude,
+          longitude: simTelemetry.longitude ?? FALLBACK_DRONE_LOCATION.longitude,
+          speed: isArmed ? (simTelemetry.speed || 0) : 0,
+          isArmed,
+        },
       };
 
   return {
@@ -733,6 +790,7 @@ export function useDroneTelemetry() {
       ...activeTelemetry,
       gimbal: activeTelemetry.gimbal || gimbalState,
     },
+    positionSource: activeTelemetry.positionSource,
     flightMode: activeTelemetry.flightMode,
     setFlightMode,
     updateStickInputs,

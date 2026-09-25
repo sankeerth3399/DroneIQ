@@ -212,8 +212,9 @@ export const Logs = () => {
   }
 
   return (
-    <div className="p-3.5 sm:p-6 lg:p-8 space-y-5 sm:space-y-6 max-w-7xl mx-auto text-[#EEF4F8] select-none font-sans">
-      {/* Top Header & Global Actions */}
+    <div className="relative h-full min-h-0 w-full overflow-y-auto overflow-x-hidden bg-[#06090E] select-none font-sans text-[#EEF4F8] scrollbar-thin">
+      <div className="p-3.5 sm:p-6 lg:p-8 space-y-5 sm:space-y-6 max-w-7xl mx-auto min-w-0 pb-12 sm:pb-16">
+        {/* Top Header & Global Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-[#1A2633]">
         <div>
           <div className="flex items-center gap-2.5">
@@ -358,6 +359,7 @@ export const Logs = () => {
         onClose={() => setIsDrawerOpen(false)}
         onViewFlight={handleViewFlightFromMission}
       />
+      </div>
     </div>
   )
 }

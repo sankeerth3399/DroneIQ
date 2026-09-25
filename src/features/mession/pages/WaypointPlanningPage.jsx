@@ -323,6 +323,7 @@ const WaypointPlanningPage = () => {
           geofence={geofenceCoords}
           routeViolations={geofenceValidation.violatingSegments || []}
           invalidClickPoint={invalidClickPoint}
+          pageType="waypoints"
         />
       </div>
 

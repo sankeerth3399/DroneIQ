@@ -1,6 +1,6 @@
 import { memo } from "react";
 import { RotateCcw, RotateCw, Crosshair } from "lucide-react";
-import Live from "@/features/mession/components/live.jsx";
+import LiveDroneFeed from "@/components/video/LiveDroneFeed.jsx";
 import CameraCaptureBanner from "./CameraCaptureBanner.jsx";
 
 const cameraOptions = [
@@ -45,6 +45,8 @@ export const CameraPreview = ({
   isDroneFlashing = false,
   showExpandHint = false,
   gimbalState = { pitch: 0, roll: 0, yaw: 0 },
+  droneId = "DRONE-001",
+  camSelected = "main",
 }) => {
   const pitchOffset = Math.max(-24, Math.min(24, (gimbalState?.pitch || 0) * 0.35));
   const rollAngle = gimbalState?.roll || 0;
@@ -58,7 +60,7 @@ export const CameraPreview = ({
           transform: `scale(1.06) rotate(${-rollAngle * 0.7}deg) translateY(${pitchOffset}px)`,
         }}
       >
-        <Live />
+        <LiveDroneFeed droneId={droneId} cameraType={camSelected} />
       </div>
 
       {/* Shutter flash effect */}
@@ -201,7 +203,9 @@ export const CameraWidget = memo(function CameraWidget({
   onTriggerDroneFlash,
   onTriggerScreenFlash,
   isDroneFlashing = false,
+  droneId,
 }) {
+  const effectiveDroneId = droneId || telemetry?.droneId || "DRONE-001";
   const isFpv = camSelected === "fpv";
   const currentRoll = gimbalState?.roll ?? telemetry?.gimbal?.roll ?? 0;
   const formatRoll = `${currentRoll >= 0 ? "+" : ""}${Number(currentRoll).toFixed(1)}°`;
@@ -232,6 +236,8 @@ export const CameraWidget = memo(function CameraWidget({
             isDroneFlashing={isDroneFlashing}
             showExpandHint={mapIsLarge}
             gimbalState={gimbalState || telemetry?.gimbal}
+            droneId={effectiveDroneId}
+            camSelected={camSelected}
           />
         </div>
 

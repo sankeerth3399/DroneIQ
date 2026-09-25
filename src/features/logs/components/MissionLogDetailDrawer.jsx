@@ -107,7 +107,7 @@ export const MissionLogDetailDrawer = ({
         </div>
 
         {/* Scrollable Body */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-5">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-5 scrollbar-thin">
           {/* Section 1: Overview Grid */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 bg-[#06090E] p-3.5 rounded-xl border border-[#16212E] text-xs">
             <div>
