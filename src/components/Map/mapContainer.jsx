@@ -15,6 +15,7 @@ import {
   removeGeofenceLayers,
   buildGeofenceVertexMarkerHtml,
   GEOFENCE_FILL_LAYER_ID,
+  GEOFENCE_LINE_LAYER_ID,
   GEOFENCE_PREVIEW_LINE_LAYER_ID,
 } from "./geofenceLayerHelper.js";
 import {
@@ -43,6 +44,7 @@ const MapContainer = ({
   isPlacingWaypoint = false,
   showMissionRoute = true,
   geofence = null,
+  geofenceEditHover = null,
   isDrawingGeofence = false,
   isEditingGeofence = false,
   isClosedGeofence = undefined,
@@ -50,6 +52,7 @@ const MapContainer = ({
   onGeofenceVertexSelect,
   onGeofenceVertexDrag,
   onGeofenceVertexDragEnd,
+  onGeofenceEditHover,
   routeViolations = [],
   invalidClickPoint = null,
   followDrone = false,
@@ -63,6 +66,7 @@ const MapContainer = ({
   const markerRef = useRef(null);
   const markerRotatorRef = useRef(null);
   const invalidMarkerRef = useRef(null);
+  const geofenceInsertionMarkerRef = useRef(null);
   const autoId = useId();
   const mapId = `mappls-map-${autoId.replace(/[^a-zA-Z0-9_-]/g, "")}`;
   const markerScalerRef = useRef(null);
@@ -335,6 +339,7 @@ const MapContainer = ({
   const onGeofenceVertexDragRef = useRef(onGeofenceVertexDrag);
   const onGeofenceVertexDragEndRef = useRef(onGeofenceVertexDragEnd);
   const onGeofenceVertexSelectRef = useRef(onGeofenceVertexSelect);
+  const onGeofenceEditHoverRef = useRef(onGeofenceEditHover);
 
   useEffect(() => {
     onMapClickRef.current = onMapClick;
@@ -344,7 +349,8 @@ const MapContainer = ({
     onGeofenceVertexDragRef.current = onGeofenceVertexDrag;
     onGeofenceVertexDragEndRef.current = onGeofenceVertexDragEnd;
     onGeofenceVertexSelectRef.current = onGeofenceVertexSelect;
-  }, [onMapClick, onWaypointSelect, onWaypointDrag, onWaypointDragEnd, onGeofenceVertexDrag, onGeofenceVertexDragEnd, onGeofenceVertexSelect]);
+    onGeofenceEditHoverRef.current = onGeofenceEditHover;
+  }, [onMapClick, onWaypointSelect, onWaypointDrag, onWaypointDragEnd, onGeofenceVertexDrag, onGeofenceVertexDragEnd, onGeofenceVertexSelect, onGeofenceEditHover]);
 
   const geofenceCoords = useMemo(() => {
     if (Array.isArray(geofence)) return geofence;
@@ -374,6 +380,7 @@ const MapContainer = ({
       const hasPolygonLayer = Boolean(
         underlying?.getLayer?.(GEOFENCE_FILL_LAYER_ID) && geofenceCoords.length >= 3
       );
+      const hasBoundaryLayer = Boolean(underlying?.getLayer?.(GEOFENCE_LINE_LAYER_ID));
       const hasPreviewLayer = Boolean(
         underlying?.getLayer?.(GEOFENCE_PREVIEW_LINE_LAYER_ID) &&
           isDrawingGeofence &&
@@ -385,6 +392,7 @@ const MapContainer = ({
         project: currentProjectId || currentProject?.id || "N/A",
         vertexCount: geofenceCoords.length,
         polygonLayerCount: hasPolygonLayer ? 1 : 0,
+        polylineLayerCount: hasBoundaryLayer ? 1 : 0,
         previewLayerCount: hasPreviewLayer ? 1 : 0,
         vertexMarkerCount: geofenceMarkersRef.current?.size || 0,
       });
@@ -447,6 +455,42 @@ const MapContainer = ({
       }
     };
   }, [invalidClickPoint]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !window.mappls) return;
+
+    if (!isEditingGeofence || !geofenceEditHover) {
+      geofenceInsertionMarkerRef.current?.remove?.();
+      geofenceInsertionMarkerRef.current = null;
+      return;
+    }
+
+    if (geofenceInsertionMarkerRef.current) {
+      if (geofenceInsertionMarkerRef.current.setPosition) {
+        geofenceInsertionMarkerRef.current.setPosition(geofenceEditHover);
+      } else {
+        geofenceInsertionMarkerRef.current.setLngLat?.([
+          geofenceEditHover.lng,
+          geofenceEditHover.lat,
+        ]);
+      }
+      return;
+    }
+
+    const cueHtml = `
+      <div style="width:16px;height:16px;border:2px solid #35E0FF;border-radius:50%;background:#35E0FF33;box-shadow:0 0 10px #35E0FF;pointer-events:none;"></div>
+    `;
+    try {
+      geofenceInsertionMarkerRef.current = new window.mappls.Marker({
+        map,
+        position: geofenceEditHover,
+        html: cueHtml,
+      });
+    } catch (err) {
+      console.debug("[MapContainer] Geofence insertion cue note:", err.message);
+    }
+  }, [geofenceEditHover, isEditingGeofence]);
 
   // Synchronize Geofence Vertex Handles (Keyed by stable vertex ID)
   useEffect(() => {
@@ -907,6 +951,14 @@ const MapContainer = ({
             lng: Number(Number(e.lngLat.lng).toFixed(6)),
           });
         });
+        map.on("mousemove", (e) => {
+          if (!isEditingGeofence || !e?.lngLat) return;
+          onGeofenceEditHoverRef.current?.({
+            lat: Number(Number(e.lngLat.lat).toFixed(6)),
+            lng: Number(Number(e.lngLat.lng).toFixed(6)),
+          });
+        });
+        map.on("mouseout", () => onGeofenceEditHoverRef.current?.(null));
 
         const onMapReady = () => {
           if (cancelled) return;
@@ -1075,6 +1127,8 @@ const MapContainer = ({
         missionPolylineRef.current = null;
         removeRouteLayers(mapRef.current, directionMarkersRef);
         removeGeofenceLayers(mapRef.current);
+        geofenceInsertionMarkerRef.current?.remove?.();
+        geofenceInsertionMarkerRef.current = null;
 
         for (const [, obj] of markers.entries()) {
           try {
@@ -1361,8 +1415,21 @@ const MapContainer = ({
 
           return (
             <div
+              onMouseMove={(e) => {
+                if (!isEditingGeofence) return;
+                const rect = e.currentTarget.getBoundingClientRect();
+                const pxOffsetX = e.clientX - (rect.left + rect.width / 2);
+                const pxOffsetY = e.clientY - (rect.top + rect.height / 2);
+                const clickedLat = radarRefLat - pxOffsetY / (0.8 * 111139);
+                const clickedLng = radarRefLng + pxOffsetX / (0.8 * 111139 * Math.cos((radarRefLat * Math.PI) / 180));
+                onGeofenceEditHoverRef.current?.({
+                  lat: Number(clickedLat.toFixed(6)),
+                  lng: Number(clickedLng.toFixed(6)),
+                });
+              }}
+              onMouseLeave={() => onGeofenceEditHoverRef.current?.(null)}
               onClick={(e) => {
-                if (!isPlacingWaypoint && !isDrawingGeofence) return;
+                if (!isPlacingWaypoint && !isDrawingGeofence && !isEditingGeofence) return;
                 const rect = e.currentTarget.getBoundingClientRect();
                 const cx = rect.left + rect.width / 2;
                 const cy = rect.top + rect.height / 2;
@@ -1378,7 +1445,7 @@ const MapContainer = ({
                 });
               }}
               className={`absolute inset-0 flex items-center justify-center bg-[#070B12] ${
-                isPlacingWaypoint || isDrawingGeofence ? "pointer-events-auto cursor-crosshair" : "pointer-events-none"
+                isPlacingWaypoint || isDrawingGeofence || isEditingGeofence ? "pointer-events-auto cursor-crosshair" : "pointer-events-none"
               }`}
             >
               {/* Tactical Grid Background */}
@@ -1543,6 +1610,23 @@ const MapContainer = ({
                         />
                       );
                     })}
+
+                  {isEditingGeofence && geofenceEditHover && (() => {
+                    const dLatM = (geofenceEditHover.lat - radarRefLat) * 111139;
+                    const dLngM = (geofenceEditHover.lng - radarRefLng) * (111139 * Math.cos((radarRefLat * Math.PI) / 180));
+                    const x = 180 + dLngM * 0.8;
+                    const y = 180 - dLatM * 0.8;
+                    return (
+                      <circle
+                        cx={x}
+                        cy={y}
+                        r="7"
+                        fill="#35E0FF33"
+                        stroke="#35E0FF"
+                        strokeWidth="2"
+                      />
+                    );
+                  })()}
 
                   {/* Invalid Click Indicator (Red Pulse) */}
                   {invalidClickPoint && typeof invalidClickPoint.lat === "number" && (

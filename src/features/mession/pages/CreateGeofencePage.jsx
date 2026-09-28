@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import MapLoad from "@/components/Map/mapContainer.jsx";
 import { useMission } from "@/hooks/useMission.js";
@@ -16,6 +16,9 @@ import {
   validateGeofenceClosure,
   validateGeofencePolygon,
   calculateDistance,
+  findNearestPolygonEdge,
+  GeofenceValidationReasons,
+  GEOFENCE_EDGE_INSERTION_TOLERANCE_METERS,
 } from "@/utils/geofenceValidation.js";
 import {
   Shield,
@@ -42,6 +45,9 @@ const mapStyleOptions = [
   { id: "normal", label: "Normal Map" },
   { id: "satellite", label: "Satellite Map" },
 ];
+
+const createGeofenceVertexId = () =>
+  `vertex-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 8)}`;
 
 /**
  * Ensures all vertices have stable IDs and standardized coordinates
@@ -110,9 +116,25 @@ const CreateGeofencePage = () => {
   const [inlineError, setInlineError] = useState(null);
   const [history, setHistory] = useState([]);
   const [invalidClickPoint, setInvalidClickPoint] = useState(null);
+  const [geofenceEditHover, setGeofenceEditHover] = useState(null);
   const [metricsCollapsed, setMetricsCollapsed] = useState(() => typeof window !== "undefined" && window.innerWidth < 640);
   const dragStartVerticesRef = useRef(null);
+  const editSnapshotVerticesRef = useRef(null);
   const errorTimerRef = useRef(null);
+
+  useEffect(() => {
+    dragStartVerticesRef.current = null;
+    editSnapshotVerticesRef.current = null;
+  }, [currentProjectId]);
+
+  const hasExistingGeofence = useMemo(() => {
+    const raw =
+      currentProject?.geofence?.vertices ||
+      currentProject?.geofence?.polygon ||
+      currentProject?.geofence?.coordinates || [];
+
+    return Array.isArray(raw) && raw.length >= 3;
+  }, [currentProject]);
 
   const setInlineErrorWithTimeout = (msg) => {
     if (errorTimerRef.current) {
@@ -148,7 +170,6 @@ const CreateGeofencePage = () => {
     setSelectedVertexId(null);
     setInlineError(null);
     setHistory([]);
-    dragStartVerticesRef.current = null;
   }
 
   // Push to undo history when vertices change significantly
@@ -165,7 +186,66 @@ const CreateGeofencePage = () => {
     }
     setInlineError(null);
 
-    if (isViewer || !isDrawing) return;
+    if (isViewer) return;
+
+    if (isEditing) {
+      const nearestEdge = findNearestPolygonEdge(vertices, coords);
+      if (!nearestEdge) {
+        setInlineErrorWithTimeout(
+          `Click within ${GEOFENCE_EDGE_INSERTION_TOLERANCE_METERS} m of the geofence boundary to add a point.`
+        );
+        return;
+      }
+
+      const newVertex = {
+        id: createGeofenceVertexId(),
+        lat: Number(coords.lat.toFixed(6)),
+        lng: Number(coords.lng.toFixed(6)),
+        latitude: Number(coords.lat.toFixed(6)),
+        longitude: Number(coords.lng.toFixed(6)),
+      };
+      const nextVertices = [...vertices];
+      nextVertices.splice(nearestEdge.insertionIndex, 0, newVertex);
+
+      const validation = validateGeofencePolygon(nextVertices);
+      if (!validation.valid) {
+        const message =
+          validation.reason === GeofenceValidationReasons.DUPLICATE_VERTEX ||
+          validation.reason === GeofenceValidationReasons.VERTEX_TOO_CLOSE
+            ? "Point is too close to an existing vertex."
+            : "Point cannot be added here because it would create invalid geometry.";
+        setInvalidClickPoint({ lat: newVertex.lat, lng: newVertex.lng });
+        setTimeout(() => setInvalidClickPoint(null), 1800);
+        setInlineErrorWithTimeout(message);
+        if (import.meta.env?.DEV) {
+          console.debug("[GEOFENCE EDIT]", {
+            action: "ADD_POINT",
+            targetEdge: `${vertices[nearestEdge.edgeIndex]?.id} -> ${vertices[(nearestEdge.edgeIndex + 1) % vertices.length]?.id}`,
+            vertexCount: vertices.length,
+            polygonLayerCount: 1,
+            polylineLayerCount: 1,
+            valid: false,
+            reason: validation.reason,
+          });
+        }
+        return;
+      }
+
+      pushHistory(nextVertices);
+      if (import.meta.env?.DEV) {
+        console.debug("[GEOFENCE EDIT]", {
+          action: "ADD_POINT",
+          targetEdge: `${vertices[nearestEdge.edgeIndex]?.id} -> ${vertices[(nearestEdge.edgeIndex + 1) % vertices.length]?.id}`,
+          vertexCount: nextVertices.length,
+          polygonLayerCount: 1,
+          polylineLayerCount: 1,
+          valid: true,
+        });
+      }
+      return;
+    }
+
+    if (!isDrawing) return;
 
     // Check if clicking close to the first vertex to auto-close
     if (vertices.length >= 3) {
@@ -209,7 +289,7 @@ const CreateGeofencePage = () => {
     }
 
     const newVertex = {
-      id: `vertex-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
+      id: createGeofenceVertexId(),
       lat: Number(coords.lat.toFixed(6)),
       lng: Number(coords.lng.toFixed(6)),
       latitude: Number(coords.lat.toFixed(6)),
@@ -219,23 +299,45 @@ const CreateGeofencePage = () => {
     pushHistory([...vertices, newVertex]);
   };
 
-  // Vertex dragging during edit mode
-  const handleVertexDrag = (index, newCoords) => {
-    if (isViewer) return;
-    if (!dragStartVerticesRef.current) {
-      dragStartVerticesRef.current = [...vertices];
+  const handleMapHover = (coords) => {
+    if (!isEditing || !coords) {
+      setGeofenceEditHover(null);
+      return;
     }
+    const nextHover = findNearestPolygonEdge(vertices, coords) ? coords : null;
+    setGeofenceEditHover((previous) =>
+      previous?.lat === nextHover?.lat && previous?.lng === nextHover?.lng
+        ? previous
+        : nextHover
+    );
+  };
+
+  // Vertex dragging during edit mode
+  const handleVertexDrag = (index, newCoords, vertexId) => {
+    if (isViewer || !isEditing) return;
+    const currentIndex = vertexId
+      ? vertices.findIndex((vertex) => vertex.id === vertexId)
+      : index;
+    if (currentIndex < 0) return;
+    if (!dragStartVerticesRef.current) {
+      dragStartVerticesRef.current = vertices.map((vertex) => ({ ...vertex }));
+    }
+    const dragBase = dragStartVerticesRef.current;
     const check = validateVertexDrag(
-      dragStartVerticesRef.current || vertices,
-      index,
+      dragBase,
+      currentIndex,
       newCoords,
       isClosed
     );
     if (check.valid) {
       setVertices((prev) => {
         const next = [...prev];
-        const existing = next[index];
-        next[index] = {
+        const targetIndex = vertexId
+          ? next.findIndex((vertex) => vertex.id === vertexId)
+          : currentIndex;
+        const existing = next[targetIndex];
+        if (!existing) return prev;
+        next[targetIndex] = {
           ...existing,
           lat: newCoords.lat,
           lng: newCoords.lng,
@@ -247,13 +349,21 @@ const CreateGeofencePage = () => {
     }
   };
 
-  const handleVertexDragEnd = (index, newCoords) => {
-    if (isViewer) return;
-    const baseVertices = dragStartVerticesRef.current || vertices;
-    const validation = validateVertexDrag(baseVertices, index, newCoords, isClosed);
+  const handleVertexDragEnd = (index, newCoords, vertexId) => {
+    if (isViewer || !isEditing) return;
+    const baseVertices = dragStartVerticesRef.current || vertices.map((vertex) => ({ ...vertex }));
+    const currentIndex = vertexId
+      ? baseVertices.findIndex((vertex) => vertex.id === vertexId)
+      : index;
+    if (currentIndex < 0) {
+      dragStartVerticesRef.current = null;
+      return { valid: false };
+    }
+    const validation = validateVertexDrag(baseVertices, currentIndex, newCoords, isClosed);
 
     if (!validation.valid) {
       setVertices(baseVertices);
+      dragStartVerticesRef.current = null;
       setInvalidClickPoint({ lat: newCoords.lat, lng: newCoords.lng });
       setTimeout(() => setInvalidClickPoint(null), 1800);
       const isBoundary = validation.reason === "SELF_INTERSECTING" || validation.reason === "BOUNDARY_CROSSING";
@@ -262,7 +372,7 @@ const CreateGeofencePage = () => {
     }
 
     const nextVertices = baseVertices.map((v, i) =>
-      i === index
+      i === currentIndex
         ? {
             ...v,
             lat: newCoords.lat,
@@ -272,7 +382,19 @@ const CreateGeofencePage = () => {
           }
         : v
     );
-    pushHistory(nextVertices);
+    setHistory((historyItems) => [...historyItems.slice(-15), baseVertices]);
+    setVertices(nextVertices);
+    dragStartVerticesRef.current = null;
+    if (import.meta.env?.DEV) {
+      console.debug("[GEOFENCE EDIT]", {
+        action: "MOVE_POINT",
+        vertexId: vertexId || baseVertices[currentIndex]?.id,
+        vertexCount: nextVertices.length,
+        polygonLayerCount: 1,
+        polylineLayerCount: 1,
+        valid: true,
+      });
+    }
     return { valid: true };
   };
 
@@ -280,7 +402,7 @@ const CreateGeofencePage = () => {
    * Delete an individual geofence vertex by stable ID (Requirements 1 - 13)
    */
   const handleDeleteVertex = (vertexIdToDelete) => {
-    if (isViewer) return;
+    if (isViewer || !isEditing) return;
     const targetId = vertexIdToDelete || selectedVertexId;
     if (!targetId) return;
 
@@ -314,22 +436,31 @@ const CreateGeofencePage = () => {
     }
 
     // Save initial state for cancel/undo if not already saved
-    if (!dragStartVerticesRef.current) {
-      dragStartVerticesRef.current = [...vertices];
-    }
-
     pushHistory(nextVertices);
+    if (import.meta.env?.DEV) {
+      console.debug("[GEOFENCE EDIT]", {
+        action: "DELETE_POINT",
+        vertexId: targetId,
+        vertexCount: nextVertices.length,
+        polygonLayerCount: 1,
+        polylineLayerCount: 1,
+        valid: true,
+      });
+    }
     setSelectedVertexId(null);
     setInlineErrorWithTimeout(null);
   };
 
   // Revert modifications made during edit mode (Requirement 18 & 29)
   const handleCancelEdit = () => {
-    if (dragStartVerticesRef.current) {
-      setVertices(dragStartVerticesRef.current);
-      dragStartVerticesRef.current = null;
+    if (editSnapshotVerticesRef.current) {
+      setVertices(editSnapshotVerticesRef.current.map((vertex) => ({ ...vertex })));
     }
+    dragStartVerticesRef.current = null;
+    editSnapshotVerticesRef.current = null;
+    setHistory([]);
     setIsEditing(false);
+    setIsClosed(true);
     setSelectedVertexId(null);
     setInlineError(null);
   };
@@ -372,26 +503,28 @@ const CreateGeofencePage = () => {
 
   const handleStartDraw = () => {
     if (isViewer) return;
+
+    if (hasExistingGeofence || vertices.length > 0) {
+      setInlineErrorWithTimeout("Clear the current geofence before drawing a new one.");
+      return;
+    }
+
     setIsDrawing(true);
     setIsEditing(false);
     setIsClosed(false);
   };
 
   const handleToggleEdit = () => {
-    if (isViewer) return;
+    if (isViewer || isEditing) return;
     if (vertices.length < 3) {
       showToast("Create a geofence with at least 3 vertices first.", "warning", "Geofence Incomplete");
       return;
     }
-    setIsEditing((prev) => {
-      const next = !prev;
-      if (next) {
-        dragStartVerticesRef.current = [...vertices];
-      } else {
-        dragStartVerticesRef.current = null;
-      }
-      return next;
-    });
+    editSnapshotVerticesRef.current = vertices.map((vertex) => ({ ...vertex }));
+    dragStartVerticesRef.current = null;
+    editSnapshotVerticesRef.current = null;
+    setHistory([]);
+    setIsEditing(true);
     setIsDrawing(false);
     setSelectedVertexId(null);
     setInlineError(null);
@@ -408,6 +541,7 @@ const CreateGeofencePage = () => {
     setSelectedVertexId(null);
     setInlineError(null);
     dragStartVerticesRef.current = null;
+    editSnapshotVerticesRef.current = null;
     if (currentProjectId) {
       clearGeofence(currentProjectId);
     }
@@ -458,6 +592,8 @@ const CreateGeofencePage = () => {
     });
 
     dragStartVerticesRef.current = null;
+    editSnapshotVerticesRef.current = null;
+    setHistory([]);
     setSelectedVertexId(null);
     setInlineError(null);
     setIsDrawing(false);
@@ -499,6 +635,7 @@ const CreateGeofencePage = () => {
           mapStyle={mapStyle}
           telemetry={telemetry}
           geofence={vertices}
+          geofenceEditHover={geofenceEditHover}
           isDrawingGeofence={isDrawing}
           isEditingGeofence={isEditing}
           isClosedGeofence={isClosed}
@@ -510,6 +647,7 @@ const CreateGeofencePage = () => {
           onGeofenceVertexDrag={handleVertexDrag}
           onGeofenceVertexDragEnd={handleVertexDragEnd}
           onMapClick={handleMapClick}
+          onGeofenceEditHover={handleMapHover}
           showMissionRoute={false}
           invalidClickPoint={invalidClickPoint}
           pageType="geofence"
@@ -561,7 +699,7 @@ const CreateGeofencePage = () => {
             {isDrawing
               ? "Drawing Mode (Click map to add points)"
               : isEditing
-              ? "Editing Mode (Drag numbered handles or delete)"
+              ? "EDIT MODE - Click near boundary to add; drag or delete points"
               : vertices.length >= 3 && isClosed
               ? "GEOFENCE: ACTIVE"
               : "No Geofence Set"}
@@ -577,14 +715,23 @@ const CreateGeofencePage = () => {
             type="button"
             disabled={isViewer}
             onClick={handleStartDraw}
+            aria-disabled={hasExistingGeofence || vertices.length > 0}
             className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition shrink-0 ${
               isViewer
                 ? "text-[#475569] cursor-not-allowed opacity-50"
+                : hasExistingGeofence || vertices.length > 0
+                ? "text-[#64748B] cursor-not-allowed opacity-60"
                 : isDrawing
                 ? "bg-[#35E0FF2B] text-[#35E0FF] border border-[#1EB8D8]"
                 : "text-[#94A3B8] hover:text-white hover:bg-[#111A24]"
             }`}
-            title={isViewer ? "Read-only in Viewer mode" : "Click on the map to place vertices sequentially"}
+            title={
+              isViewer
+                ? "Read-only in Viewer mode"
+                : hasExistingGeofence || vertices.length > 0
+                ? "Clear the active geofence before drawing a new one"
+                : "Click on the map to place vertices sequentially"
+            }
           >
             <Plus className="w-3.5 h-3.5" />
             <span className="whitespace-nowrap">Draw</span>
@@ -620,10 +767,10 @@ const CreateGeofencePage = () => {
                 ? "text-[#94A3B8] hover:text-white hover:bg-[#111A24]"
                 : "text-[#475569] cursor-not-allowed opacity-50"
             }`}
-            title={isViewer ? "Read-only in Viewer mode" : "Drag vertices or select to delete"}
+            title={isViewer ? "Read-only in Viewer mode" : isEditing ? "Click near an edge to add a point; drag or select vertices to edit" : "Edit the saved geofence"}
           >
             <Edit3 className="w-3.5 h-3.5" />
-            <span className="whitespace-nowrap">Edit</span>
+            <span className="whitespace-nowrap">{isEditing ? "Editing" : "Edit"}</span>
           </button>
 
           {/* Cancel Edit Button (Requirement 18 & 29) */}
@@ -650,7 +797,12 @@ const CreateGeofencePage = () => {
                 <button
                   type="button"
                   onClick={() => handleDeleteVertex(selectedVertexId)}
-                  className="flex items-center gap-1 px-2 py-0.5 rounded bg-[#EF444422] hover:bg-[#EF444444] border border-[#EF444466] text-[#FF6B6B] hover:text-[#FFA3A3] text-[10px] font-mono font-bold transition whitespace-nowrap cursor-pointer"
+                  disabled={!isEditing || isViewer}
+                  className={`flex items-center gap-1 px-2 py-0.5 rounded border text-[10px] font-mono font-bold transition whitespace-nowrap ${
+                    isEditing && !isViewer
+                      ? "bg-[#EF444422] hover:bg-[#EF444444] border-[#EF444466] text-[#FF6B6B] hover:text-[#FFA3A3] cursor-pointer"
+                      : "bg-[#1E293B] border-[#334155] text-[#64748B] cursor-not-allowed"
+                  }`}
                   title="Delete this vertex"
                 >
                   <Trash2 className="w-3 h-3 text-[#FF4141]" />

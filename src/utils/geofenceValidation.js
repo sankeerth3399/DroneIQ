@@ -23,6 +23,7 @@ export const MIN_VERTEX_DISTANCE_METERS = 2.0;
 export const EDGE_VERTEX_TOLERANCE_METERS = 2.0;
 export const MIN_EDGE_LENGTH_METERS = 2.0;
 export const MIN_GEOFENCE_AREA_M2 = 10.0;
+export const GEOFENCE_EDGE_INSERTION_TOLERANCE_METERS = 500;
 
 // Canonical Validation Reason Codes
 export const GeofenceValidationReasons = {
@@ -86,6 +87,43 @@ export function projectSinglePoint(point, origin) {
   const x = ((norm.lng - origin.lng) * Math.PI / 180) * R * cosLat;
   const y = ((norm.lat - origin.lat) * Math.PI / 180) * R;
   return { x, y, lat: norm.lat, lng: norm.lng };
+}
+
+/** Finds the closest polygon edge to a candidate coordinate in local meters. */
+export function findNearestPolygonEdge(
+  vertices = [],
+  candidate,
+  maxDistanceMeters = GEOFENCE_EDGE_INSERTION_TOLERANCE_METERS
+) {
+  const coords = vertices.map(normalizeCoord).filter(Boolean);
+  const point = normalizeCoord(candidate);
+  if (coords.length < 3 || !point || maxDistanceMeters < 0) return null;
+
+  let nearest = null;
+  for (let edgeIndex = 0; edgeIndex < coords.length; edgeIndex++) {
+    const start = coords[edgeIndex];
+    const end = coords[(edgeIndex + 1) % coords.length];
+    const origin = { lat: (start.lat + end.lat) / 2, lng: (start.lng + end.lng) / 2 };
+    const a = projectSinglePoint(start, origin);
+    const b = projectSinglePoint(end, origin);
+    const p = projectSinglePoint(point, origin);
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const lengthSquared = dx * dx + dy * dy;
+    if (lengthSquared === 0) continue;
+
+    const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / lengthSquared));
+    const distanceMeters = Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+    if (!nearest || distanceMeters < nearest.distanceMeters) {
+      nearest = {
+        edgeIndex,
+        insertionIndex: edgeIndex + 1,
+        distanceMeters,
+      };
+    }
+  }
+
+  return nearest && nearest.distanceMeters <= maxDistanceMeters ? nearest : null;
 }
 
 /**
@@ -709,6 +747,7 @@ export default {
   GeofenceValidationReasons,
   isVertexTooClose,
   isPointOnSegment,
+  findNearestPolygonEdge,
   segmentsIntersect,
   segmentsOverlap,
   hasDuplicateVertices,
