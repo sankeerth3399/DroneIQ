@@ -1,7 +1,86 @@
 import { API_BASE_URL, buildApiUrl } from "@/config/env.js"
+import { showAlert, AlertTypes, AlertCategories } from "@/services/notification/alertService.js"
 
 export const TOKEN_STORAGE_KEY = "aeronexus_jwt_token"
 export const USER_STORAGE_KEY = "aeronexus_user"
+
+/**
+ * Standardize HTTP status code to user-friendly titles and default messages
+ */
+function getErrorDetails(status, responseData) {
+  let safeMessage = ""
+  if (responseData && typeof responseData === "object") {
+    safeMessage = responseData.message || responseData.error || ""
+  } else if (typeof responseData === "string" && responseData.length < 160) {
+    safeMessage = responseData
+  }
+
+  // Prevent exposing raw backend stack traces or internal exception classes
+  if (
+    typeof safeMessage === "string" &&
+    (safeMessage.includes("at ") ||
+      safeMessage.includes("Exception") ||
+      safeMessage.includes("Error:") ||
+      safeMessage.length > 200)
+  ) {
+    safeMessage = safeMessage.split("\n")[0].substring(0, 140)
+  }
+
+  switch (status) {
+    case 400:
+      return {
+        title: "Invalid Request",
+        message: safeMessage || "The request could not be processed due to invalid parameters.",
+      }
+    case 401:
+      return {
+        title: "Session Expired",
+        message: "Please sign in again.",
+      }
+    case 403:
+      return {
+        title: "Access Denied",
+        message: "You do not have permission to access this resource.",
+      }
+    case 404:
+      return {
+        title: "Resource Not Found",
+        message: safeMessage || "The requested resource could not be found.",
+      }
+    case 409:
+      return {
+        title: "Operation Conflict",
+        message: safeMessage || "A conflict occurred with the current state of the resource.",
+      }
+    case 422:
+      return {
+        title: "Validation Failed",
+        message: safeMessage || "The submitted data failed validation requirements.",
+      }
+    case 429:
+      return {
+        title: "Too Many Requests",
+        message: safeMessage || "Rate limit reached. Please wait before retrying.",
+      }
+    case 500:
+      return {
+        title: "Server Error",
+        message: safeMessage || "An internal server error occurred.",
+      }
+    case 502:
+    case 503:
+    case 504:
+      return {
+        title: "Service Unavailable",
+        message: safeMessage || "Backend service is currently unavailable. Please try again shortly.",
+      }
+    default:
+      return {
+        title: "Request Failed",
+        message: safeMessage || `Request failed with status ${status}.`,
+      }
+  }
+}
 
 /**
  * Centralized REST API Client
@@ -9,6 +88,7 @@ export const USER_STORAGE_KEY = "aeronexus_user"
  * - Deduplicated endpoint URL resolution via buildApiUrl
  * - Differentiated 401 handling (login invalid credentials vs protected session expiration)
  * - Standardized error extraction matching DroneIQ Spring Boot contract
+ * - Direct integration with centralized alertService
  */
 export async function apiClient(endpoint, options = {}) {
   const url = buildApiUrl(endpoint)
@@ -38,7 +118,7 @@ export async function apiClient(endpoint, options = {}) {
     throw error
   }
 
-  // Check if this request is the login endpoint
+  // Check if this request is an auth endpoint (login, register)
   const isAuthEndpoint =
     typeof endpoint === "string" &&
     (endpoint.includes("/auth/login") || endpoint.includes("/auth/register"))
@@ -46,14 +126,13 @@ export async function apiClient(endpoint, options = {}) {
   // Handle 401 Unauthorized (Expired or Invalid JWT on PROTECTED endpoints only)
   if (response.status === 401) {
     if (!isAuthEndpoint && typeof window !== "undefined") {
-      window.dispatchEvent(
-        new CustomEvent("aeronexus:toast", {
-          detail: {
-            message: "Session expired. Please sign in again.",
-            type: "warning",
-          },
-        })
-      )
+      showAlert({
+        type: AlertTypes.WARNING,
+        title: "Session Expired",
+        message: "Please sign in again.",
+        key: "API_AUTH_SESSION_EXPIRED",
+        category: AlertCategories.SECURITY,
+      })
       window.dispatchEvent(new CustomEvent("aeronexus:unauthorized"))
     }
   }
@@ -84,14 +163,13 @@ export async function apiClient(endpoint, options = {}) {
     )
 
     if (!isSuppressed && typeof window !== "undefined") {
-      window.dispatchEvent(
-        new CustomEvent("aeronexus:toast", {
-          detail: {
-            message: "Access Denied: You do not have permission to perform this action.",
-            type: "error",
-          },
-        })
-      )
+      showAlert({
+        type: AlertTypes.ERROR,
+        title: "Access Denied",
+        message: "You do not have permission to perform this action.",
+        key: "API_ACCESS_DENIED",
+        category: AlertCategories.SECURITY,
+      })
       window.dispatchEvent(new CustomEvent("aeronexus:forbidden"))
     }
   }
@@ -109,6 +187,9 @@ export async function apiClient(endpoint, options = {}) {
   }
 
   if (!response.ok) {
+    // No action-result notifications for background API/server errors per Section 15 and 25
+
+
     const errorMessage =
       (responseData && typeof responseData === "object" && (responseData.message || responseData.error)) ||
       `Request failed with status ${response.status} (${response.statusText})`

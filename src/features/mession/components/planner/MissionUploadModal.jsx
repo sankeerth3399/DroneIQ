@@ -6,12 +6,16 @@ import {
   AlertTriangle,
   Loader2,
   Cpu,
+  Play,
 } from "lucide-react";
+import { showAlert, AlertTypes, AlertCategories } from "@/services/notification/alertService.js";
+import { useFlyConfirmation } from "@/hooks/useFlyConfirmation.js";
+import { flightControlService } from "@/services/control/flightControlService.js";
 
 /**
  * MissionUploadModal
  * Handles the upload of the waypoint flight plan to the drone autopilot.
- * Accurately communicates simulation mode vs real vehicle state.
+ * Provides explicit START MISSION action requiring confirmation.
  */
 export default function MissionUploadModal({
   isOpen,
@@ -24,6 +28,7 @@ export default function MissionUploadModal({
   const [progress, setProgress] = useState(0);
   const [uploadComplete, setUploadComplete] = useState(false);
   const timerRefs = useRef([]);
+  const { requestActionConfirmation } = useFlyConfirmation();
 
   const {
     missionName,
@@ -43,6 +48,7 @@ export default function MissionUploadModal({
 
   if (!isOpen) return null;
 
+  // Section 6: Do not automatically show notifications for mission loading/uploading
   const handleStartUpload = () => {
     setUploading(true);
     setProgress(15);
@@ -65,6 +71,47 @@ export default function MissionUploadModal({
     setProgress(0);
     setUploadComplete(false);
     onClose();
+  };
+
+  // Section 6: START MISSION requires confirmation + single result notification
+  const handleStartMission = () => {
+    handleResetAndClose();
+    requestActionConfirmation({
+      action: "START_MISSION",
+      title: "Confirm Start Mission",
+      message: `Initiate autonomous waypoint mission execution for ${droneId}?`,
+      confirmLabel: "Confirm Start Mission",
+      cancelLabel: "Cancel",
+      severity: "warning",
+      droneId,
+      missionName,
+      onConfirm: async () => {
+        try {
+          await flightControlService.sendFlightCommand({
+            commandType: "START_MISSION",
+            droneId,
+            parameters: { missionName },
+          });
+
+          showAlert({
+            type: AlertTypes.SUCCESS,
+            title: "START MISSION SUCCESS",
+            message: `Mission "${missionName || "Flight Plan"}" started for ${droneId}.`,
+            key: "START_MISSION_RESULT",
+            category: AlertCategories.MISSION,
+          });
+        } catch (err) {
+          const reason = err?.data?.message || err?.message || "Failed to start mission execution.";
+          showAlert({
+            type: AlertTypes.ERROR,
+            title: "START MISSION FAILED",
+            message: reason,
+            key: "START_MISSION_RESULT",
+            category: AlertCategories.MISSION,
+          });
+        }
+      },
+    });
   };
 
   return (
@@ -116,13 +163,21 @@ export default function MissionUploadModal({
               </p>
             </div>
 
-            <div className="pt-3">
+            <div className="pt-3 flex items-center gap-2.5">
               <button
                 type="button"
                 onClick={handleResetAndClose}
-                className="w-full py-2.5 rounded-xl text-xs font-mono font-bold text-[#06090E] bg-[#2FE089] hover:bg-[#52F0A0] shadow-[0_0_15px_rgba(47,224,137,0.4)] transition"
+                className="flex-1 py-2.5 rounded-xl text-xs font-mono font-semibold text-[#8E9EAA] bg-[#0E1520] border border-[#1A2633] hover:text-white transition"
               >
-                Close & Return to Map
+                Close & Return
+              </button>
+              <button
+                type="button"
+                onClick={handleStartMission}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-mono font-bold text-[#06090E] bg-[#2FE089] hover:bg-[#52F0A0] shadow-[0_0_15px_rgba(47,224,137,0.4)] transition"
+              >
+                <Play className="w-3.5 h-3.5 fill-current" />
+                <span>Start Mission</span>
               </button>
             </div>
           </div>

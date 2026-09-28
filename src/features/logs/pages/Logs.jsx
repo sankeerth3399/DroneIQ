@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import {
   FileText,
   Download,
@@ -16,6 +16,7 @@ import { MissionLogTable } from "../components/MissionLogTable.jsx"
 import { FlightLogsTable } from "../components/FlightLogsTable.jsx"
 import { GenericLogsTable } from "../components/GenericLogsTable.jsx"
 import { MissionLogDetailDrawer } from "../components/MissionLogDetailDrawer.jsx"
+import { showAlert, AlertTypes, AlertCategories } from "@/services/notification/alertService.js"
 
 const INITIAL_FILTERS = {
   search: "",
@@ -44,9 +45,38 @@ export const Logs = () => {
   // Export dropdown state
   const [showExportMenu, setShowExportMenu] = useState(false)
 
-  // Original handler for ULog downloads
+  useEffect(() => {
+    try {
+      logService.getAllLogs()
+    } catch {
+      showAlert({
+        type: AlertTypes.ERROR,
+        title: "Logs Unavailable",
+        message: "Unable to load system logs.",
+        category: AlertCategories.SYSTEM,
+        key: "LOGS_LOAD_ERROR",
+      })
+    }
+  }, [])
+
+  // Handler for ULog downloads
   const handleExportUlog = (logId) => {
-    alert(`Downloading telemetry binary log ${logId}.ulg / .tlog...`)
+    showAlert({
+      type: AlertTypes.INFO,
+      title: "Export Started",
+      message: `Downloading telemetry binary log ${logId}.ulg / .tlog...`,
+      category: AlertCategories.SYSTEM,
+      key: `EXPORT_${logId}`,
+    })
+    setTimeout(() => {
+      showAlert({
+        type: AlertTypes.SUCCESS,
+        title: "Logs Exported",
+        message: `Binary log ${logId}.ulg ready.`,
+        category: AlertCategories.SYSTEM,
+        key: `EXPORT_${logId}`,
+      })
+    }, 800)
   }
 
   // Fetch summary metrics
@@ -208,7 +238,31 @@ export const Logs = () => {
   // Export handlers
   const handleTriggerExport = (format) => {
     setShowExportMenu(false)
-    logService.exportLogs(format, activeCategory, currentDataset)
+    try {
+      showAlert({
+        type: AlertTypes.INFO,
+        title: "Export Started",
+        message: `Preparing ${format.toUpperCase()} export for ${activeCategory} logs...`,
+        category: AlertCategories.SYSTEM,
+        key: "LOGS_EXPORT",
+      })
+      logService.exportLogs(format, activeCategory, currentDataset)
+      showAlert({
+        type: AlertTypes.SUCCESS,
+        title: "Logs Exported",
+        message: `Successfully exported ${currentDataset.length} ${activeCategory} logs as ${format.toUpperCase()}.`,
+        category: AlertCategories.SYSTEM,
+        key: "LOGS_EXPORT",
+      })
+    } catch (err) {
+      showAlert({
+        type: AlertTypes.ERROR,
+        title: "Export Failed",
+        message: err?.message || "Failed to generate log export.",
+        category: AlertCategories.SYSTEM,
+        key: "LOGS_EXPORT",
+      })
+    }
   }
 
   return (

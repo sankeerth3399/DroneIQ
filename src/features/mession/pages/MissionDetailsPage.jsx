@@ -12,7 +12,6 @@ import {
   ShieldCheck,
   ShieldAlert,
   Trash2,
-  CheckCircle2,
   AlertCircle,
   Briefcase,
   User,
@@ -59,7 +58,6 @@ export const MissionDetailsPage = () => {
   const [isCreatingNew, setIsCreatingNew] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [searchFilter, setSearchFilter] = useState("");
-  const [saveToast, setSaveToast] = useState(false);
   const [lastLoadedProjectId, setLastLoadedProjectId] = useState(currentProjectId);
 
   // Synchronize form whenever currentProject changes during render
@@ -138,15 +136,9 @@ export const MissionDetailsPage = () => {
       const created = createProject(payload);
       setIsCreatingNew(false);
       selectProject(created.id);
-      setSaveToast("Project created and saved successfully.");
     } else if (currentProject) {
       updateProject(currentProject.id, payload);
-      setSaveToast("Project details saved successfully.");
     }
-
-    setTimeout(() => {
-      setSaveToast(false);
-    }, 3200);
   };
 
   // Save details and proceed to Geofence setup
@@ -195,16 +187,17 @@ export const MissionDetailsPage = () => {
       }
     }
 
-    setSaveToast("Launching Waypoint Planning...");
-    setTimeout(() => {
-      navigate("/missions/waypoints");
-    }, 280);
+    navigate("/missions/waypoints");
   };
 
   // Open an existing project from catalog
   const handleOpenProject = (projId) => {
-    setIsCreatingNew(false);
-    selectProject(projId);
+    try {
+      setIsCreatingNew(false);
+      selectProject(projId);
+    } catch (err) {
+      console.error("[MissionDetails] Failed to open project:", err);
+    }
   };
 
   // Filtered past projects list
@@ -238,18 +231,6 @@ export const MissionDetailsPage = () => {
 
   return (
     <div className="relative h-full min-h-0 w-full overflow-y-auto bg-[#06090E] p-3 sm:p-5 lg:p-6 select-none font-sans">
-      {/* Toast Confirmation */}
-      {saveToast && (
-        <div className="fixed top-5 right-5 z-50 flex items-center gap-2 px-3.5 py-2 rounded-lg bg-[#07241F] border border-[#10B981] text-[#10B981] text-xs font-mono shadow-2xl animate-in fade-in">
-          <CheckCircle2 className="w-4 h-4" />
-          <span>
-            {typeof saveToast === "string"
-              ? saveToast
-              : "Project saved. Launching Waypoint Planning..."}
-          </span>
-        </div>
-      )}
-
       {/* Delete Confirmation Modal */}
       {deleteConfirmId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">

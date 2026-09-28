@@ -4,6 +4,7 @@ import { droneService } from "@/services/api/droneService.js"
 import { projectService } from "@/services/projectService.js"
 import { userService } from "@/services/api/userService.js"
 import { useTelemetry } from "@/hooks/useTelemetry.js"
+import { showAlert, AlertTypes, AlertCategories } from "@/services/notification/alertService.js"
 
 const DEFAULT_FILTERS = {
   range: "Last 7 Days",
@@ -103,6 +104,13 @@ export function useAnalytics() {
         if (!active) return
         console.error("[useAnalytics] Loading error:", err)
         setError("Failed to load analytics data. Please retry.")
+        showAlert({
+          type: AlertTypes.ERROR,
+          title: "Analytics Unavailable",
+          message: "Unable to load analytics data.",
+          category: AlertCategories.SYSTEM,
+          key: "ANALYTICS_LOAD_ERROR",
+        })
       } finally {
         if (active) {
           setIsLoading(false)
@@ -161,6 +169,13 @@ export function useAnalytics() {
     } catch (err) {
       console.error("[useAnalytics] Refresh error:", err)
       setError("Failed to refresh analytics data.")
+      showAlert({
+        type: AlertTypes.ERROR,
+        title: "Analytics Unavailable",
+        message: "Unable to load analytics data.",
+        category: AlertCategories.SYSTEM,
+        key: "ANALYTICS_LOAD_ERROR",
+      })
     } finally {
       setIsRefreshing(false)
     }
@@ -203,7 +218,24 @@ export function useAnalytics() {
       window.print()
       return
     }
-    analyticsService.exportData(format, flightHistory, `aeronexus_${activeDashboard}_analytics`)
+    try {
+      analyticsService.exportData(format, flightHistory, `aeronexus_${activeDashboard}_analytics`)
+      showAlert({
+        type: AlertTypes.SUCCESS,
+        title: "Analytics Exported",
+        message: `Analytics data exported successfully as ${format.toUpperCase()}.`,
+        category: AlertCategories.SYSTEM,
+        key: "ANALYTICS_EXPORT",
+      })
+    } catch (err) {
+      showAlert({
+        type: AlertTypes.ERROR,
+        title: "Export Failed",
+        message: err?.message || "Failed to export analytics data.",
+        category: AlertCategories.SYSTEM,
+        key: "ANALYTICS_EXPORT",
+      })
+    }
   }
 
   return {

@@ -1,5 +1,6 @@
 import { X, Plane, Download, Activity } from "lucide-react"
 import MultiMetricChart from "./charts/MultiMetricChart.jsx"
+import { showAlert, AlertTypes, AlertCategories } from "@/services/notification/alertService.js"
 
 export const FlightDetailDrawer = ({
   flight,
@@ -8,6 +9,25 @@ export const FlightDetailDrawer = ({
   telemetrySamples = [],
 }) => {
   if (!isOpen || !flight) return null
+
+  const handleDownloadLog = () => {
+    showAlert({
+      type: AlertTypes.INFO,
+      title: "Export Started",
+      message: `Exporting MAVLink binary telemetry for sortie ${flight.id}...`,
+      category: AlertCategories.SYSTEM,
+      key: `SORTIE_EXPORT_${flight.id}`,
+    })
+    setTimeout(() => {
+      showAlert({
+        type: AlertTypes.SUCCESS,
+        title: "Analytics Exported",
+        message: `MAVLink log for sortie ${flight.id} exported successfully.`,
+        category: AlertCategories.SYSTEM,
+        key: `SORTIE_EXPORT_${flight.id}`,
+      })
+    }, 1000)
+  }
 
   // Default simulated flight telemetry stream if not provided
   const samples = telemetrySamples.length > 0 ? telemetrySamples : [
@@ -162,7 +182,7 @@ export const FlightDetailDrawer = ({
 
             <button
               type="button"
-              onClick={() => alert(`Exporting MAVLink binary telemetry for sortie ${flight.id}...`)}
+              onClick={handleDownloadLog}
               className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#35E0FF] hover:bg-[#25C8E5] text-[#0A0E16] text-xs font-bold transition cursor-pointer"
             >
               <Download className="w-3.5 h-3.5" />

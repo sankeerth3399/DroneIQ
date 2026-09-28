@@ -33,37 +33,44 @@ export const FlyActionConfirmProvider = ({ children }) => {
       const baseConfig = FLY_ACTION_CONFIG[actionKey] || {};
       const activeDroneId = options.droneId || selectedDroneId || telemetry?.droneId || "DRONE-001";
 
-      // 0. Camera / media actions execute immediately without opening any confirmation modal
-      const CAMERA_MEDIA_ACTIONS = new Set([
-        "START_RECORDING",
-        "STOP_RECORDING",
-        "RECORD",
-        "STOP_RECORD",
-        "CAPTURE_PHOTO",
-        "PHOTO",
-        "CAPTURE_SCREENSHOT",
-        "SCREENSHOT",
+      // Strict DroneIQ Confirmation Policy (Section 1 & 24)
+      // ONLY the following 6 actions require confirmation:
+      // 1. ARM
+      // 2. DISARM
+      // 3. TAKEOFF
+      // 4. LAND
+      // 5. START MISSION
+      // 6. GUIDED DROPDOWN / FLIGHT-MODE OPTIONS
+      const CONFIRMATION_ACTIONS = new Set([
+        "ARM",
+        "DISARM",
+        "FORCE_DISARM",
+        "TAKEOFF",
+        "LAND",
+        "EMERGENCY_LAND",
+        "START_MISSION",
+        "START MISSION",
+        "FLIGHT_MODE_CHANGE",
       ]);
 
-      if (CAMERA_MEDIA_ACTIONS.has(actionKey)) {
+      // All other actions execute normally without confirmation and without action notification (Section 14 & 26)
+      if (!CONFIRMATION_ACTIONS.has(actionKey)) {
         if (typeof options.onConfirm === "function") {
           try {
             const res = options.onConfirm();
             if (res && typeof res.catch === "function") {
               res.catch((err) => {
                 console.error(`[FlyConfirmation] Immediate ${actionKey} execution error:`, err);
-                showToast(`Error: ${err.message || "Action failed"}`, "error");
               });
             }
           } catch (err) {
             console.error(`[FlyConfirmation] Immediate ${actionKey} execution error:`, err);
-            showToast(`Error: ${err.message || "Action failed"}`, "error");
           }
         }
         return;
       }
 
-      // 1. Initial Permission Check
+      // 1. Initial Permission Check (Preserve RBAC per Section 21)
       const requiredPerm = options.requiredPermission || baseConfig.requiredPermission;
       if (requiredPerm && typeof hasPermission === "function" && !hasPermission(requiredPerm)) {
         const actionTitle = options.title || baseConfig.title || actionKey;
@@ -107,6 +114,8 @@ export const FlyActionConfirmProvider = ({ children }) => {
         cancelLabel,
         droneId: activeDroneId,
         currentState: options.currentState,
+        currentMode: options.currentMode,
+        newMode: options.newMode,
         targetAltitude,
         missionId: options.missionId,
         missionName: options.missionName,
@@ -134,7 +143,8 @@ export const FlyActionConfirmProvider = ({ children }) => {
   }, [dialogState]);
 
   /**
-   * Re-validate current drone connection / state, then execute command exactly once.
+   * Re-validate current drone state if hook provided, then execute command exactly once.
+   * Section 16: System events / background connection must NOT block flight actions on frontend.
    */
   const handleConfirm = useCallback(async () => {
     if (!dialogState || executingRef.current) return;
@@ -143,38 +153,7 @@ export const FlyActionConfirmProvider = ({ children }) => {
     setIsExecuting(true);
 
     try {
-      // 1. Re-validate latest drone connection state
-      const isConnected = Boolean(
-        telemetry?.droneConnected ||
-        connectionState === ConnectionState.AUTHENTICATED ||
-        isLive
-      );
-
-      // Actions that strictly require active drone connection
-      const flightOperationalActions = [
-        "ARM",
-        "DISARM",
-        "TAKEOFF",
-        "LAND",
-        "RTL",
-        "OVERRIDE_RTL",
-        "EMERGENCY_LAND",
-        "FORCE_DISARM",
-        "ABORT_MISSION",
-        "FLIGHT_MODE_CHANGE",
-        "GIMBAL_CENTER",
-        "GIMBAL_LEVEL_ROLL",
-      ];
-
-      if (flightOperationalActions.includes(dialogState.action)) {
-        if (!isConnected && telemetry?.status === "DISCONNECTED") {
-          showToast(`Action aborted: ${dialogState.droneId} is no longer connected.`, "error");
-          setDialogState(null);
-          return;
-        }
-      }
-
-      // 2. Custom state revalidation hook
+      // 1. Custom state revalidation hook if explicitly provided (e.g. already in mode)
       if (typeof dialogState.validateState === "function") {
         const validationResult = await dialogState.validateState();
         if (validationResult === false || (typeof validationResult === "string" && validationResult)) {
@@ -185,19 +164,18 @@ export const FlyActionConfirmProvider = ({ children }) => {
         }
       }
 
-      // 3. Execute authoritative command
+      // 2. Execute authoritative command
       if (typeof dialogState.onConfirm === "function") {
         await dialogState.onConfirm();
       }
     } catch (err) {
       console.error("[FlyConfirmation] Command execution error:", err);
-      showToast(`Command error: ${err.message || "Failed to execute"}`, "error");
     } finally {
       executingRef.current = false;
       setIsExecuting(false);
       setDialogState(null);
     }
-  }, [dialogState, telemetry, connectionState, isLive, showToast]);
+  }, [dialogState, showToast]);
 
   return (
     <FlyActionConfirmContext.Provider
@@ -223,6 +201,8 @@ export const FlyActionConfirmProvider = ({ children }) => {
           cancelLabel={dialogState.cancelLabel}
           droneId={dialogState.droneId}
           currentState={dialogState.currentState}
+          currentMode={dialogState.currentMode}
+          newMode={dialogState.newMode}
           targetAltitude={dialogState.targetAltitude}
           missionId={dialogState.missionId}
           missionName={dialogState.missionName}

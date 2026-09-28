@@ -16,8 +16,8 @@ import {
 import { useAuth } from "@/hooks/useAuth.js"
 import { Roles } from "@/auth/roleConfig.js"
 import { Permissions } from "@/auth/permissions.js"
-import { useTelemetry } from "@/hooks/useTelemetry.js"
 import { API_BASE_URL, WS_BASE_URL } from "@/config/env.js"
+import { showAlert, AlertTypes, AlertCategories } from "@/services/notification/alertService.js"
 
 const STORAGE_KEY_SYS_CONFIG = "aeronexus_system_config"
 
@@ -36,7 +36,6 @@ const DEFAULT_CONFIG = {
 
 export const SettingsPage = () => {
   const { hasPermission, role: currentRole } = useAuth()
-  const { showToast } = useTelemetry()
 
   const canSystemConfig = hasPermission(Permissions.SYSTEM_CONFIG) || currentRole === Roles.SUPER_ADMIN
   const canManageUsers = hasPermission(Permissions.INVITE_USERS) || currentRole === Roles.FLEET_MANAGER || currentRole === Roles.SUPER_ADMIN
@@ -58,29 +57,73 @@ export const SettingsPage = () => {
   const handleSaveSystemConfig = (e) => {
     e.preventDefault()
     if (!canSystemConfig) {
-      showToast("Access Denied: Super Admin permissions required to modify system configuration.", "error")
+      showAlert({
+        type: AlertTypes.ERROR,
+        title: "Access Denied",
+        message: "You do not have permission to modify system configuration.",
+        category: AlertCategories.SECURITY,
+      })
+      return
+    }
+
+    const rth = parseInt(sysConfig.batteryRthThreshold, 10)
+    if (isNaN(rth) || rth < 5 || rth > 50) {
+      showAlert({
+        type: AlertTypes.WARNING,
+        title: "Invalid Configuration",
+        message: "Battery RTH threshold must be between 5% and 50%.",
+        category: AlertCategories.SYSTEM,
+      })
       return
     }
 
     try {
       localStorage.setItem(STORAGE_KEY_SYS_CONFIG, JSON.stringify(sysConfig))
       setSysSaved(true)
-      showToast("System configurations persisted successfully.", "success")
+      showAlert({
+        type: AlertTypes.SUCCESS,
+        title: "Settings Saved",
+        message: "System configuration saved successfully.",
+        category: AlertCategories.SYSTEM,
+      })
       setTimeout(() => setSysSaved(false), 2500)
     } catch (err) {
       console.error("[SettingsPage] Save error:", err)
-      showToast("Failed to save settings to local storage.", "error")
+      showAlert({
+        type: AlertTypes.ERROR,
+        title: "Settings Save Failed",
+        message: "Failed to persist settings to storage.",
+        category: AlertCategories.SYSTEM,
+      })
     }
   }
 
   const handleResetDefaults = () => {
-    if (!canSystemConfig) return
+    if (!canSystemConfig) {
+      showAlert({
+        type: AlertTypes.ERROR,
+        title: "Access Denied",
+        message: "You do not have permission to reset settings.",
+        category: AlertCategories.SECURITY,
+      })
+      return
+    }
     setSysConfig(DEFAULT_CONFIG)
     try {
       localStorage.setItem(STORAGE_KEY_SYS_CONFIG, JSON.stringify(DEFAULT_CONFIG))
-      showToast("Configurations reset to default factory parameters.", "info")
+      showAlert({
+        type: AlertTypes.INFO,
+        title: "Settings Reset",
+        message: "Configurations reset to default factory parameters.",
+        category: AlertCategories.SYSTEM,
+      })
     } catch {
-      // Ignore
+      showAlert({
+        type: AlertTypes.ERROR,
+        title: "Settings Save Failed",
+        message: "Failed to reset settings in storage.",
+        category: AlertCategories.SYSTEM,
+      })
     }
   }
 
@@ -96,15 +139,29 @@ export const SettingsPage = () => {
 
       if (res && res.ok) {
         setTestState({ testing: false, status: "success", message: "API Gateway Online & Responding (200 OK)" })
-        showToast("Backend connection verified successfully.", "success")
+        showAlert({
+          type: AlertTypes.SUCCESS,
+          title: "Connection Verified",
+          message: "API Gateway is online and responding.",
+          category: AlertCategories.SYSTEM,
+        })
       } else {
-        // Even if mock server / offline, report healthy fallback
-        setTestState({ testing: false, status: "warning", message: "API reached with status or local proxy fallback" })
-        showToast("Backend connection reachable.", "info")
+        setTestState({ testing: false, status: "warning", message: "API Gateway Simulated Mode / Offline" })
+        showAlert({
+          type: AlertTypes.WARNING,
+          title: "Connection Warning",
+          message: "API Gateway offline or in simulated mode.",
+          category: AlertCategories.SYSTEM,
+        })
       }
     } catch (err) {
-      setTestState({ testing: false, status: "error", message: `Connection failed: ${err.message}` })
-      showToast("Connection test failed.", "warning")
+      setTestState({ testing: false, status: "error", message: `Connection Failed: ${err.message}` })
+      showAlert({
+        type: AlertTypes.ERROR,
+        title: "Connection Error",
+        message: "Unable to reach the server. Please try again.",
+        category: AlertCategories.SYSTEM,
+      })
     }
 
     setTimeout(() => {

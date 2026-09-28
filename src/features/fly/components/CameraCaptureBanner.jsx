@@ -86,12 +86,6 @@ const CameraCaptureBanner = ({
           document.body.appendChild(a)
           a.click()
           document.body.removeChild(a)
-
-          onCaptureToast?.({
-            type: "photo",
-            title: "Drone Photo Captured",
-            message: `${filename} (Still frame from live stream)`,
-          })
         } catch {
           try {
             const a = document.createElement("a")
@@ -100,38 +94,17 @@ const CameraCaptureBanner = ({
             document.body.appendChild(a)
             a.click()
             document.body.removeChild(a)
-
-            onCaptureToast?.({
-              type: "photo",
-              title: "Drone Photo Captured",
-              message: `${filename} (Still frame from live stream)`,
-            })
           } catch (downloadErr) {
             console.error("[CameraCapture] Photo export failed:", downloadErr)
-            onCaptureToast?.({
-              type: "error",
-              title: "Photo Capture Failed",
-              message: downloadErr?.message || "Failed to save photo snapshot",
-            })
           }
         }
       }
 
       img.onerror = (err) => {
         console.error("[CameraCapture] Drone camera stream frame unavailable:", err)
-        onCaptureToast?.({
-          type: "error",
-          title: "Photo Capture Failed",
-          message: "Drone camera stream frame unavailable",
-        })
       }
     } catch (err) {
       console.error("[CameraCapture] Photo capture error:", err)
-      onCaptureToast?.({
-        type: "error",
-        title: "Photo Capture Failed",
-        message: err?.message || "Unable to capture photo",
-      })
     }
   }
 
@@ -157,19 +130,8 @@ const CameraCaptureBanner = ({
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
-
-      onCaptureToast?.({
-        type: "screenshot",
-        title: "Screen Capture Saved",
-        message: `${filename} (Full operator application UI)`,
-      })
     } catch (err) {
       console.error("[CameraCapture] Screenshot capture failed:", err)
-      onCaptureToast?.({
-        type: "error",
-        title: "Screenshot Failed",
-        message: err?.message || "Failed to capture application screenshot",
-      })
     }
   }
 
@@ -180,14 +142,8 @@ const CameraCaptureBanner = ({
       if (!isRecording) {
         setRecordSeconds(0)
         setIsRecording(true)
-        onCaptureToast?.({
-          type: "video",
-          title: "Drone Feed Recording Started",
-          message: "Recording live drone stream in 4K 60FPS (H.265)",
-        })
       } else {
         setIsRecording(false)
-        const durationStr = formatTimer(recordSeconds)
         const timestamp = new Date().toISOString().replace(/[-:T.]/g, "").slice(0, 14)
         const filename = `DRONE_RECORDING_${timestamp}.mp4`
 
@@ -201,20 +157,9 @@ const CameraCaptureBanner = ({
         a.click()
         document.body.removeChild(a)
         URL.revokeObjectURL(url)
-
-        onCaptureToast?.({
-          type: "video",
-          title: "Drone Video Saved",
-          message: `${filename} (${durationStr} • ${(recordSeconds * 5.8).toFixed(1)} MB)`,
-        })
       }
     } catch (err) {
       console.error("[CameraCapture] Recording error:", err)
-      onCaptureToast?.({
-        type: "error",
-        title: "Recording Error",
-        message: err?.message || "Failed to toggle video recording",
-      })
     }
   }
 

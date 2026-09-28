@@ -8,6 +8,7 @@ import {
   isPointInsideGeofence,
   validateMissionAgainstGeofence,
 } from "@/utils/geofence.js";
+import { validateGeofencePolygon } from "@/utils/geofenceValidation.js";
 
 // Planner HUD components
 import MissionPlanningToolbar from "@/features/mession/components/planner/MissionPlanningToolbar.jsx";
@@ -27,7 +28,7 @@ import MissionStorageModal from "@/features/mession/components/planner/MissionSt
 import MissionUploadModal from "@/features/mession/components/planner/MissionUploadModal.jsx";
 import ClearMissionModal from "@/features/mession/components/planner/ClearMissionModal.jsx";
 
-import { AlertTriangle, CheckCircle2, ShieldAlert, FolderKanban, ArrowRight } from "lucide-react";
+import { ShieldAlert, FolderKanban, ArrowRight } from "lucide-react";
 
 const mapStyleOptions = [
   { id: "normal", label: "Normal Map" },
@@ -76,24 +77,79 @@ const WaypointPlanningPage = () => {
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [isClearOpen, setIsClearOpen] = useState(false);
 
-  // Rejection & warning notifications
-  const [notification, setNotification] = useState(null);
+  // Rejection & warning state
   const [invalidClickPoint, setInvalidClickPoint] = useState(null);
 
   // Cache previous waypoint positions for safe revert on boundary drag breach
   const previousPositionsRef = useRef(new Map());
 
-  // Active geofence coordinates from current project
-  const geofenceCoords = useMemo(() => {
+  // Active geofence coordinates from current project validated against geometry rules
+  const geofenceStatus = useMemo(() => {
     const g = currentProject?.geofence;
-    if (!g) return [];
-    if (Array.isArray(g.polygon) && g.polygon.length >= 3) return g.polygon;
-    if (Array.isArray(g.coordinates) && g.coordinates.length >= 3) return g.coordinates;
-    if (Array.isArray(g) && g.length >= 3) return g;
-    return [];
+    if (!g) {
+      return {
+        hasGeofence: false,
+        isValid: false,
+        coords: [],
+        reason: "NO_GEOFENCE",
+        message: "Create and save a geofence before planning waypoints. Waypoints cannot be defined without a configured boundary.",
+      };
+    }
+    const raw =
+      Array.isArray(g.vertices) && g.vertices.length > 0
+        ? g.vertices
+        : Array.isArray(g.polygon) && g.polygon.length > 0
+        ? g.polygon
+        : Array.isArray(g.coordinates) && g.coordinates.length > 0
+        ? g.coordinates
+        : Array.isArray(g) && g.length > 0
+        ? g
+        : [];
+
+    if (raw.length === 0) {
+      return {
+        hasGeofence: false,
+        isValid: false,
+        coords: [],
+        reason: "NO_GEOFENCE",
+        message: "Create and save a geofence before planning waypoints. Waypoints cannot be defined without a configured boundary.",
+      };
+    }
+
+    if (raw.length < 3) {
+      return {
+        hasGeofence: true,
+        isValid: false,
+        coords: [],
+        reason: "INSUFFICIENT_VERTICES",
+        message: "Saved geofence is invalid: at least 3 vertices are required.",
+      };
+    }
+
+    const validation = validateGeofencePolygon(raw);
+    if (!validation.valid) {
+      return {
+        hasGeofence: true,
+        isValid: false,
+        coords: [],
+        reason: validation.reason,
+        message: `Saved geofence is invalid and must be corrected before waypoint planning: ${validation.message}`,
+      };
+    }
+
+    return {
+      hasGeofence: true,
+      isValid: true,
+      coords: raw,
+    };
   }, [currentProject?.geofence]);
 
-  const hasActiveGeofence = geofenceCoords.length >= 3;
+  const geofenceCoords = useMemo(
+    () => (geofenceStatus.isValid ? geofenceStatus.coords : []),
+    [geofenceStatus]
+  );
+  const hasActiveGeofence = geofenceStatus.isValid;
+  const isGeofenceInvalid = geofenceStatus.hasGeofence && !geofenceStatus.isValid;
 
   // Track waypoint positions in ref
   useEffect(() => {
@@ -199,19 +255,11 @@ const WaypointPlanningPage = () => {
     saveMission,
   ]);
 
-  const showToast = (message, type = "info") => {
-    setNotification({ message, type });
-    setTimeout(() => {
-      setNotification((curr) => (curr?.message === message ? null : curr));
-    }, 4000);
-  };
-
   // Map Click Listener for Waypoint Placement with Strict Geofence Check
   const handleMapClick = (coords) => {
     if (isViewer || !canCreate) return;
 
     if (!hasActiveGeofence) {
-      showToast("GEOFENCE REQUIRED — Create and save a geofence before planning waypoints.", "error");
       return;
     }
 
@@ -220,7 +268,6 @@ const WaypointPlanningPage = () => {
     const isInside = isPointInsideGeofence(coords, geofenceCoords);
     if (!isInside) {
       setInvalidClickPoint({ lat: coords.lat, lng: coords.lng, key: Date.now() });
-      showToast("WAYPOINT OUTSIDE GEOFENCE — Select a point inside the configured flight area.", "error");
       setTimeout(() => {
         setInvalidClickPoint(null);
       }, 1800);
@@ -245,7 +292,6 @@ const WaypointPlanningPage = () => {
         planner.updateWaypointCoordinates(id, prevPos);
         planner.finishWaypointDrag(id, prevPos);
       }
-      showToast("GEOFENCE REQUIRED — Create and save a geofence before planning waypoints.", "error");
       return;
     }
 
@@ -261,7 +307,6 @@ const WaypointPlanningPage = () => {
         planner.updateWaypointCoordinates(id, prevPos);
         planner.finishWaypointDrag(id, prevPos);
       }
-      showToast("WAYPOINT OUTSIDE GEOFENCE — Position reverted.", "warning");
       return;
     }
 
@@ -336,13 +381,17 @@ const WaypointPlanningPage = () => {
             </div>
             <div className="space-y-1.5">
               <div className="text-[10px] font-mono font-bold tracking-widest text-[#EF4444] uppercase">
-                FLIGHT AREA INTERLOCK ● RESTRICTED
+                {isGeofenceInvalid
+                  ? "GEOMETRY INTEGRITY INTERLOCK ● RESTRICTED"
+                  : "FLIGHT AREA INTERLOCK ● RESTRICTED"}
               </div>
               <h2 className="text-lg font-bold text-[#EEF4F8] font-sans">
-                GEOFENCE REQUIRED
+                {isGeofenceInvalid ? "INVALID GEOFENCE DETECTED" : "GEOFENCE REQUIRED"}
               </h2>
               <p className="text-xs font-mono text-[#8E9EAA] leading-relaxed">
-                Create and save a geofence before planning waypoints. Waypoints cannot be defined without a configured boundary.
+                {isGeofenceInvalid
+                  ? (geofenceStatus.message || "Saved geofence is invalid and must be corrected before waypoint planning.")
+                  : "Create and save a geofence before planning waypoints. Waypoints cannot be defined without a configured boundary."}
               </p>
             </div>
             <div className="pt-2 flex flex-col gap-2.5">
@@ -351,7 +400,7 @@ const WaypointPlanningPage = () => {
                 onClick={() => navigate("/missions/geofence")}
                 className="w-full py-3 px-4 rounded-xl text-xs font-mono font-bold text-[#06090E] bg-[#35E0FF] hover:bg-[#20CAEC] transition flex items-center justify-center gap-2 shadow-[0_0_16px_rgba(53,224,255,0.4)]"
               >
-                <span>CREATE GEOFENCE NOW</span>
+                <span>{isGeofenceInvalid ? "CORRECT GEOFENCE IN EDITOR" : "CREATE GEOFENCE NOW"}</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
               <button
@@ -439,7 +488,7 @@ const WaypointPlanningPage = () => {
             setIsStorageOpen(true);
           }}
           onOpenUpload={() => setIsUploadOpen(true)}
-          onOpenClear={() => setIsClearOpen(true)}
+          onOpenClear={() => planner.clearMission()}
         />
       </div>
 
@@ -502,7 +551,9 @@ const WaypointPlanningPage = () => {
             waypoint={planner.selectedWaypoint}
             validateCoordinates={(lat, lng) => isPointInsideGeofence({ lat, lng }, geofenceCoords)}
             onUpdate={planner.updateWaypoint}
-            onDelete={planner.deleteWaypoint}
+            onDelete={(id) => {
+              planner.deleteWaypoint(id);
+            }}
             onClose={() => planner.setSelectedWaypointId(null)}
           />
         </div>
@@ -517,7 +568,9 @@ const WaypointPlanningPage = () => {
           selectedWaypointId={planner.selectedWaypointId}
           onSelectWaypoint={(id) => planner.setSelectedWaypointId(id)}
           onMoveOrder={planner.moveWaypointOrder}
-          onDeleteWaypoint={planner.deleteWaypoint}
+          onDeleteWaypoint={(id) => {
+            planner.deleteWaypoint(id);
+          }}
         />
       </div>
 
@@ -580,33 +633,12 @@ const WaypointPlanningPage = () => {
       <ClearMissionModal
         isOpen={isClearOpen}
         onClose={() => setIsClearOpen(false)}
-        onConfirm={planner.clearMission}
+        onConfirm={() => {
+          planner.clearMission();
+          setIsClearOpen(false);
+        }}
         itemCount={planner.items.length}
       />
-
-      {/* ==================== TOAST / REJECTION BANNER ==================== */}
-      {notification && (
-        <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
-          <div
-            className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl backdrop-blur-md shadow-2xl font-mono text-xs font-semibold border ${
-              notification.type === "success"
-                ? "bg-[#062419DD] border-[#2FE089] text-[#2FE089]"
-                : notification.type === "warning"
-                ? "bg-[#271E06DD] border-[#F59E0B] text-[#FBBF24]"
-                : notification.type === "error"
-                ? "bg-[#2B0E12DD] border-[#EF4444] text-[#F87171]"
-                : "bg-[#0B1A2ADD] border-[#35E0FF] text-[#35E0FF]"
-            }`}
-          >
-            {notification.type === "error" || notification.type === "warning" ? (
-              <AlertTriangle className="w-4 h-4 shrink-0" />
-            ) : (
-              <CheckCircle2 className="w-4 h-4 shrink-0" />
-            )}
-            <span>{notification.message}</span>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

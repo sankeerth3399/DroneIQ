@@ -16,7 +16,7 @@ export const VirtualJoystick = ({
   axisYLabel = "Y",
   size = 170,
   knobSize = 54,
-  deadzone = 0.05,
+  deadzone = 0.08,
   springX = true,
   springY = true,
   defaultY = 0,
@@ -55,7 +55,7 @@ export const VirtualJoystick = ({
     if (Math.abs(raw) < deadzone) return 0
     const sign = raw > 0 ? 1 : -1
     const scaled = (Math.abs(raw) - deadzone) / (1 - deadzone)
-    return Number((sign * Math.min(1, scaled)).toFixed(2))
+    return Number((sign * Math.min(1, Math.max(0, scaled))).toFixed(3))
   }, [deadzone])
 
   const calculatePosition = useCallback((clientX, clientY) => {
@@ -65,26 +65,38 @@ export const VirtualJoystick = ({
     const centerX = rect.left + rect.width / 2
     const centerY = rect.top + rect.height / 2
 
-    const dx = clientX - centerX
-    const dy = clientY - centerY
+    let dx = clientX - centerX
+    let dy = clientY - centerY
 
-    const distance = Math.hypot(dx, dy)
-    const angle = Math.atan2(dy, dx)
+    const radius = Math.min(rect.width, rect.height) / 2
+    const distance = Math.sqrt(dx * dx + dy * dy)
 
-    // Clamp distance within circular boundary
-    const clampedDistance = Math.min(distance, maxRadius)
-    const px = Math.cos(angle) * clampedDistance
-    const py = Math.sin(angle) * clampedDistance
+    // Circular clamping: clamp vector length to radius
+    if (distance > radius && distance > 0) {
+      dx = (dx / distance) * radius
+      dy = (dy / distance) * radius
+    }
 
-    // Screen Y is inverted: moving up is negative dy, but positive control input
-    const rawX = px / maxRadius
-    const rawY = -py / maxRadius
+    // Normalized screen coordinates: X [-1=left, 1=right], Y [-1=down, 1=up]
+    const rawX = dx / radius
+    const rawY = -(dy / radius)
 
-    const normX = processAxis(rawX)
-    const normY = processAxis(rawY)
+    // Deadzone processing
+    let normX = processAxis(rawX)
+    let normY = processAxis(rawY)
+
+    if (Math.abs(rawX) < deadzone && Math.abs(rawY) < deadzone) {
+      normX = 0
+      normY = 0
+    }
+
+    // Visual knob displacement: travel bounded so knob thumb remains inside base
+    const maxKnobTravel = (size - knobSize) / 2
+    const px = (dx / radius) * maxKnobTravel
+    const py = (dy / radius) * maxKnobTravel
 
     return { px, py, normX, normY }
-  }, [maxRadius, processAxis])
+  }, [size, knobSize, processAxis, deadzone])
 
   // Clean up any global listeners on unmount
   useEffect(() => {
@@ -96,83 +108,136 @@ export const VirtualJoystick = ({
     }
   }, [])
 
+  const updatePosition = useCallback((clientX, clientY) => {
+    const pos = calculatePosition(clientX, clientY)
+    posRef.current = pos
+    setKnobPos({ x: pos.px, y: pos.py })
+    setNormalized({ x: pos.normX, y: pos.normY })
+    onChangeRef.current?.({ x: pos.normX, y: pos.normY })
+  }, [calculatePosition])
+
   const handlePointerDown = (e) => {
-    // Only capture primary touch/click per stick
+    // Only capture primary pointer per stick
     if (activePointerIdRef.current !== null) return
 
     e.preventDefault()
     e.stopPropagation()
 
+    const targetElement = e.currentTarget
     const pointerId = e.pointerId
     activePointerIdRef.current = pointerId
     setIsDragging(true)
     onActiveChangeRef.current?.(true)
 
-    const updatePosition = (clientX, clientY) => {
-      const pos = calculatePosition(clientX, clientY)
-      posRef.current = pos
-      setKnobPos({ x: pos.px, y: pos.py })
-      setNormalized({ x: pos.normX, y: pos.normY })
-      onChangeRef.current?.({ x: pos.normX, y: pos.normY })
+    if (import.meta.env?.DEV) {
+      console.log(`[JOYSTICK POINTER DOWN] ${label.toLowerCase()} pointerId:${pointerId} clientX:${e.clientX} clientY:${e.clientY}`);
+    }
+
+    try {
+      targetElement.setPointerCapture(pointerId)
+    } catch {
+      // Safe fallback
     }
 
     updatePosition(e.clientX, e.clientY)
-
-    const handleGlobalMove = (moveEvt) => {
-      if (activePointerIdRef.current !== moveEvt.pointerId) return
-      moveEvt.preventDefault()
-      updatePosition(moveEvt.clientX, moveEvt.clientY)
-    }
-
-    const handleGlobalRelease = (releaseEvt) => {
-      if (activePointerIdRef.current !== releaseEvt.pointerId && releaseEvt.type !== "blur") return
-
-      if (cleanupsRef.current) {
-        cleanupsRef.current()
-        cleanupsRef.current = null
-      }
-
-      activePointerIdRef.current = null
-      setIsDragging(false)
-      onActiveChangeRef.current?.(false)
-
-      // Spring return to neutral center
-      const nextPx = springX ? 0 : posRef.current.px
-      const nextPy = springY ? -defaultY * maxRadius : posRef.current.py
-      const nextNormX = springX ? 0 : posRef.current.normX
-      const nextNormY = springY ? defaultY : posRef.current.normY
-
-      posRef.current = { px: nextPx, py: nextPy, normX: nextNormX, normY: nextNormY }
-      setKnobPos({ x: nextPx, y: nextPy })
-      setNormalized({ x: nextNormX, y: nextNormY })
-      onChangeRef.current?.({ x: nextNormX, y: nextNormY })
-    }
-
-    const removeListeners = () => {
-      window.removeEventListener("pointermove", handleGlobalMove)
-      window.removeEventListener("pointerup", handleGlobalRelease)
-      window.removeEventListener("pointercancel", handleGlobalRelease)
-      window.removeEventListener("blur", handleGlobalRelease)
-    }
-
-    cleanupsRef.current = removeListeners
-
-    window.addEventListener("pointermove", handleGlobalMove, { passive: false })
-    window.addEventListener("pointerup", handleGlobalRelease)
-    window.addEventListener("pointercancel", handleGlobalRelease)
-    window.addEventListener("blur", handleGlobalRelease)
   }
+
+  const handlePointerMove = (e) => {
+    if (activePointerIdRef.current !== e.pointerId) return
+
+    e.preventDefault()
+    e.stopPropagation()
+
+    if (import.meta.env?.DEV) {
+      console.log(`[JOYSTICK POINTER MOVE] ${label.toLowerCase()} pointerId:${e.pointerId} clientX:${e.clientX} clientY:${e.clientY}`);
+    }
+
+    updatePosition(e.clientX, e.clientY)
+  }
+
+  const handlePointerUp = (e) => {
+    if (activePointerIdRef.current !== e.pointerId) return
+
+    e.preventDefault()
+    e.stopPropagation()
+
+    if (import.meta.env?.DEV) {
+      console.log(`[JOYSTICK POINTER UP] ${label.toLowerCase()} pointerId:${e.pointerId}`);
+    }
+
+    try {
+      if (e.currentTarget?.hasPointerCapture?.(e.pointerId)) {
+        e.currentTarget.releasePointerCapture(e.pointerId)
+      }
+    } catch {
+      // Safe fallback
+    }
+
+    activePointerIdRef.current = null
+    setIsDragging(false)
+    onActiveChangeRef.current?.(false)
+
+    // Return knob to center on release according to spring configuration
+    const finalNormX = springX ? 0 : posRef.current.normX
+    const finalNormY = springY ? 0 : posRef.current.normY
+    const finalPx = springX ? 0 : posRef.current.px
+    const finalPy = springY ? 0 : posRef.current.py
+
+    posRef.current = { px: finalPx, py: finalPy, normX: finalNormX, normY: finalNormY }
+    setKnobPos({ x: finalPx, y: finalPy })
+    setNormalized({ x: finalNormX, y: finalNormY })
+    onChangeRef.current?.({ x: finalNormX, y: finalNormY })
+  }
+
+  const handlePointerCancel = (e) => {
+    handlePointerUp(e)
+  }
+
+  const handleLostPointerCapture = (e) => {
+    if (activePointerIdRef.current === e.pointerId) {
+      handlePointerUp(e)
+    }
+  }
+
+  // Safety cleanup if window blurs or unmounts while dragging
+  useEffect(() => {
+    const handleWindowBlur = () => {
+      if (activePointerIdRef.current !== null) {
+        activePointerIdRef.current = null
+        setIsDragging(false)
+        onActiveChangeRef.current?.(false)
+        posRef.current = { px: 0, py: 0, normX: 0, normY: 0 }
+        setKnobPos({ x: 0, y: 0 })
+        setNormalized({ x: 0, y: 0 })
+        onChangeRef.current?.({ x: 0, y: 0 })
+      }
+    }
+    window.addEventListener("blur", handleWindowBlur)
+    return () => window.removeEventListener("blur", handleWindowBlur)
+  }, [])
 
   return (
     <div
       ref={containerRef}
+      id={`virtual-joystick-base-${label.toLowerCase()}`}
       className={`relative flex items-center justify-center rounded-full cursor-grab active:cursor-grabbing border transition-all duration-200 select-none touch-none ${
         isDragging
           ? "border-[#35E0FF] bg-[#0A0E16E6] shadow-[0_0_24px_rgba(53,224,255,0.35)] ring-1 ring-[#35E0FF4D]"
           : "border-[#203342] bg-[#0A0E16B3] shadow-[0_4px_20px_rgba(0,0,0,0.65)] backdrop-blur-md hover:border-[#35E0FF66] hover:shadow-[0_0_15px_rgba(53,224,255,0.15)]"
       }`}
-      style={{ width: `${size}px`, height: `${size}px` }}
+      style={{
+        width: `${size}px`,
+        height: `${size}px`,
+        touchAction: "none",
+        userSelect: "none",
+        WebkitUserSelect: "none",
+        pointerEvents: "auto",
+      }}
       onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerCancel}
+      onLostPointerCapture={handleLostPointerCapture}
       role="slider"
       aria-label={label}
       aria-valuemin={-1}

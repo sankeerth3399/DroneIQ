@@ -17,10 +17,11 @@ import { Roles, ROLE_METADATA } from "@/auth/roleConfig.js"
 import { Permissions } from "@/auth/permissions.js"
 import { useTelemetry } from "@/hooks/useTelemetry.js"
 import { userService } from "@/services/api/userService.js"
+import { showAlert, AlertTypes, AlertCategories } from "@/services/notification/alertService.js"
 
 export const UsersPage = () => {
   const { user: currentUser, role: currentRole, hasPermission } = useAuth()
-  const { showToast, clearToast, toast } = useTelemetry()
+  const { clearToast, toast } = useTelemetry()
 
   const canInvite = hasPermission(Permissions.INVITE_USERS)
   const canManageRoles = hasPermission(Permissions.MANAGE_USERS) || currentRole === Roles.SUPER_ADMIN
@@ -97,11 +98,15 @@ export const UsersPage = () => {
     try {
       const data = await userService.getUsers()
       setUsers(Array.isArray(data) ? data : [])
-      showToast("Operator directory refreshed.", "info")
     } catch (err) {
       console.error("[UsersPage] Failed to refresh users:", err)
       setError("Failed to load operator directory. Please verify backend connection.")
-      showToast("Could not load users directory.", "error")
+      showAlert({
+        type: AlertTypes.ERROR,
+        title: "Load Failed",
+        message: "Could not load users directory.",
+        category: AlertCategories.USER,
+      })
     } finally {
       setIsRefreshing(false)
     }
@@ -111,7 +116,12 @@ export const UsersPage = () => {
   const handleCreateUser = async (e) => {
     e.preventDefault()
     if (!inviteForm.username.trim() || !inviteForm.email.trim()) {
-      showToast("Username and Email are required.", "warning")
+      showAlert({
+        type: AlertTypes.WARNING,
+        title: "Validation Failed",
+        message: "Username and Email are required.",
+        category: AlertCategories.USER,
+      })
       return
     }
 
@@ -120,7 +130,12 @@ export const UsersPage = () => {
       currentRole === Roles.FLEET_MANAGER &&
       (inviteForm.role === Roles.SUPER_ADMIN || inviteForm.role === Roles.FLEET_MANAGER)
     ) {
-      showToast("Access Denied: Fleet Managers can only invite Flight Operators and Viewers.", "error")
+      showAlert({
+        type: AlertTypes.ERROR,
+        title: "Access Denied",
+        message: "You do not have permission to perform this action.",
+        category: AlertCategories.SECURITY,
+      })
       return
     }
 
@@ -141,10 +156,20 @@ export const UsersPage = () => {
         email: "",
         role: Roles.FLIGHT_OPERATOR,
       })
-      showToast(`Operator @${created.username} invited successfully.`, "success")
+      showAlert({
+        type: AlertTypes.SUCCESS,
+        title: "Invitation Sent",
+        message: `Invitation sent to @${created.username} (${created.email}).`,
+        category: AlertCategories.USER,
+      })
     } catch (err) {
       console.error("[UsersPage] Invite error:", err)
-      showToast(err.message || "Failed to invite operator.", "error")
+      showAlert({
+        type: AlertTypes.ERROR,
+        title: "Invitation Failed",
+        message: err?.message || "Failed to invite operator.",
+        category: AlertCategories.USER,
+      })
     } finally {
       setIsSubmitting(false)
     }
@@ -153,17 +178,32 @@ export const UsersPage = () => {
   // Handle Role Change
   const handleChangeUserRole = async (userId, newRole) => {
     if (!canManageRoles) {
-      showToast("Access Denied: Only Super Admin can modify operator roles.", "error")
+      showAlert({
+        type: AlertTypes.ERROR,
+        title: "Access Denied",
+        message: "You do not have permission to perform this action.",
+        category: AlertCategories.SECURITY,
+      })
       return
     }
 
     try {
       await userService.updateUserRole(userId, newRole)
       setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, role: newRole } : u)))
-      showToast(`Operator role updated to ${newRole}.`, "success")
+      showAlert({
+        type: AlertTypes.SUCCESS,
+        title: "Role Updated",
+        message: `Operator role updated to ${newRole}.`,
+        category: AlertCategories.SECURITY,
+      })
     } catch (err) {
       console.error("[UsersPage] Role change error:", err)
-      showToast("Failed to update operator role.", "error")
+      showAlert({
+        type: AlertTypes.ERROR,
+        title: "Update Failed",
+        message: "Failed to update operator role.",
+        category: AlertCategories.USER,
+      })
     }
   }
 
@@ -171,7 +211,12 @@ export const UsersPage = () => {
   const confirmDelete = async () => {
     if (!userToDelete) return
     if (!canManageRoles) {
-      showToast("Access Denied: Only Super Admin can delete operators.", "error")
+      showAlert({
+        type: AlertTypes.ERROR,
+        title: "Access Denied",
+        message: "You do not have permission to perform this action.",
+        category: AlertCategories.SECURITY,
+      })
       setUserToDelete(null)
       return
     }
@@ -179,10 +224,20 @@ export const UsersPage = () => {
     try {
       await userService.deleteUser(userToDelete.id)
       setUsers((prev) => prev.filter((u) => u.id !== userToDelete.id))
-      showToast(`Operator @${userToDelete.username} removed from directory.`, "info")
+      showAlert({
+        type: AlertTypes.SUCCESS,
+        title: "User Removed",
+        message: `Operator @${userToDelete.username} removed from directory.`,
+        category: AlertCategories.USER,
+      })
     } catch (err) {
       console.error("[UsersPage] Delete error:", err)
-      showToast("Failed to remove operator.", "error")
+      showAlert({
+        type: AlertTypes.ERROR,
+        title: "Deletion Failed",
+        message: "Failed to remove operator.",
+        category: AlertCategories.USER,
+      })
     } finally {
       setUserToDelete(null)
     }

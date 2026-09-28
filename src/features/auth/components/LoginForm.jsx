@@ -6,6 +6,7 @@ import GcsCornerBrackets from "./GcsCornerBrackets.jsx"
 import GcsInput from "./GcsInput.jsx"
 import { useAuth } from "@/hooks/useAuth.js"
 import { DEV_TEST_USERS } from "@/auth/jwtUtils.js"
+import { showAlert, AlertTypes, AlertCategories } from "@/services/notification/alertService.js"
 
 export const APP_VERSION = "2.6.0-rbac"
 export const BUILD_DATE = "2026-09-17"
@@ -66,6 +67,14 @@ export const LoginForm = ({ onSuccess, onCancel, showCloseButton = false }) => {
         password,
       })
 
+      showAlert({
+        type: AlertTypes.SUCCESS,
+        title: "Login Successful",
+        message: `Welcome back to DroneIQ GCS, ${identifier}.`,
+        category: AlertCategories.SECURITY,
+        key: "AUTH_STATUS",
+      })
+
       if (rememberDevice) {
         localStorage.setItem("aeronexus_remembered_email", identifier)
       } else {
@@ -78,14 +87,29 @@ export const LoginForm = ({ onSuccess, onCancel, showCloseButton = false }) => {
         navigate("/dashboard")
       }
     } catch (err) {
-      setError(err.message || "Authentication failed. Please verify credentials or check backend availability.")
+      const msg = err.status === 401 || err.message?.toLowerCase().includes("invalid") || err.message?.toLowerCase().includes("credential")
+        ? "Invalid username or password."
+        : (err.message || "Invalid username or password.")
+      setError(msg)
+      showAlert({
+        type: AlertTypes.ERROR,
+        title: "Login Failed",
+        message: msg,
+        category: AlertCategories.SECURITY,
+        key: "AUTH_STATUS",
+      })
     } finally {
       setLoading(false)
     }
   }
 
   const handleForgotPassword = () => {
-    alert("Password reset instructions will be sent to the registered email.")
+    showAlert({
+      type: AlertTypes.INFO,
+      title: "Password Reset",
+      message: "Password reset instructions will be sent to the registered email.",
+      category: AlertCategories.SECURITY,
+    })
   }
 
   const handleFillTestAccount = (testUser) => {

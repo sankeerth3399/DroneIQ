@@ -3,21 +3,33 @@ import { useTelemetry } from "@/hooks/useTelemetry.js";
 import {
   OPERATIONAL_MAP_ZOOM,
   FALLBACK_DRONE_LOCATION,
-  GLOBAL_DEFAULT_CENTER,
-  GLOBAL_DEFAULT_ZOOM,
   PositionSource,
   isValidGpsCoordinate,
 } from "@/services/telemetry/telemetryTypes.js";
 import { resolveInitialMapState } from "@/config/mapConfig.js";
-import { ensureSatelliteLayer, applyMapStyle } from "./satelliteLayerHelper.js";
+import { ensureSatelliteLayer, applyMapStyle, getUnderlyingMap } from "./satelliteLayerHelper.js";
 import { buildDroneMarkerHtml } from "./droneMarkerHelper.js";
 import { buildWaypointMarkerHtml } from "./waypointMarkerHelper.js";
-import { syncGeofenceLayers, buildGeofenceVertexMarkerHtml } from "./geofenceLayerHelper.js";
+import {
+  syncGeofenceLayers,
+  removeGeofenceLayers,
+  buildGeofenceVertexMarkerHtml,
+  GEOFENCE_FILL_LAYER_ID,
+  GEOFENCE_PREVIEW_LINE_LAYER_ID,
+} from "./geofenceLayerHelper.js";
 import {
   syncMissionRoute,
   syncDirectionMarkers,
   removeRouteLayers,
 } from "./routeLayerHelper.js";
+import { useMission } from "@/hooks/useMission.js";
+
+const normalizeLongitude = (lng) => {
+  if (typeof lng !== "number" || isNaN(lng)) return FALLBACK_DRONE_LOCATION.longitude;
+  if (lng >= -180 && lng <= 180) return Number(lng.toFixed(6));
+  const normalized = ((lng + 180) % 360 + 360) % 360 - 180;
+  return Number(normalized.toFixed(6));
+};
 
 const MapContainer = ({
   mapStyle = "normal",
@@ -33,6 +45,9 @@ const MapContainer = ({
   geofence = null,
   isDrawingGeofence = false,
   isEditingGeofence = false,
+  isClosedGeofence = undefined,
+  selectedGeofenceVertexId = null,
+  onGeofenceVertexSelect,
   onGeofenceVertexDrag,
   onGeofenceVertexDragEnd,
   routeViolations = [],
@@ -42,6 +57,7 @@ const MapContainer = ({
   initialCenter: propInitialCenter = null,
   initialZoom: propInitialZoom = null,
 }) => {
+  const { currentProjectId, currentProject } = useMission();
   const mapRef = useRef(null);
   const containerRef = useRef(null);
   const markerRef = useRef(null);
@@ -86,7 +102,12 @@ const MapContainer = ({
   );
 
   const hasValidGps = isValidGpsCoordinate(telemetry?.latitude, telemetry?.longitude);
-  const hasLiveDroneLocation = Boolean(isDroneConnected && !isTelemetryStale && hasValidGps);
+  const hasLiveDroneLocation = Boolean(
+    isDroneConnected &&
+    !isTelemetryStale &&
+    hasValidGps &&
+    telemetry?.positionSource === PositionSource.LIVE
+  );
 
   // Position source resolution: prioritize LIVE real drone GPS, fallback to Hyderabad for development
   const positionSource = hasLiveDroneLocation
@@ -182,12 +203,12 @@ const MapContainer = ({
           try {
             if (typeof map.flyTo === "function") {
               map.flyTo({
-                center: [activeLat, activeLng],
+                center: { lat: activeLat, lng: activeLng },
                 zoom: OPERATIONAL_MAP_ZOOM,
                 duration: 1200,
               });
             } else if (typeof map.setCenter === "function") {
-              map.setCenter([activeLat, activeLng]);
+              map.setCenter({ lat: activeLat, lng: activeLng });
               map.setZoom(OPERATIONAL_MAP_ZOOM);
             }
           } catch (err) {
@@ -213,9 +234,9 @@ const MapContainer = ({
         if (followDrone && !userHasPannedRef.current && !isDrawingOrEditingGeofence && !isPlacingWaypoint) {
           try {
             if (typeof map.panTo === "function") {
-              map.panTo([activeLat, activeLng]);
+              map.panTo({ lat: activeLat, lng: activeLng });
             } else if (typeof map.setCenter === "function") {
-              map.setCenter([activeLat, activeLng]);
+              map.setCenter({ lat: activeLat, lng: activeLng });
             }
           } catch {
             // Safe ignore
@@ -224,30 +245,11 @@ const MapContainer = ({
       }
     } else {
       // SCENARIO B: HYDERABAD FALLBACK (Disconnected or no valid live GPS)
-      // If we previously had a live connection and the drone just disconnected:
+      // When live telemetry transitions to disconnected or stale:
+      // The camera remains undisturbed where the user had it. DO NOT fly to [20, 0]!
       if (prevSource === PositionSource.LIVE || hasHadFirstFixRef.current) {
         hasHadFirstFixRef.current = false;
         userHasPannedRef.current = false;
-        currentPosRef.current = { lat: FALLBACK_DRONE_LOCATION.latitude, lng: FALLBACK_DRONE_LOCATION.longitude };
-        targetPosRef.current = { lat: FALLBACK_DRONE_LOCATION.latitude, lng: FALLBACK_DRONE_LOCATION.longitude };
-
-        // Return camera to neutral global default view (zoom 2, center [20, 0]) ONLY for Fly page
-        if (effectivePageType === "fly") {
-          try {
-            if (typeof map.flyTo === "function") {
-              map.flyTo({
-                center: [GLOBAL_DEFAULT_CENTER.latitude, GLOBAL_DEFAULT_CENTER.longitude],
-                zoom: GLOBAL_DEFAULT_ZOOM,
-                duration: 1000,
-              });
-            } else if (typeof map.setCenter === "function") {
-              map.setCenter([GLOBAL_DEFAULT_CENTER.latitude, GLOBAL_DEFAULT_CENTER.longitude]);
-              map.setZoom(GLOBAL_DEFAULT_ZOOM);
-            }
-          } catch (err) {
-            console.debug("[MapContainer] Reset view error:", err.message);
-          }
-        }
 
         // Clear polyline trail
         if (polylineRef.current) {
@@ -261,7 +263,7 @@ const MapContainer = ({
         trailCoordsRef.current = [];
       }
 
-      // Ensure marker is placed at active coordinates (starting at Hyderabad fallback location)
+      // Ensure marker is placed or updated at active coordinates (starting at Hyderabad fallback location)
       if (!markerRef.current && typeof window.mappls.Marker === "function") {
         try {
           markerRef.current = new window.mappls.Marker({
@@ -273,28 +275,38 @@ const MapContainer = ({
         } catch (err) {
           console.warn("[MapContainer] Marker creation error:", err.message);
         }
+      } else if (markerRef.current) {
+        try {
+          if (typeof markerRef.current.setPosition === "function") {
+            markerRef.current.setPosition({ lat: activeLat, lng: activeLng });
+          } else if (typeof markerRef.current.setLngLat === "function") {
+            markerRef.current.setLngLat([activeLng, activeLat]);
+          }
+        } catch {
+          // Safe ignore
+        }
       }
 
       // Follow drone if followDrone is enabled, user hasn't panned, and not drawing geofence
       if (followDrone && !userHasPannedRef.current && !isDrawingOrEditingGeofence && !isPlacingWaypoint) {
         try {
           if (typeof map.panTo === "function") {
-            map.panTo([activeLat, activeLng]);
+            map.panTo({ lat: activeLat, lng: activeLng });
           } else if (typeof map.setCenter === "function") {
-            map.setCenter([activeLat, activeLng]);
+            map.setCenter({ lat: activeLat, lng: activeLng });
           }
         } catch {
           // Safe ignore
         }
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Heading updates decoupled to prevent camera repositioning
   }, [
     positionSource,
     isDroneConnected,
     isTelemetryStale,
     activeLat,
     activeLng,
-    heading,
     droneCallsign,
     followDrone,
     isDrawingOrEditingGeofence,
@@ -322,6 +334,7 @@ const MapContainer = ({
   const geofenceMarkersRef = useRef(new Map());
   const onGeofenceVertexDragRef = useRef(onGeofenceVertexDrag);
   const onGeofenceVertexDragEndRef = useRef(onGeofenceVertexDragEnd);
+  const onGeofenceVertexSelectRef = useRef(onGeofenceVertexSelect);
 
   useEffect(() => {
     onMapClickRef.current = onMapClick;
@@ -330,21 +343,61 @@ const MapContainer = ({
     onWaypointDragEndRef.current = onWaypointDragEnd;
     onGeofenceVertexDragRef.current = onGeofenceVertexDrag;
     onGeofenceVertexDragEndRef.current = onGeofenceVertexDragEnd;
-  }, [onMapClick, onWaypointSelect, onWaypointDrag, onWaypointDragEnd, onGeofenceVertexDrag, onGeofenceVertexDragEnd]);
+    onGeofenceVertexSelectRef.current = onGeofenceVertexSelect;
+  }, [onMapClick, onWaypointSelect, onWaypointDrag, onWaypointDragEnd, onGeofenceVertexDrag, onGeofenceVertexDragEnd, onGeofenceVertexSelect]);
 
   const geofenceCoords = useMemo(() => {
     if (Array.isArray(geofence)) return geofence;
+    if (Array.isArray(geofence?.vertices)) return geofence.vertices;
     if (Array.isArray(geofence?.polygon)) return geofence.polygon;
     if (Array.isArray(geofence?.coordinates)) return geofence.coordinates;
     return [];
   }, [geofence]);
 
-  // Synchronize Geofence and Route Violation Layers on Map
+  // Synchronize Geofence, Preview Line, and Route Violation Layers on Map
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    syncGeofenceLayers(map, geofenceCoords, routeViolations);
-  }, [geofenceCoords, routeViolations, mapStyle]);
+
+    const isClosed =
+      isClosedGeofence !== undefined
+        ? isClosedGeofence
+        : !isDrawingGeofence || geofenceCoords.length >= 3;
+
+    syncGeofenceLayers(map, geofenceCoords, routeViolations, {
+      isDrawing: isDrawingGeofence,
+      isClosed,
+    });
+
+    if (import.meta.env?.DEV) {
+      const underlying = getUnderlyingMap(map);
+      const hasPolygonLayer = Boolean(
+        underlying?.getLayer?.(GEOFENCE_FILL_LAYER_ID) && geofenceCoords.length >= 3
+      );
+      const hasPreviewLayer = Boolean(
+        underlying?.getLayer?.(GEOFENCE_PREVIEW_LINE_LAYER_ID) &&
+          isDrawingGeofence &&
+          !isClosed &&
+          geofenceCoords.length >= 2
+      );
+
+      console.log("[GEOFENCE RENDER]", {
+        project: currentProjectId || currentProject?.id || "N/A",
+        vertexCount: geofenceCoords.length,
+        polygonLayerCount: hasPolygonLayer ? 1 : 0,
+        previewLayerCount: hasPreviewLayer ? 1 : 0,
+        vertexMarkerCount: geofenceMarkersRef.current?.size || 0,
+      });
+    }
+  }, [
+    geofenceCoords,
+    routeViolations,
+    mapStyle,
+    isDrawingGeofence,
+    isClosedGeofence,
+    currentProjectId,
+    currentProject?.id,
+  ]);
 
   // Synchronize Temporary Invalid Click Marker (Red Pulse on Map)
   useEffect(() => {
@@ -395,13 +448,16 @@ const MapContainer = ({
     };
   }, [invalidClickPoint]);
 
-  // Synchronize Geofence Vertex Handles
+  // Synchronize Geofence Vertex Handles (Keyed by stable vertex ID)
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !window.mappls) return;
 
     const currentMarkers = geofenceMarkersRef.current;
-    const showMarkers = isEditingGeofence || isDrawingGeofence;
+    const showMarkers =
+      isEditingGeofence ||
+      isDrawingGeofence ||
+      (effectivePageType === "geofence" && geofenceCoords.length > 0);
 
     if (!showMarkers) {
       for (const [, obj] of currentMarkers.entries()) {
@@ -415,40 +471,114 @@ const MapContainer = ({
       return;
     }
 
-    const nextIndices = new Set(geofenceCoords.map((_, i) => i));
+    const nextIds = new Set(geofenceCoords.map((pt, i) => pt.id || `vertex-${i}`));
 
-    for (const [idx, markerObj] of currentMarkers.entries()) {
-      if (!nextIndices.has(idx)) {
+    // Clean up markers for removed vertices
+    for (const [id, markerObj] of currentMarkers.entries()) {
+      if (!nextIds.has(id)) {
         try {
           markerObj.marker?.remove?.();
         } catch {
           // Safe ignore
         }
-        currentMarkers.delete(idx);
+        currentMarkers.delete(id);
       }
     }
 
+    // Add or update active markers
     geofenceCoords.forEach((pt, idx) => {
-      const existing = currentMarkers.get(idx);
-      if (existing) {
+      const vId = pt.id || `vertex-${idx}`;
+      const isSelected = vId === selectedGeofenceVertexId;
+      const html = buildGeofenceVertexMarkerHtml(idx, isSelected);
+      const existing = currentMarkers.get(vId);
+
+      if (existing && existing.isEditing === isEditingGeofence) {
         try {
           if (typeof existing.marker.setPosition === "function") {
             existing.marker.setPosition({ lat: pt.lat, lng: pt.lng });
           } else if (typeof existing.marker.setLngLat === "function") {
             existing.marker.setLngLat([pt.lng, pt.lat]);
           }
+
+          // Update marker HTML and presentation number if selection or index changed
+          if (existing.html !== html || existing.index !== idx || existing.isSelected !== isSelected) {
+            existing.html = html;
+            existing.index = idx;
+            existing.isSelected = isSelected;
+            const el = existing.marker.getElement?.();
+            if (el) {
+              const bg = isSelected ? "#35E0FF" : "#06B6D4";
+              const borderColor = isSelected ? "#35E0FF" : "#FFFFFF";
+              const glow = isSelected
+                ? "0 0 0 3px rgba(53, 224, 255, 0.45), 0 0 16px #35E0FF, 0 0 24px rgba(53, 224, 255, 0.6)"
+                : "0 0 6px rgba(6, 182, 212, 0.6)";
+              const scale = isSelected ? "scale(1.3)" : "scale(1)";
+              const zIndex = isSelected ? "999" : "10";
+
+              el.innerHTML = `
+                <div class="geofence-vertex-marker ${isSelected ? "selected-vertex" : ""}" data-index="${idx}" style="
+                  width: 22px;
+                  height: 22px;
+                  border-radius: 50%;
+                  background: ${bg};
+                  border: 2.5px solid ${borderColor};
+                  box-shadow: ${glow};
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  font-family: monospace;
+                  font-size: 10px;
+                  font-weight: 700;
+                  color: #030712;
+                  cursor: pointer;
+                  user-select: none;
+                  transform: translate(-50%, -50%) ${scale};
+                  z-index: ${zIndex};
+                  transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+                ">
+                  ${idx + 1}
+                </div>
+              `;
+            }
+          }
         } catch (err) {
           console.debug("[MapContainer] Geofence marker update note:", err.message);
         }
       } else {
+        if (existing) {
+          try {
+            existing.marker?.remove?.();
+          } catch {
+            // Safe ignore
+          }
+          currentMarkers.delete(vId);
+        }
+
         try {
-          const html = buildGeofenceVertexMarkerHtml(idx);
           const marker = new window.mappls.Marker({
             map,
             position: { lat: pt.lat, lng: pt.lng },
             html,
             draggable: isEditingGeofence,
           });
+
+          const handleSelectClick = (e) => {
+            e?.stopPropagation?.();
+            onGeofenceVertexSelectRef.current?.(vId, idx);
+          };
+
+          if (typeof marker.addListener === "function") {
+            marker.addListener("click", handleSelectClick);
+          } else if (typeof marker.on === "function") {
+            marker.on("click", handleSelectClick);
+          }
+
+          setTimeout(() => {
+            const el = marker.getElement?.();
+            if (el) {
+              el.addEventListener("click", handleSelectClick);
+            }
+          }, 60);
 
           if (isEditingGeofence) {
             const handleDrag = () => {
@@ -460,7 +590,7 @@ const MapContainer = ({
                   onGeofenceVertexDragRef.current?.(idx, {
                     lat: Number(Number(pLat).toFixed(6)),
                     lng: Number(Number(pLng).toFixed(6)),
-                  });
+                  }, vId);
                 }
               } catch (err) {
                 console.debug("[MapContainer] Geofence drag note:", err.message);
@@ -473,10 +603,17 @@ const MapContainer = ({
                 if (pos) {
                   const pLat = typeof pos.lat === "function" ? pos.lat() : pos.lat;
                   const pLng = typeof pos.lng === "function" ? pos.lng() : pos.lng;
-                  onGeofenceVertexDragEndRef.current?.(idx, {
+                  const dragResult = onGeofenceVertexDragEndRef.current?.(idx, {
                     lat: Number(Number(pLat).toFixed(6)),
                     lng: Number(Number(pLng).toFixed(6)),
-                  });
+                  }, vId);
+                  if (dragResult && dragResult.valid === false) {
+                    if (typeof marker.setPosition === "function") {
+                      marker.setPosition({ lat: pt.lat, lng: pt.lng });
+                    } else if (typeof marker.setLngLat === "function") {
+                      marker.setLngLat([pt.lng, pt.lat]);
+                    }
+                  }
                 }
               } catch (err) {
                 console.debug("[MapContainer] Geofence dragend note:", err.message);
@@ -492,13 +629,19 @@ const MapContainer = ({
             }
           }
 
-          currentMarkers.set(idx, { marker, html });
+          currentMarkers.set(vId, {
+            marker,
+            html,
+            index: idx,
+            isSelected,
+            isEditing: isEditingGeofence,
+          });
         } catch (err) {
           console.warn("[MapContainer] Geofence vertex creation note:", err.message);
         }
       }
     });
-  }, [geofenceCoords, isEditingGeofence, isDrawingGeofence]);
+  }, [geofenceCoords, isEditingGeofence, isDrawingGeofence, selectedGeofenceVertexId, effectivePageType]);
 
   // Synchronize Waypoint Markers & Mission Route on Map
   useEffect(() => {
@@ -706,10 +849,17 @@ const MapContainer = ({
           customZoom: propInitialZoom,
         });
 
+        const centerObj = {
+          lat: Number(initialCenter[0] ?? initialCenter.lat ?? FALLBACK_DRONE_LOCATION.latitude),
+          lng: Number(initialCenter[1] ?? initialCenter.lng ?? FALLBACK_DRONE_LOCATION.longitude),
+        };
+
         const map = new window.mappls.Map(mapId, {
-          center: initialCenter,
+          center: centerObj,
           zoom: initialZoom,
           hybrid: mapStyle === "satellite",
+          renderWorldCopies: false,
+          maxBounds: [[-180, -85], [180, 85]],
           fullscreenControl: false,
           zoomControl: false,
           rotateControl: false,
@@ -718,6 +868,14 @@ const MapContainer = ({
           touchZoomRotate: true,
           dragPan: true,
         });
+
+        // Ensure renderWorldCopies is strictly disabled on the underlying Mapbox/MapLibre instance
+        if (typeof map.setRenderWorldCopies === "function") {
+          map.setRenderWorldCopies(false);
+        }
+        if (map.transform && "renderWorldCopies" in map.transform) {
+          map.transform.renderWorldCopies = false;
+        }
 
         if (typeof map.remove === "function") {
           const origInstRemove = map.remove;
@@ -755,10 +913,18 @@ const MapContainer = ({
           setSdkAvailable(true);
           map.resize?.();
 
+          const isClosed =
+            isClosedGeofence !== undefined
+              ? isClosedGeofence
+              : !isDrawingGeofence || geofenceCoords.length >= 3;
+
           // Initialize satellite layer and apply style
           ensureSatelliteLayer(map, mapStyleRef.current === "satellite");
           applyMapStyle(map, mapStyleRef.current, polylineRef);
-          syncGeofenceLayers(map, geofenceCoords, routeViolations);
+          syncGeofenceLayers(map, geofenceCoords, routeViolations, {
+            isDrawing: isDrawingGeofence,
+            isClosed,
+          });
           syncMissionRoute(map, waypoints, showMissionRoute, mapStyleRef.current === "satellite");
           syncDirectionMarkers(map, waypoints, showMissionRoute, directionMarkersRef);
 
@@ -800,9 +966,17 @@ const MapContainer = ({
 
         const handleStyleLoad = () => {
           if (cancelled) return;
+          const isClosed =
+            isClosedGeofence !== undefined
+              ? isClosedGeofence
+              : !isDrawingGeofence || geofenceCoords.length >= 3;
+
           ensureSatelliteLayer(map, mapStyleRef.current === "satellite");
           applyMapStyle(map, mapStyleRef.current, polylineRef);
-          syncGeofenceLayers(map, geofenceCoords, routeViolations);
+          syncGeofenceLayers(map, geofenceCoords, routeViolations, {
+            isDrawing: isDrawingGeofence,
+            isClosed,
+          });
           syncMissionRoute(map, waypoints, showMissionRoute, mapStyleRef.current === "satellite");
           syncDirectionMarkers(map, waypoints, showMissionRoute, directionMarkersRef);
         };
@@ -900,6 +1074,7 @@ const MapContainer = ({
         }
         missionPolylineRef.current = null;
         removeRouteLayers(mapRef.current, directionMarkersRef);
+        removeGeofenceLayers(mapRef.current);
 
         for (const [, obj] of markers.entries()) {
           try {
@@ -992,9 +1167,10 @@ const MapContainer = ({
     }
   }, [heading, mapId]);
 
-  // 60 FPS smooth position lerp interpolation & movement trail manager
+  // Smooth position lerp interpolation & movement trail manager
+  // Strictly stops when destination is reached to eliminate marker drift
   useEffect(() => {
-    let animId;
+    let animId = null;
 
     const animateMovement = () => {
       const current = currentPosRef.current;
@@ -1009,58 +1185,83 @@ const MapContainer = ({
       const dLng = target.lng - current.lng;
       const distSq = dLat * dLat + dLng * dLng;
 
-      if (distSq > 1e-16) {
-        if (distSq > 0.005) {
-          // Large step or initial coordinate load: snap directly
-          current.lat = target.lat;
-          current.lng = target.lng;
-        } else {
-          // Smooth tracking for continuous live movement
-          const lerpFactor = 0.45;
-          current.lat += dLat * lerpFactor;
-          current.lng += dLng * lerpFactor;
-        }
+      // Stationary check: if within ~0.02 meters (1e-12 degrees sq), snap and stop animation
+      if (distSq <= 1e-12) {
+        current.lat = target.lat;
+        current.lng = target.lng;
 
-        // Update Mappls Marker position
         if (markerRef.current) {
+          const displayLng = normalizeLongitude(current.lng);
+          const displayLat = Math.max(-90, Math.min(90, Number(current.lat.toFixed(6))));
+
           try {
             if (typeof markerRef.current.setPosition === "function") {
-              markerRef.current.setPosition({ lat: current.lat, lng: current.lng });
+              markerRef.current.setPosition({ lat: displayLat, lng: displayLng });
+            } else if (typeof markerRef.current.setLngLat === "function") {
+              markerRef.current.setLngLat([displayLng, displayLat]);
             }
           } catch {
-            // Ignore if method not supported on marker
+            // Ignore
           }
-          try {
-            if (typeof markerRef.current.setLngLat === "function") {
-              markerRef.current.setLngLat([current.lng, current.lat]);
-            }
-          } catch {
-            // Ignore if method not supported on marker
-          }
-          try {
-            if (markerRef.current._marker && typeof markerRef.current._marker.setLngLat === "function") {
-              markerRef.current._marker.setLngLat([current.lng, current.lat]);
-            }
-          } catch {
-            // Ignore if method not supported on marker
-          }
-          try {
-            if (typeof markerRef.current.setPoint === "function") {
-              markerRef.current.setPoint([current.lat, current.lng]);
-            }
-          } catch {
-            // Ignore if method not supported on marker
+
+          if (import.meta.env?.DEV) {
+            const mPos = markerRef.current.getPosition?.() || markerRef.current.getLngLat?.() || markerRef.current._marker?.getLngLat?.();
+            const mLat = mPos?.lat ? (typeof mPos.lat === "function" ? mPos.lat() : mPos.lat) : displayLat;
+            const mLng = mPos?.lng ? (typeof mPos.lng === "function" ? mPos.lng() : mPos.lng) : displayLng;
+            const mCenter = mapRef.current?.getCenter?.();
+            const mZoom = mapRef.current?.getZoom?.();
+            console.debug("[DRONE MARKER RENDER]", {
+              stateLat: activeLat,
+              stateLng: activeLng,
+              markerLat: mLat,
+              markerLng: mLng,
+              mapCenterLat: mCenter?.lat,
+              mapCenterLng: mCenter?.lng,
+              mapZoom: mZoom,
+            });
           }
         }
+        return;
+      }
 
-        // Manage lightweight flight breadcrumb trail (last 40 points)
+      if (distSq > 0.005) {
+        // Large step or initial coordinate load: snap directly
+        current.lat = target.lat;
+        current.lng = target.lng;
+      } else {
+        // Smooth tracking for continuous live movement
+        const lerpFactor = 0.45;
+        current.lat += dLat * lerpFactor;
+        current.lng += dLng * lerpFactor;
+      }
+
+      // Update Mappls Marker position with normalized display coordinates
+      if (markerRef.current) {
+        const displayLng = normalizeLongitude(current.lng);
+        const displayLat = Math.max(-90, Math.min(90, Number(current.lat.toFixed(6))));
+
+        try {
+          if (typeof markerRef.current.setPosition === "function") {
+            markerRef.current.setPosition({ lat: displayLat, lng: displayLng });
+          } else if (typeof markerRef.current.setLngLat === "function") {
+            markerRef.current.setLngLat([displayLng, displayLat]);
+          } else if (markerRef.current._marker && typeof markerRef.current._marker.setLngLat === "function") {
+            markerRef.current._marker.setLngLat([displayLng, displayLat]);
+          }
+        } catch {
+          // Ignore
+        }
+      }
+
+      // Manage lightweight flight breadcrumb trail (only for real movements in live mode)
+      if (hasLiveDroneLocation) {
         const trail = trailCoordsRef.current;
         const lastPt = trail[trail.length - 1];
         const stepDistSq = lastPt
           ? Math.pow(current.lat - lastPt.lat, 2) + Math.pow(current.lng - lastPt.lng, 2)
           : 1;
 
-        if (stepDistSq > 0.0000000005) {
+        if (stepDistSq > 0.00000005) {
           trail.push({ lat: Number(current.lat.toFixed(6)), lng: Number(current.lng.toFixed(6)) });
           if (trail.length > 40) trail.shift();
 
@@ -1088,9 +1289,19 @@ const MapContainer = ({
       animId = requestAnimationFrame(animateMovement);
     };
 
-    animId = requestAnimationFrame(animateMovement);
-    return () => cancelAnimationFrame(animId);
-  }, []);
+    // Check if target is different from current; if so, trigger interpolation
+    const current = currentPosRef.current;
+    const target = targetPosRef.current;
+    const initialDistSq = Math.pow(target.lat - current.lat, 2) + Math.pow(target.lng - current.lng, 2);
+
+    if (initialDistSq > 1e-12) {
+      animId = requestAnimationFrame(animateMovement);
+    }
+
+    return () => {
+      if (animId) cancelAnimationFrame(animId);
+    };
+  }, [activeLat, activeLng, hasLiveDroneLocation]);
 
   // Handle container resize & transition settlements
   useEffect(() => {

@@ -1,21 +1,24 @@
 import { useState, useEffect, useRef, useMemo } from "react"
-import { ChevronDown, Check, ShieldAlert } from "lucide-react"
+import { ChevronDown, Check, ShieldAlert, Loader2 } from "lucide-react"
 import { useTelemetry } from "@/hooks/useTelemetry.js"
 import { useAuth } from "@/hooks/useAuth.js"
 import { Permissions } from "@/auth/permissions.js"
 import { FLIGHT_MODES, getFlightModeLabel } from "../constants/flightModes.js"
 import { DEFAULT_FLIGHT_MODE } from "@/services/telemetry/telemetryTypes.js"
 import { useFlyConfirmation } from "@/hooks/useFlyConfirmation.js"
+import { showAlert, AlertTypes, AlertCategories } from "@/services/notification/alertService.js"
+import { flightControlService } from "@/services/control/flightControlService.js"
 
 /**
  * Functional Flight Mode Dropdown for AeroNexus Top Telemetry Bar
  * Requires explicit user confirmation before sending any flight mode change command.
  */
 export const FlightModeDropdown = () => {
-  const { flightMode, setFlightMode, handleFlightModeChange, showToast, selectedDroneId, telemetry } = useTelemetry()
+  const { flightMode, setFlightMode, handleFlightModeChange, selectedDroneId, telemetry } = useTelemetry()
   const { hasPermission } = useAuth()
   const { requestActionConfirmation } = useFlyConfirmation()
   const [isOpen, setIsOpen] = useState(false)
+  const [isChangingMode, setIsChangingMode] = useState(false)
   const dropdownRef = useRef(null)
 
   const canChangeMode = typeof hasPermission === "function"
@@ -58,39 +61,78 @@ export const FlightModeDropdown = () => {
   const handleSelectMode = (mode) => {
     setIsOpen(false)
 
+    // Section 20: Duplicate command protection
+    if (isChangingMode) return
+
+    // Section 21: RBAC check
     if (!canChangeMode) {
-      if (typeof showToast === "function") {
-        showToast("Flight mode change inhibited: Viewer role is read-only.", "warning")
-      }
+      showAlert({
+        type: AlertTypes.ERROR,
+        title: "Access Denied",
+        message: "You do not have permission to change flight mode.",
+        category: AlertCategories.SECURITY,
+      })
       return
     }
 
-    // If selecting current active mode, no-op
+    // Section 8: SAME MODE SELECTION - no confirmation, no command, no notification
     if (mode.id === activeModeId) {
       return
     }
 
+    // Section 7, 10, 11: Request confirmation for mode change
     requestActionConfirmation({
       action: "FLIGHT_MODE_CHANGE",
-      title: "Confirm Flight Mode Change",
-      message: `Change flight mode from ${activeModeLabel} to ${mode.label}?`,
-      warning: `Ensure aircraft is trimmed and ready for ${mode.label} mode dynamics.`,
-      confirmLabel: "Confirm Mode Change",
-      severity: mode.id === "BRAKE" || mode.id === "LAND" ? "danger" : "warning",
+      title: "CONFIRM FLIGHT MODE CHANGE",
       droneId: activeDroneId,
+      currentMode: activeModeLabel,
+      newMode: mode.label,
+      message: `Are you sure you want to change the flight mode from ${activeModeLabel} to ${mode.label}?`,
+      confirmLabel: `Confirm ${mode.label}`,
+      cancelLabel: "Cancel",
+      severity: mode.id === "BRAKE" || mode.id === "LAND" ? "danger" : "warning",
       currentState: activeModeLabel,
-      validateState: () => {
-        const latestMode = String(flightMode || DEFAULT_FLIGHT_MODE).toUpperCase().replace(/\s+/g, "_")
-        if (latestMode === mode.id) {
-          return `Drone is already in ${mode.label} mode.`
-        }
-        return true
+      onCancel: () => {
+        // Section 9: Mode change cancel - close confirmation, keep current mode, no command, no notification
       },
       onConfirm: async () => {
-        if (typeof handleFlightModeChange === "function") {
-          handleFlightModeChange(mode.id, "USER")
-        } else if (typeof setFlightMode === "function") {
-          setFlightMode(mode.id)
+        setIsChangingMode(true)
+        try {
+          // Send existing flight-mode command
+          await flightControlService.sendFlightCommand({
+            commandType: "SET_MODE",
+            command: "SET_MODE",
+            droneId: activeDroneId,
+            parameters: { mode: mode.id },
+          })
+
+          // Update authoritative state only after actual response
+          if (typeof handleFlightModeChange === "function") {
+            handleFlightModeChange(mode.id, "USER_CONFIRMED")
+          } else if (typeof setFlightMode === "function") {
+            setFlightMode(mode.id)
+          }
+
+          // Section 10: ONE final SUCCESS notification
+          showAlert({
+            type: AlertTypes.SUCCESS,
+            title: "FLIGHT MODE CHANGED",
+            message: `${activeDroneId} switched from ${activeModeLabel} to ${mode.label}.`,
+            key: "FLIGHT_MODE_CHANGE_RESULT",
+            category: AlertCategories.FLIGHT,
+          })
+        } catch (err) {
+          // Section 10: ONE final FAILURE notification
+          const reason = err?.data?.message || err?.message || "Flight mode change rejected by vehicle."
+          showAlert({
+            type: AlertTypes.ERROR,
+            title: "FLIGHT MODE CHANGE FAILED",
+            message: reason,
+            key: "FLIGHT_MODE_CHANGE_RESULT",
+            category: AlertCategories.FLIGHT,
+          })
+        } finally {
+          setIsChangingMode(false)
         }
       },
     })
@@ -119,6 +161,7 @@ export const FlightModeDropdown = () => {
       {/* Trigger Button: [ ● MODE_LABEL ▼ ] */}
       <button
         type="button"
+        disabled={isChangingMode}
         onClick={() => setIsOpen((prev) => !prev)}
         className={`inline-flex items-center gap-1.5 px-2 py-0.5 sm:py-1 rounded-[4px] border text-[9px] sm:text-[10px] font-bold tracking-wider uppercase transition-all cursor-pointer select-none active:scale-95 ${
           isOpen

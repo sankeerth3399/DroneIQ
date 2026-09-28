@@ -58,13 +58,15 @@ export default function MissionStorageModal({
     if (!nameInput.trim()) return;
 
     if (!geofence || (Array.isArray(geofence) ? geofence.length < 3 : (geofence?.coordinates?.length || 0) < 3)) {
-      setLoadErrorMsg("GEOFENCE REQUIRED — Create and save a geofence before planning waypoints.");
+      const msg = "GEOFENCE REQUIRED — Create and save a geofence before planning waypoints.";
+      setLoadErrorMsg(msg);
       return;
     }
 
     const validation = validateMissionAgainstGeofence(items, geofence);
     if (!validation.isValid) {
-      setLoadErrorMsg(validation.message || "MISSION ROUTE EXCEEDS GEOFENCE — Route must remain inside boundary.");
+      const msg = validation.message || "Route must remain inside boundary.";
+      setLoadErrorMsg(msg);
       return;
     }
 
@@ -78,6 +80,7 @@ export default function MissionStorageModal({
   };
 
   const handleLoad = (id) => {
+    const targetMission = savedMissions.find((m) => m.id === id);
     const success = loadMissionFromStorage(id);
     if (success) {
       onClose();

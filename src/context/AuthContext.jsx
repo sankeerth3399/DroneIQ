@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from "react"
 import { AuthContext } from "./authContextCore.js"
 import { authService } from "@/services/api/authService.js"
 import { normalizeRole, getRolePermissions, Roles } from "@/auth/roleConfig.js"
+import { showAlert, AlertTypes, AlertCategories } from "@/services/notification/alertService.js"
 
 export const AuthProvider = ({ children }) => {
   const [token, setToken] = useState(() => authService.getToken())
@@ -12,6 +13,13 @@ export const AuthProvider = ({ children }) => {
     authService.logout()
     setToken(null)
     setUser(null)
+    showAlert({
+      type: AlertTypes.INFO,
+      title: "Signed Out",
+      message: "You have signed out of AeroNexus GCS.",
+      category: AlertCategories.SECURITY,
+      key: "AUTH_STATUS",
+    })
   }, [])
 
   // Manage auth event listeners
@@ -83,6 +91,13 @@ export const AuthProvider = ({ children }) => {
     if (res) {
       setToken(res.token)
       setUser(res.user)
+      showAlert({
+        type: AlertTypes.INFO,
+        title: "Role Updated",
+        message: `Switched active role to ${res.user.role}.`,
+        category: AlertCategories.SECURITY,
+        key: "ROLE_CHANGE",
+      })
     }
     return res
   }, [])

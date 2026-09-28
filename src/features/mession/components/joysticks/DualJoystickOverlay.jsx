@@ -26,10 +26,28 @@ export const DualJoystickOverlay = ({
   camSelected = "main",
   mapIsLarge = true,
   cameraSelector = "#drone-live-feed",
+  onActivityChange,
 }) => {
   const leftStickRef = useRef({ x: 0, y: 0 })
   const rightStickRef = useRef({ x: 0, y: 0 })
   const springThrottle = true
+
+  // Joystick active state tracking
+  const activityRef = useRef({ left: false, right: false })
+  const handleLeftActive = useCallback(
+    (active) => {
+      activityRef.current.left = active
+      onActivityChange?.({ ...activityRef.current })
+    },
+    [onActivityChange]
+  )
+  const handleRightActive = useCallback(
+    (active) => {
+      activityRef.current.right = active
+      onActivityChange?.({ ...activityRef.current })
+    },
+    [onActivityChange]
+  )
 
   // Standard responsive base size and shared bottom positioning with height and width awareness
   const [dimensions, setDimensions] = useState(() => {
@@ -63,7 +81,27 @@ export const DualJoystickOverlay = ({
 
   // Dynamic horizontal offset for right joystick (horizontal-only adjustment preserves shared Y)
   const [rightOffset, setRightOffset] = useState(28)
+  const leftContainerRef = useRef(null)
   const rightContainerRef = useRef(null)
+
+  // Development DOM hit-test verification to ensure no overlay intercepts joystick interaction
+  useEffect(() => {
+    if (import.meta.env?.DEV && visible) {
+      const timer = setTimeout(() => {
+        const testHit = (ref, name) => {
+          if (!ref.current) return
+          const rect = ref.current.getBoundingClientRect()
+          const cx = rect.left + rect.width / 2
+          const cy = rect.top + rect.height / 2
+          const el = document.elementFromPoint(cx, cy)
+          console.log(`[JOYSTICK HIT-TEST] ${name} center (${cx.toFixed(0)}, ${cy.toFixed(0)}) ->`, el?.id || el?.className || el?.tagName)
+        }
+        testHit(leftContainerRef, "LEFT")
+        testHit(rightContainerRef, "RIGHT")
+      }, 500)
+      return () => clearTimeout(timer)
+    }
+  }, [visible])
 
   // 1. Calculate responsive base size and shared bottom on viewport changes
   useEffect(() => {
@@ -246,7 +284,7 @@ export const DualJoystickOverlay = ({
 
   return (
     <div
-      className="pointer-events-none absolute inset-0 z-20 overflow-hidden"
+      className="pointer-events-none absolute inset-0 z-30 overflow-hidden"
       style={{
         "--joystick-bottom": `calc(${dimensions.sharedBottom}px + env(safe-area-inset-bottom, 0px))`,
       }}
@@ -254,11 +292,15 @@ export const DualJoystickOverlay = ({
       {/* LEFT CIRCULAR JOYSTICK: Throttle & Yaw (Uses shared --joystick-bottom) */}
       <div
         id="fly-left-joystick-container"
+        ref={leftContainerRef}
         style={{
           left: `calc(${dimensions.leftOffset}px + env(safe-area-inset-left, 0px))`,
           bottom: "var(--joystick-bottom)",
           width: `${dimensions.baseSize}px`,
           height: `${dimensions.baseSize}px`,
+          touchAction: "none",
+          userSelect: "none",
+          WebkitUserSelect: "none",
         }}
         className="pointer-events-auto absolute transition-all duration-300 ease-out select-none touch-none"
       >
@@ -272,6 +314,7 @@ export const DualJoystickOverlay = ({
           springY={springThrottle}
           defaultY={0}
           onChange={handleLeftChange}
+          onActiveChange={handleLeftActive}
         />
       </div>
 
@@ -304,6 +347,9 @@ export const DualJoystickOverlay = ({
           bottom: "var(--joystick-bottom)",
           width: `${dimensions.baseSize}px`,
           height: `${dimensions.baseSize}px`,
+          touchAction: "none",
+          userSelect: "none",
+          WebkitUserSelect: "none",
         }}
         className="pointer-events-auto absolute transition-all duration-300 ease-out select-none touch-none"
       >
@@ -317,6 +363,7 @@ export const DualJoystickOverlay = ({
           springY={true}
           defaultY={0}
           onChange={handleRightChange}
+          onActiveChange={handleRightActive}
         />
       </div>
     </div>

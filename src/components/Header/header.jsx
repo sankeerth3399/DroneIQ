@@ -2,31 +2,34 @@ import { Menu, Bell } from "lucide-react"
 import ProfileDetails from "@/components/profile/profileDetails.jsx"
 import { useTelemetry } from "@/hooks/useTelemetry.js"
 import { useAuth } from "@/hooks/useAuth.js"
+import { useNotification } from "@/hooks/useNotification.js"
 import { ConnectionState, DEFAULT_FLIGHT_MODE } from "@/services/telemetry/telemetryTypes.js"
 import { ROLE_METADATA, Roles } from "@/auth/roleConfig.js"
 import { Permissions } from "@/auth/permissions.js"
 import ArmStatusButton from "./ArmStatusButton.jsx"
 import EmergencyOverrideDeck from "@/features/fly/components/EmergencyOverrideDeck.jsx"
+import NotificationCenterModal from "@/components/notification/NotificationCenterModal.jsx"
 
 const Header = ({ onToggleMobile, mobileOpen }) => {
     const { telemetry, flightMode: contextFlightMode, selectedDroneId, connectionState, isLive } = useTelemetry()
     const { role, hasPermission } = useAuth()
+    const { unreadCount, isHistoryOpen, setIsHistoryOpen } = useNotification()
     const roleMeta = ROLE_METADATA[role] || ROLE_METADATA[Roles.VIEWER]
     const canOverrideFlight = typeof hasPermission === "function" ? hasPermission(Permissions.OVERRIDE_FLIGHT_COMMANDS) : false
     const canExecuteFlight = typeof hasPermission === "function" ? hasPermission(Permissions.EXECUTE_FLIGHT_COMMANDS) : false
 
     // Determine link display text and color based on connection state
     const getLinkDisplay = () => {
+        if (connectionState === ConnectionState.STALE) {
+            return { text: "Stale", color: "text-[#F59E0B]" }
+        }
         if (isLive || connectionState === ConnectionState.AUTHENTICATED) {
             return { text: "Online", color: "text-[#2FE089]" }
         }
         if (connectionState === ConnectionState.CONNECTING) {
             return { text: "Connecting", color: "text-[#35E0FF]" }
         }
-        if (connectionState === ConnectionState.STALE) {
-            return { text: "Stale", color: "text-[#F59E0B]" }
-        }
-        if (connectionState === ConnectionState.BACKEND_UNAVAILABLE) {
+        if (connectionState === ConnectionState.BACKEND_UNAVAILABLE || connectionState === ConnectionState.DISCONNECTED || connectionState === ConnectionState.AUTH_FAILURE) {
             return { text: "Offline", color: "text-[#FF8585]" }
         }
         return { text: "Standby", color: "text-[#8E9EAA]" }
@@ -138,13 +141,25 @@ const Header = ({ onToggleMobile, mobileOpen }) => {
                     <span>{roleMeta.shortLabel}</span>
                 </div>
 
-                <button
-                    type="button"
-                    className="flex justify-center items-center w-8 h-8 sm:w-9 sm:h-9 bg-[#171F27] border border-[#223240] rounded-[8px] hover:bg-[#202B36] transition shrink-0"
-                    title="Notifications"
-                >
-                    <Bell className="w-4 h-4 text-[#8E9EAA] hover:text-[#35E0FF] transition" />
-                </button>
+                <div className="relative shrink-0">
+                    <button
+                        id="notification-bell-btn"
+                        type="button"
+                        onClick={() => setIsHistoryOpen((prev) => !prev)}
+                        className="relative flex justify-center items-center w-8 h-8 sm:w-9 sm:h-9 bg-[#171F27] border border-[#223240] rounded-[8px] hover:bg-[#202B36] transition shrink-0 cursor-pointer"
+                        title="Alerts & Notifications"
+                        aria-label="Toggle Notification Center"
+                        aria-expanded={isHistoryOpen}
+                    >
+                        <Bell className="w-4 h-4 text-[#8E9EAA] hover:text-[#35E0FF] transition" />
+                        {unreadCount > 0 && (
+                            <span className="absolute -top-1 -right-1 flex h-4 min-w-[16px] px-1 items-center justify-center rounded-full bg-[#EF4444] text-[9px] font-mono font-bold text-white shadow-[0_0_8px_#EF4444] animate-pulse">
+                                {unreadCount > 9 ? "9+" : unreadCount}
+                            </span>
+                        )}
+                    </button>
+                    <NotificationCenterModal />
+                </div>
                 <ProfileDetails />
             </div>
         </div>

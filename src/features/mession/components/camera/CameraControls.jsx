@@ -52,22 +52,8 @@ export const CameraControls = ({
     if (!isRecording) {
       setRecordSeconds(0)
       setIsRecording(true)
-      onCaptureToast?.({
-        type: "video",
-        title: "Recording Started",
-        message: "Video recording in 4K 60FPS (H.265)",
-      })
     } else {
       setIsRecording(false)
-      const durationStr = formatTimer(recordSeconds)
-      const filename = `VID_${new Date().toISOString().slice(0, 10).replace(/-/g, "")}_${String(
-        Math.floor(Math.random() * 9000 + 1000)
-      )}.mp4`
-      onCaptureToast?.({
-        type: "video",
-        title: "Recording Saved",
-        message: `${filename} (${durationStr} • ${(recordSeconds * 6.2).toFixed(1)} MB)`,
-      })
     }
   }
 
@@ -75,34 +61,14 @@ export const CameraControls = ({
   const handleTakePhoto = (e) => {
     e.stopPropagation()
     onTriggerFlash?.()
-
-    const filename = `IMG_${new Date().toISOString().slice(0, 10).replace(/-/g, "")}_${String(
-      photoCount
-    ).padStart(4, "0")}.JPG`
     setPhotoCount((prev) => prev + 1)
-
-    onCaptureToast?.({
-      type: "photo",
-      title: "Photo Captured",
-      message: `${filename} (12.4 MP • RAW+JPG)`,
-    })
   }
 
   // Take Screenshot
   const handleScreenshot = (e) => {
     e.stopPropagation()
     onTriggerFlash?.()
-
-    const filename = `SCREEN_${new Date().toISOString().slice(0, 10).replace(/-/g, "")}_${String(
-      screenshotCount
-    ).padStart(3, "0")}.PNG`
     setScreenshotCount((prev) => prev + 1)
-
-    onCaptureToast?.({
-      type: "screenshot",
-      title: "Screenshot Captured",
-      message: `${filename} saved to local gallery`,
-    })
   }
 
   return (

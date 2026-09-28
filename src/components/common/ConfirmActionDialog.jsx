@@ -39,6 +39,8 @@ export const ConfirmActionDialog = ({
   warning,
   droneId,
   currentState,
+  currentMode,
+  newMode,
   targetAltitude,
   missionId,
   missionName,
@@ -190,6 +192,16 @@ export const ConfirmActionDialog = ({
                   <span>{droneId}</span>
                 </span>
               )}
+              {currentMode && (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#0E1722] border border-[#1A2633] text-[#CBD5E1]">
+                  <span>CURRENT MODE: <strong className="text-white">{currentMode}</strong></span>
+                </span>
+              )}
+              {newMode && (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#0E1722] border border-[#35E0FF4D] text-[#35E0FF]">
+                  <span>NEW MODE: <strong>{newMode}</strong></span>
+                </span>
+              )}
               {missionId && (
                 <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#0E1722] border border-[#1A2633] text-[#FCD34D]">
                   <Target className="w-2.5 h-2.5" />
@@ -201,7 +213,7 @@ export const ConfirmActionDialog = ({
                   <span>NAME: {missionName}</span>
                 </span>
               )}
-              {currentState && (
+              {currentState && !currentMode && (
                 <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#0E1722] border border-[#1A2633] text-[#CBD5E1]">
                   <span>STATE: {currentState}</span>
                 </span>
@@ -255,7 +267,21 @@ export const ConfirmActionDialog = ({
             {busy ? (
               <>
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                <span>EXECUTING...</span>
+                <span>
+                  {action.toUpperCase() === "ARM" || (action.toUpperCase().startsWith("ARM") && !action.toUpperCase().includes("DISARM"))
+                    ? "ARMING..."
+                    : action.toUpperCase().includes("DISARM")
+                    ? "DISARMING..."
+                    : action.toUpperCase().includes("TAKEOFF")
+                    ? "TAKING OFF..."
+                    : action.toUpperCase().includes("LAND")
+                    ? "LANDING..."
+                    : action.toUpperCase().includes("START_MISSION") || action.toUpperCase().includes("START MISSION")
+                    ? "STARTING MISSION..."
+                    : action.toUpperCase().includes("MODE")
+                    ? "CHANGING MODE..."
+                    : "EXECUTING..."}
+                </span>
               </>
             ) : (
               <span>{effectiveConfirmLabel}</span>

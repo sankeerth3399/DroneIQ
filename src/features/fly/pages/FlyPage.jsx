@@ -1,18 +1,17 @@
 import { useState, useCallback, useEffect } from "react";
 import MapLoad from "@/components/Map/mapContainer.jsx";
 import { useDroneTelemetry } from "@/hooks/useDroneTelemetry.js";
+import { getMovementAbbreviation } from "@/utils/joystick.js";
 import DualJoystickOverlay from "@/features/mession/components/joysticks/DualJoystickOverlay.jsx";
 import FlightInstrumentsWidget from "@/features/mession/components/widgets/FlightInstrumentsWidget.jsx";
 import CameraWidget from "@/features/fly/components/CameraWidget.jsx";
 import FlightModeDropdown from "@/features/fly/components/FlightModeDropdown.jsx";
-import CaptureToast from "@/features/mession/components/toast/CaptureToast.jsx";
 import { LayoutGrid, ShieldAlert } from "lucide-react";
 
 import { useAuth } from "@/hooks/useAuth.js";
 import { Permissions } from "@/auth/permissions.js";
 import { Roles } from "@/auth/roleConfig.js";
 import { DEFAULT_SHOW_JOYSTICKS } from "@/services/telemetry/telemetryTypes.js";
-import { useFlyConfirmation } from "@/hooks/useFlyConfirmation.js";
 
 const pipClass =
   "absolute right-2 top-2 sm:right-4 sm:top-4 z-20 flex cursor-pointer flex-col overflow-hidden rounded-xl border border-[#223240] bg-[#171F27B2] shadow-2xl backdrop-blur-md transition-all duration-300 h-[124px] w-[155px] sm:h-[156px] sm:w-[205px] md:h-[188px] md:w-[245px]";
@@ -71,6 +70,7 @@ const FlyPage = () => {
 
   // Dual Virtual Joysticks visibility state (Mandatory Default: HIDDEN / false)
   const [joysticksVisible, setJoysticksVisible] = useState(DEFAULT_SHOW_JOYSTICKS);
+  const [joystickActivity, setJoystickActivity] = useState({ left: false, right: false });
 
   // RBAC permissions and role inspection
   const { hasPermission, role } = useAuth();
@@ -81,34 +81,21 @@ const FlyPage = () => {
   const {
     telemetry,
     updateStickInputs,
+    stickInputs,
+    isArmed,
     gimbalState,
     setGimbalRoll,
     centerGimbal,
     selectedDroneId,
   } = useDroneTelemetry();
 
-  // Centralized action confirmation request hook
-  const { requestActionConfirmation } = useFlyConfirmation();
-
   const handleRequestCenterGimbal = useCallback(() => {
-    requestActionConfirmation({
-      action: "GIMBAL_CENTER",
-      droneId: selectedDroneId || telemetry?.droneId || "DRONE-001",
-      onConfirm: async () => {
-        centerGimbal(telemetry.heading || 0);
-      },
-    });
-  }, [requestActionConfirmation, selectedDroneId, telemetry, centerGimbal]);
+    centerGimbal(telemetry?.heading || 0);
+  }, [telemetry, centerGimbal]);
 
   const handleRequestLevelRoll = useCallback(() => {
-    requestActionConfirmation({
-      action: "GIMBAL_LEVEL_ROLL",
-      droneId: selectedDroneId || telemetry?.droneId || "DRONE-001",
-      onConfirm: async () => {
-        setGimbalRoll(0);
-      },
-    });
-  }, [requestActionConfirmation, selectedDroneId, telemetry, setGimbalRoll]);
+    setGimbalRoll(0);
+  }, [setGimbalRoll]);
 
   // Desktop Keyboard Flight Controls (WASD: Throttle/Yaw, Arrow Keys: Pitch/Roll, Space: Hover)
   // Strictly gated by EXECUTE_FLIGHT_COMMANDS permission
@@ -184,9 +171,6 @@ const FlyPage = () => {
     };
   }, [updateStickInputs, canExecuteFlight]);
 
-  // Capture toast notification state
-  const [toast, setToast] = useState(null);
-
   // Shutter flash states: full-screen vs drone-feed-scoped
   const [isScreenFlashing, setIsScreenFlashing] = useState(false);
   const [isDroneFlashing, setIsDroneFlashing] = useState(false);
@@ -229,9 +213,6 @@ const FlyPage = () => {
         <div className="absolute inset-0 z-50 bg-white/95 pointer-events-none transition-opacity duration-200 animate-out fade-out" />
       )}
 
-      {/* NON-BLOCKING CAPTURE CONFIRMATION TOAST */}
-      <CaptureToast toast={toast} onDismiss={() => setToast(null)} />
-
       {/* MAP LAYER (Full screen or PiP) */}
       <div className={mapIsLarge ? fullClass : pipClass}>
         <div className={`relative ${mapIsLarge ? "h-full w-full" : "min-h-0 flex-1"}`}>
@@ -269,7 +250,6 @@ const FlyPage = () => {
         onSetRoll={handleRequestLevelRoll}
         onNudgeRoll={(delta) => setGimbalRoll((gimbalState?.roll || 0) + delta)}
         onCenterGimbal={handleRequestCenterGimbal}
-        onCaptureToast={setToast}
         onTriggerDroneFlash={triggerDroneFlash}
         onTriggerScreenFlash={triggerScreenFlash}
         isDroneFlashing={isDroneFlashing}
@@ -288,6 +268,7 @@ const FlyPage = () => {
           onToggleVisible={() => setJoysticksVisible((prev) => !prev)}
           camSelected={camSelected}
           mapIsLarge={mapIsLarge}
+          onActivityChange={setJoystickActivity}
         />
       )}
 
@@ -404,37 +385,48 @@ const FlyPage = () => {
         </button>
       </div>
 
-      {/* REAL-TIME FLIGHT MOVEMENT & HEADING VECTOR DEBUG HUD */}
-      {canExecuteFlight && (
+      {/* REAL-TIME DEVELOPMENT DEBUG HUD (Section 26) */}
+      {import.meta.env.DEV && canExecuteFlight && (
         <div
           id="flight-movement-debug-hud"
-          className="absolute top-11 sm:top-12 left-1/2 -translate-x-1/2 z-15 pointer-events-auto flex flex-wrap items-center justify-center gap-1.5 sm:gap-2.5 px-2 sm:px-3 py-0.5 sm:py-1 rounded-md bg-[#080C14E6] border border-[#1E293B] shadow-xl backdrop-blur-md text-[8px] sm:text-[9.5px] font-mono select-none max-w-[calc(100vw-24px)] sm:max-w-none"
+          className="absolute top-11 sm:top-12 left-1/2 -translate-x-1/2 z-15 pointer-events-auto flex flex-wrap items-center justify-center gap-1.5 sm:gap-2.5 px-2.5 sm:px-3.5 py-0.5 sm:py-1 rounded-md bg-[#080C14E6] border border-[#1E293B] shadow-xl backdrop-blur-md text-[8px] sm:text-[9.5px] font-mono select-none max-w-[calc(100vw-24px)] sm:max-w-none"
         >
           <div className="flex items-center gap-1">
-            <span className="text-[#8E9EAA]">HEADING:</span>
-            <strong className="text-[#EEF4F8]">
-              {telemetry.flightMovementDebug?.droneHeading ?? Math.round(telemetry.heading || 0)}°
-            </strong>
+            <span className="text-[#8E9EAA]">LEFT:</span>
+            <span className={joystickActivity.left ? "text-[#2FE089] font-bold" : "text-[#64748B]"}>
+              [{joystickActivity.left ? "ACTIVE" : "IDLE"}]
+            </span>
+            <span className="text-[#EEF4F8]">
+              X: <strong className="text-[#35E0FF]">{(stickInputs?.yaw || 0).toFixed(2)}</strong> Y: <strong className="text-[#35E0FF]">{(stickInputs?.throttle || 0).toFixed(2)}</strong>
+            </span>
           </div>
           <div className="w-[1px] h-2.5 bg-[#223240]" />
           <div className="flex items-center gap-1">
-            <span className="text-[#8E9EAA]">ARROW:</span>
-            <strong className="text-[#35E0FF]">
-              {telemetry.flightMovementDebug?.arrowDirection || "N"}
-            </strong>
+            <span className="text-[#8E9EAA]">RIGHT:</span>
+            <span className={joystickActivity.right ? "text-[#2FE089] font-bold" : "text-[#64748B]"}>
+              [{joystickActivity.right ? "ACTIVE" : "IDLE"}]
+            </span>
+            <span className="text-[#EEF4F8]">
+              X: <strong className="text-[#35E0FF]">{(stickInputs?.roll || 0).toFixed(2)}</strong> Y: <strong className="text-[#35E0FF]">{(stickInputs?.pitch || 0).toFixed(2)}</strong>
+            </span>
           </div>
           <div className="w-[1px] h-2.5 bg-[#223240]" />
           <div className="flex items-center gap-1">
-            <span className="text-[#8E9EAA]">JOYSTICK:</span>
-            <strong className="text-[#EEF4F8]">
-              {telemetry.flightMovementDebug?.joystickDirection || "NEUTRAL"}
+            <span className="text-[#8E9EAA]">ARMED:</span>
+            <strong className={isArmed ? "text-[#2FE089]" : "text-[#FF4757]"}>
+              {isArmed ? "true" : "false"}
             </strong>
           </div>
           <div className="w-[1px] h-2.5 bg-[#223240]" />
           <div className="flex items-center gap-1">
             <span className="text-[#8E9EAA]">MOVEMENT:</span>
             <strong className="text-[#2FE089]">
-              {telemetry.flightMovementDebug?.calculatedMovementDirection || telemetry.flightMovementDebug?.arrowDirection || "N"}
+              {getMovementAbbreviation(
+                stickInputs?.pitch || 0,
+                stickInputs?.roll || 0,
+                stickInputs?.throttle || 0,
+                stickInputs?.yaw || 0
+              )}
             </strong>
           </div>
         </div>

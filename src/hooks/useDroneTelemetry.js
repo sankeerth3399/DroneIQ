@@ -10,33 +10,10 @@ import {
   PositionSource,
 } from "@/services/telemetry/telemetryTypes.js";
 
-const DEADZONE = 0.04;
+const DEADZONE = 0.08;
 const applyDeadzone = (v) => (Math.abs(v) < DEADZONE ? 0 : v);
 
 export { getJoystickDirectionLabel };
-
-const calculateBearing = (lat1, lon1, lat2, lon2) => {
-  const toRad = (deg) => (deg * Math.PI) / 180;
-  const toDeg = (rad) => (rad * 180) / Math.PI;
-  const phi1 = toRad(lat1);
-  const phi2 = toRad(lat2);
-  const deltaLambda = toRad(lon2 - lon1);
-  const y = Math.sin(deltaLambda) * Math.cos(phi2);
-  const x = Math.cos(phi1) * Math.sin(phi2) - Math.sin(phi1) * Math.cos(phi2) * Math.cos(deltaLambda);
-  return (toDeg(Math.atan2(y, x)) + 360) % 360;
-};
-
-const calculateDistanceMeters = (lat1, lon1, lat2, lon2) => {
-  const R = 6371000;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLon / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-};
 
 const MAX_SPEED = 24.0; // Max horizontal speed in m/s (crisp and visible on map)
 const MAX_CLIMB_RATE = 7.0; // Max vertical climb/descent rate in m/s
@@ -61,7 +38,6 @@ export function useDroneTelemetry() {
     selectedDroneId,
     selectDrone,
     isArmed,
-    showToast,
     gimbalState,
     setGimbalPitch,
     setGimbalRoll,
@@ -93,13 +69,6 @@ export function useDroneTelemetry() {
     droneConnected: false,
     droneGPSValid: false,
     isLive: false,
-  });
-
-  // Stored home / launch location for RTL return
-  const homePositionRef = useRef({
-    latitude: FALLBACK_DRONE_LOCATION.latitude,
-    longitude: FALLBACK_DRONE_LOCATION.longitude,
-    altitude: 0.0,
   });
 
   // Authoritative simulation state reference for 60 FPS physics integration
@@ -168,14 +137,47 @@ export function useDroneTelemetry() {
     roll: 0,
   });
 
-  // Mode: 'interactive' (joystick control) vs 'patrol' (autonomous orbit demo)
+  // Authoritative development simulation switch (Enabled for interactive manual flight)
+  const [simulationEnabled, setSimulationEnabled] = useState(true);
   const [simMode, setSimMode] = useState("interactive");
 
-  // Immediate disarm flight stoppage: freeze position and zero all velocities immediately
+  const movementFrameRef = useRef(null);
+  const lastTimeRef = useRef(0);
+  const lastUiSyncRef = useRef(0);
+  const isArmedRef = useRef(isArmed ?? false);
+  const simulationEnabledRef = useRef(simulationEnabled);
+  const canonicalFlightModeRef = useRef(canonicalFlightMode);
+  const isLiveRef = useRef(isLive);
+  const liveTelemetryRef = useRef(liveTelemetry);
+
   useEffect(() => {
+    simulationEnabledRef.current = simulationEnabled;
+  }, [simulationEnabled]);
+
+  useEffect(() => {
+    canonicalFlightModeRef.current = canonicalFlightMode;
+  }, [canonicalFlightMode]);
+
+  useEffect(() => {
+    isLiveRef.current = isLive;
+    liveTelemetryRef.current = liveTelemetry;
+  }, [isLive, liveTelemetry]);
+
+  // Clean stop of the movement animation loop
+  const stopMovementLoop = useCallback(() => {
+    if (movementFrameRef.current !== null) {
+      cancelAnimationFrame(movementFrameRef.current);
+      movementFrameRef.current = null;
+    }
+  }, []);
+
+  // Immediate disarm flight stoppage: freeze position, zero all velocities, and stop loop
+  useEffect(() => {
+    isArmedRef.current = isArmed ?? false;
     hasSettledRef.current = false;
     if (!isArmed) {
-      // 1. Reset stick inputs & notify flight control service
+      stopMovementLoop();
+      // 1. Reset stick inputs & notify flightControlService
       const zeroSticks = { throttle: 0, yaw: 0, pitch: 0, roll: 0 };
       stickInputRef.current = zeroSticks;
       flightControlService.sendControlCommand(zeroSticks);
@@ -188,41 +190,353 @@ export function useDroneTelemetry() {
       state.speed = 0;
       state.pitch = 0;
       state.roll = 0;
+
+      // Schedule state reset without cascading synchronous render
+      queueMicrotask(() => {
+        setStickInputs(zeroSticks);
+        setSimTelemetry((prev) => ({
+          ...prev,
+          speed: 0,
+          groundSpeed: 0,
+          verticalSpeed: 0,
+          climbRate: 0,
+          pitch: 0,
+          roll: 0,
+          armed: false,
+          isArmed: false,
+        }));
+      });
     }
-  }, [isArmed]);
+  }, [isArmed, stopMovementLoop]);
+
+  const stepMovementRef = useRef(null);
+
+  // Physics simulation step callback
+  const stepMovement = useCallback((currentTime) => {
+    // 1. If live WebSocket data is actively flowing with valid coordinates from a real drone, bypass local simulation
+    const live = liveTelemetryRef.current;
+    if (
+      isLiveRef.current &&
+      live &&
+      isValidGpsCoordinate(live.latitude, live.longitude) &&
+      live.positionSource === PositionSource.LIVE
+    ) {
+      stopMovementLoop();
+      return;
+    }
+
+    // 2. HARD ARMED/UNARMED LOCK: When UNARMED or simulation disabled, stop immediately
+    if (!isArmedRef.current || !simulationEnabledRef.current) {
+      const state = simStateRef.current;
+      state.speed = 0;
+      state.forwardSpeed = 0;
+      state.lateralSpeed = 0;
+      state.verticalSpeed = 0;
+      state.pitch = 0;
+      state.roll = 0;
+      stopMovementLoop();
+      return;
+    }
+
+    const dt = Math.min((currentTime - lastTimeRef.current) / 1000, 0.1);
+    lastTimeRef.current = currentTime;
+
+    const state = simStateRef.current;
+
+    // 3. Inspect user stick inputs
+    const rawSticks = stickInputRef.current;
+    const throttleInput = applyDeadzone(rawSticks.throttle || 0);
+    const yawInput = applyDeadzone(rawSticks.yaw || 0);
+    const pitchInput = applyDeadzone(rawSticks.pitch || 0);
+    const rollInput = applyDeadzone(rawSticks.roll || 0);
+
+    const hasHorizontalStick = pitchInput !== 0 || rollInput !== 0;
+    const hasVerticalStick = throttleInput !== 0;
+    const hasYawStick = yawInput !== 0;
+    const hasActiveStick = hasHorizontalStick || hasVerticalStick || hasYawStick;
+
+    // If sticks are released to center/deadzone: IMMEDIATELY stop movement
+    if (!hasActiveStick) {
+      state.forwardSpeed = 0;
+      state.lateralSpeed = 0;
+      state.verticalSpeed = 0;
+      state.speed = 0;
+      state.pitch = 0;
+      state.roll = 0;
+
+      hasSettledRef.current = true;
+      stopMovementLoop();
+
+      // Sync neutral state to React once
+      const safeLat = typeof state.latitude === "number" ? state.latitude : FALLBACK_DRONE_LOCATION.latitude;
+      const safeLng = typeof state.longitude === "number" ? state.longitude : FALLBACK_DRONE_LOCATION.longitude;
+      const safeHeading = typeof state.heading === "number" ? state.heading : 0;
+      const safeAlt = typeof state.altitude === "number" ? state.altitude : 0;
+
+      const settledDebug = {
+        droneHeading: Number(safeHeading.toFixed(1)),
+        arrowDirection: getCardinalDirection(safeHeading),
+        joystickX: 0,
+        joystickY: 0,
+        joystickDirection: "NEUTRAL",
+        calculatedMovementHeading: Number(safeHeading.toFixed(1)),
+        calculatedMovementDirection: getCardinalDirection(safeHeading),
+        latitude: Number(safeLat.toFixed(6)),
+        longitude: Number(safeLng.toFixed(6)),
+        speed: 0,
+        isArmed: true,
+      };
+      debugFlightInfoRef.current = settledDebug;
+
+      if (typeof window !== "undefined") {
+        window.__DRONE_STATE__ = {
+          latitude: Number(safeLat.toFixed(6)),
+          longitude: Number(safeLng.toFixed(6)),
+          heading: Number(safeHeading.toFixed(1)),
+          altitude: Number(safeAlt.toFixed(1)),
+          speed: 0,
+          roll: 0,
+          pitch: 0,
+          yaw: 0,
+          armed: true,
+          arrowDirection: getCardinalDirection(safeHeading),
+          calculatedMovementHeading: Number(safeHeading.toFixed(1)),
+          calculatedMovementDirection: getCardinalDirection(safeHeading),
+        };
+      }
+
+      setSimTelemetry((prev) => ({
+        ...prev,
+        latitude: Number(safeLat.toFixed(6)),
+        longitude: Number(safeLng.toFixed(6)),
+        altitude: Number(safeAlt.toFixed(1)),
+        heading: Number(safeHeading.toFixed(1)),
+        pitch: 0,
+        roll: 0,
+        speed: 0,
+        groundSpeed: 0,
+        verticalSpeed: 0,
+        climbRate: 0,
+        battery: 84,
+        voltage: 24.2,
+        satellites: 18,
+        gpsFix: "3D Fix",
+        armed: true,
+        isArmed: true,
+        flightMode: state.flightMode || canonicalFlightModeRef.current || "GUIDED",
+        status: "OK",
+        flightMovementDebug: settledDebug,
+      }));
+      return;
+    }
+
+    // Active sticks: perform movement integration
+    hasSettledRef.current = false;
+
+    // Handle yaw rotation (independent of position)
+    if (hasYawStick) {
+      state.heading = normalizeHeading(state.heading + yawInput * YAW_RATE * dt);
+    }
+
+    // Handle vertical throttle (independent of horizontal position)
+    if (hasVerticalStick) {
+      const targetVsi = throttleInput * MAX_CLIMB_RATE;
+      state.verticalSpeed += (targetVsi - state.verticalSpeed) * Math.min(1, dt * 7.0);
+      state.altitude = Math.max(
+        MIN_ALTITUDE,
+        Math.min(MAX_ALTITUDE, state.altitude + state.verticalSpeed * dt)
+      );
+    } else {
+      state.verticalSpeed = 0;
+    }
+
+    if (state.altitude <= MIN_ALTITUDE && state.verticalSpeed < 0) {
+      state.verticalSpeed = 0;
+    }
+
+    let calculatedMovementHeading = state.heading;
+
+    // HORIZONTAL MOVEMENT: Body-relative to current heading
+    if (hasHorizontalStick) {
+      const targetPitch = -pitchInput * MAX_PITCH_DEG;
+      const targetRoll = rollInput * MAX_ROLL_DEG;
+      state.pitch = targetPitch;
+      state.roll = targetRoll;
+
+      state.forwardSpeed = pitchInput * MAX_SPEED;
+      state.lateralSpeed = rollInput * MAX_SPEED;
+      state.speed = Math.hypot(state.forwardSpeed, state.lateralSpeed);
+
+      const headingRad = (state.heading * Math.PI) / 180;
+      const vNorth =
+        state.forwardSpeed * Math.cos(headingRad) -
+        state.lateralSpeed * Math.sin(headingRad);
+      const vEast =
+        state.forwardSpeed * Math.sin(headingRad) +
+        state.lateralSpeed * Math.cos(headingRad);
+
+      calculatedMovementHeading = ((Math.atan2(vEast, vNorth) * 180) / Math.PI + 360) % 360;
+
+      const metersPerDegLat = 111320;
+      const metersPerDegLng =
+        111320 * Math.cos((state.latitude * Math.PI) / 180);
+
+      const prevLat = state.latitude;
+      const prevLng = state.longitude;
+
+      state.latitude += (vNorth * dt) / metersPerDegLat;
+      state.longitude += (vEast * dt) / metersPerDegLng;
+
+      if (import.meta.env?.DEV) {
+        console.debug(`[DRONE POSITION UPDATE] source: JOYSTICK previous: ${prevLat.toFixed(6)},${prevLng.toFixed(6)} next: ${state.latitude.toFixed(6)},${state.longitude.toFixed(6)} armed: true joystick: ${pitchInput.toFixed(2)},${rollInput.toFixed(2)} reason: ACTIVE_JOYSTICK_INPUT`);
+      }
+    } else {
+      state.forwardSpeed = 0;
+      state.lateralSpeed = 0;
+      state.speed = 0;
+      state.pitch = 0;
+      state.roll = 0;
+    }
+
+    const debugInfo = {
+      droneHeading: Number(state.heading.toFixed(1)),
+      arrowDirection: getCardinalDirection(state.heading),
+      joystickX: Number((rawSticks.roll || 0).toFixed(2)),
+      joystickY: Number((rawSticks.pitch || 0).toFixed(2)),
+      joystickDirection: getJoystickDirectionLabel(
+        rawSticks.pitch || 0,
+        rawSticks.roll || 0,
+        rawSticks.throttle || 0,
+        rawSticks.yaw || 0
+      ),
+      calculatedMovementHeading: Number(calculatedMovementHeading.toFixed(1)),
+      calculatedMovementDirection: hasHorizontalStick
+        ? getCardinalDirection(calculatedMovementHeading)
+        : getCardinalDirection(state.heading),
+      latitude: Number(state.latitude.toFixed(6)),
+      longitude: Number(state.longitude.toFixed(6)),
+      speed: Number(state.speed.toFixed(1)),
+      isArmed: true,
+    };
+    debugFlightInfoRef.current = debugInfo;
+
+    if (typeof window !== "undefined") {
+      window.__DRONE_STATE__ = {
+        latitude: Number(state.latitude.toFixed(6)),
+        longitude: Number(state.longitude.toFixed(6)),
+        heading: Number(state.heading.toFixed(1)),
+        altitude: Number(state.altitude.toFixed(1)),
+        speed: Number(state.speed.toFixed(1)),
+        roll: Number(state.roll.toFixed(1)),
+        pitch: Number(state.pitch.toFixed(1)),
+        yaw: Number((rawSticks.yaw || 0).toFixed(2)),
+        armed: true,
+        arrowDirection: getCardinalDirection(state.heading),
+        calculatedMovementHeading: Number(calculatedMovementHeading.toFixed(1)),
+        calculatedMovementDirection: debugInfo.calculatedMovementDirection,
+      };
+    }
+
+    // Synchronize to React state at ~30 FPS throttle
+    if (currentTime - lastUiSyncRef.current >= 33) {
+      lastUiSyncRef.current = currentTime;
+      const safeLat = typeof state.latitude === "number" ? state.latitude : FALLBACK_DRONE_LOCATION.latitude;
+      const safeLng = typeof state.longitude === "number" ? state.longitude : FALLBACK_DRONE_LOCATION.longitude;
+      const safeHeading = typeof state.heading === "number" ? state.heading : 0;
+      const safeAlt = typeof state.altitude === "number" ? state.altitude : 0;
+
+      setSimTelemetry((prev) => ({
+        ...prev,
+        latitude: Number(safeLat.toFixed(6)),
+        longitude: Number(safeLng.toFixed(6)),
+        altitude: Number(safeAlt.toFixed(1)),
+        heading: Number(safeHeading.toFixed(1)),
+        pitch: Number(state.pitch.toFixed(1)),
+        roll: Number(state.roll.toFixed(1)),
+        speed: Number(state.speed.toFixed(1)),
+        groundSpeed: Number(state.speed.toFixed(1)),
+        verticalSpeed: Number(state.verticalSpeed.toFixed(2)),
+        climbRate: Number(state.verticalSpeed.toFixed(2)),
+        battery: 84,
+        voltage: 24.2,
+        satellites: 18,
+        gpsFix: "3D Fix",
+        armed: true,
+        isArmed: true,
+        flightMode: state.flightMode || canonicalFlightModeRef.current || "GUIDED",
+        status: "OK",
+        flightMovementDebug: debugInfo,
+      }));
+    }
+
+    // Continue physics loop while pilot holds sticks
+    if (stepMovementRef.current) {
+      movementFrameRef.current = requestAnimationFrame(stepMovementRef.current);
+    }
+  }, [stopMovementLoop]);
+
+  useEffect(() => {
+    stepMovementRef.current = stepMovement;
+  }, [stepMovement]);
+
+  // Start movement loop safely (no duplicates)
+  const startMovementLoop = useCallback(() => {
+    if (movementFrameRef.current !== null) return;
+    lastTimeRef.current = performance.now();
+    if (stepMovementRef.current) {
+      movementFrameRef.current = requestAnimationFrame(stepMovementRef.current);
+    }
+  }, []);
 
   /**
    * Update stick inputs from virtual joysticks or keyboard
    * @param {Object} sticks - { throttle, yaw, pitch, roll }
    */
   const updateStickInputs = useCallback((sticks) => {
-    // CRITICAL: When UNARMED, reject stick input and notify user
-    if (!isArmed) {
-      const hasInput =
-        Math.abs(sticks.throttle || 0) > DEADZONE ||
-        Math.abs(sticks.yaw || 0) > DEADZONE ||
-        Math.abs(sticks.pitch || 0) > DEADZONE ||
-        Math.abs(sticks.roll || 0) > DEADZONE;
+    const rawSticks = {
+      throttle: sticks.throttle || 0,
+      yaw: sticks.yaw || 0,
+      pitch: sticks.pitch || 0,
+      roll: sticks.roll || 0,
+    };
 
-      if (hasInput) {
-        const now = performance.now();
-        if (now - lastUnarmedWarnRef.current > 2500) {
-          lastUnarmedWarnRef.current = now;
-          if (typeof showToast === "function") {
-            showToast("Drone is UNARMED — Arm the drone before flying.", "warning");
-          }
-        }
-      }
+    const nextSticks = {
+      throttle: applyDeadzone(rawSticks.throttle),
+      yaw: applyDeadzone(rawSticks.yaw),
+      pitch: applyDeadzone(rawSticks.pitch),
+      roll: applyDeadzone(rawSticks.roll),
+    };
 
-      const zeroSticks = { throttle: 0, yaw: 0, pitch: 0, roll: 0 };
-      stickInputRef.current = zeroSticks;
-      setStickInputs(zeroSticks);
-      flightControlService.sendControlCommand(zeroSticks);
+    const hasInput =
+      nextSticks.throttle !== 0 ||
+      nextSticks.yaw !== 0 ||
+      nextSticks.pitch !== 0 ||
+      nextSticks.roll !== 0;
+
+    // Update stick inputs so the joystick knobs and HUD reflect active pilot touch/key inputs
+    stickInputRef.current = nextSticks;
+    setStickInputs(nextSticks);
+
+    // CRITICAL HARD INVARIANT: When UNARMED, reject physical position movement immediately.
+    // Display pilot stick activity in HUD and UI, but freeze velocities and geographical coordinates.
+    if (!isArmedRef.current) {
+      stopMovementLoop();
+      // Hard lock: guarantee zero movement velocities in simulation state
+      const state = simStateRef.current;
+      state.forwardSpeed = 0;
+      state.lateralSpeed = 0;
+      state.verticalSpeed = 0;
+      state.speed = 0;
+      state.pitch = 0;
+      state.roll = 0;
+
+      // Ensure no physical commands are dispatched while unarmed
+      flightControlService.sendControlCommand({ throttle: 0, yaw: 0, pitch: 0, roll: 0 });
       return;
     }
 
     // In autonomous / safety priority modes (RTL, LAND, AUTO, BRAKE), joystick input is inhibited while active
-    const activeMode = simStateRef.current.flightMode || "GUIDED";
+    const activeMode = simStateRef.current.flightMode || canonicalFlightModeRef.current || "GUIDED";
     const isAutonomousMode =
       activeMode === "RTL" ||
       activeMode === "LAND" ||
@@ -230,6 +544,7 @@ export function useDroneTelemetry() {
       activeMode === "BRAKE";
 
     if (isAutonomousMode) {
+      stopMovementLoop();
       const zeroSticks = { throttle: 0, yaw: 0, pitch: 0, roll: 0 };
       stickInputRef.current = zeroSticks;
       setStickInputs(zeroSticks);
@@ -237,455 +552,40 @@ export function useDroneTelemetry() {
       return;
     }
 
-    const nextSticks = {
-      ...stickInputRef.current,
-      ...sticks,
-    };
-    stickInputRef.current = nextSticks;
-    setStickInputs(nextSticks);
-
     // Forward to flight control service abstraction
     flightControlService.sendControlCommand(nextSticks);
-  }, [isArmed, showToast]);
 
-  // Authoritative Physics Simulation Loop
+    // Start movement loop if armed and active stick input exists
+    if (hasInput && simulationEnabledRef.current) {
+      startMovementLoop();
+    }
+  }, [stopMovementLoop, startMovementLoop]);
+
+  // Clean up RAF on unmount
   useEffect(() => {
-    // If live WebSocket data is actively flowing with valid coordinates, bypass local simulation
-    if (isLive && liveTelemetry && typeof liveTelemetry.latitude === "number" && liveTelemetry.latitude !== 0) return;
-
-    let animFrameId;
-    let lastTime = performance.now();
-    let lastUiSync = 0;
-    let ambientPhase = 0;
-
-    const step = (currentTime) => {
-      const dt = Math.min((currentTime - lastTime) / 1000, 0.1);
-      lastTime = currentTime;
-      ambientPhase += dt * 1.5;
-
-      const state = simStateRef.current;
-
-      // CRITICAL FLIGHT SAFETY LOCK:
-      // When UNARMED, all flight controls, physics movement, and attitude dynamics are strictly locked.
-      if (!isArmed) {
-        state.speed = 0;
-        state.forwardSpeed = 0;
-        state.lateralSpeed = 0;
-        state.verticalSpeed = 0;
-        state.pitch = 0;
-        state.roll = 0;
-
-        if (!hasSettledRef.current) {
-          hasSettledRef.current = true;
-          const safeLat = typeof state.latitude === "number" ? state.latitude : FALLBACK_DRONE_LOCATION.latitude;
-          const safeLng = typeof state.longitude === "number" ? state.longitude : FALLBACK_DRONE_LOCATION.longitude;
-          const safeHeading = typeof state.heading === "number" ? state.heading : 0;
-          const safeAlt = typeof state.altitude === "number" ? state.altitude : 0;
-
-          const settledDebug = {
-            droneHeading: Number(safeHeading.toFixed(1)),
-            arrowDirection: getCardinalDirection(safeHeading),
-            joystickX: 0,
-            joystickY: 0,
-            joystickDirection: "NEUTRAL",
-            calculatedMovementHeading: Number(safeHeading.toFixed(1)),
-            calculatedMovementDirection: getCardinalDirection(safeHeading),
-            latitude: Number(safeLat.toFixed(6)),
-            longitude: Number(safeLng.toFixed(6)),
-            speed: 0,
-            isArmed: false,
-          };
-          debugFlightInfoRef.current = settledDebug;
-
-          if (typeof window !== "undefined") {
-            window.__DRONE_STATE__ = {
-              latitude: Number(safeLat.toFixed(6)),
-              longitude: Number(safeLng.toFixed(6)),
-              heading: Number(safeHeading.toFixed(1)),
-              altitude: Number(safeAlt.toFixed(1)),
-              speed: 0,
-              roll: 0,
-              pitch: 0,
-              yaw: 0,
-              armed: false,
-              arrowDirection: getCardinalDirection(safeHeading),
-              calculatedMovementHeading: Number(safeHeading.toFixed(1)),
-              calculatedMovementDirection: getCardinalDirection(safeHeading),
-            };
-          }
-
-          setSimTelemetry({
-            latitude: Number(safeLat.toFixed(6)),
-            longitude: Number(safeLng.toFixed(6)),
-            altitude: Number(safeAlt.toFixed(1)),
-            heading: Number(safeHeading.toFixed(1)),
-            pitch: 0,
-            roll: 0,
-            speed: 0,
-            groundSpeed: 0,
-            verticalSpeed: 0,
-            climbRate: 0,
-            battery: 84,
-            voltage: 24.2,
-            satellites: 18,
-            gpsFix: "3D Fix",
-            armed: false,
-            isArmed: false,
-            flightMode: state.flightMode || canonicalFlightMode || "GUIDED",
-            status: "OK",
-            flightMovementDebug: settledDebug,
-          });
-        }
-
-        animFrameId = requestAnimationFrame(step);
-        return;
-      }
-
-      const rawSticks = stickInputRef.current;
-
-      const throttleInput = applyDeadzone(rawSticks.throttle || 0);
-      const yawInput = applyDeadzone(rawSticks.yaw || 0);
-      const pitchInput = applyDeadzone(rawSticks.pitch || 0);
-      const rollInput = applyDeadzone(rawSticks.roll || 0);
-
-      const hasActiveStick =
-        throttleInput !== 0 || yawInput !== 0 || pitchInput !== 0 || rollInput !== 0;
-
-      const currentMode = state.flightMode || canonicalFlightMode || "GUIDED";
-
-      // -------------------------------------------------------------
-      // FLIGHT MODE EXECUTION ENGINE (10 Canonical Modes)
-      // -------------------------------------------------------------
-      if (currentMode === "RTL") {
-        // Return-To-Launch: Autonomous return toward stored home location
-        const home = homePositionRef.current;
-        const distToHome = calculateDistanceMeters(state.latitude, state.longitude, home.latitude, home.longitude);
-
-        if (distToHome > 2.0) {
-          const targetHeading = calculateBearing(state.latitude, state.longitude, home.latitude, home.longitude);
-          const diff = ((targetHeading - state.heading + 540) % 360) - 180;
-          state.heading = normalizeHeading(state.heading + Math.sign(diff) * Math.min(Math.abs(diff), YAW_RATE * dt));
-
-          // Cruise forward speed ~10 m/s
-          state.forwardSpeed += (10.0 - state.forwardSpeed) * Math.min(1, dt * 4.0);
-          state.lateralSpeed += (0 - state.lateralSpeed) * Math.min(1, dt * 5.0);
-
-          const targetPitch = -14.0;
-          state.pitch += (targetPitch - state.pitch) * Math.min(1, dt * 6.0);
-          state.roll += (0 - state.roll) * Math.min(1, dt * 6.0);
-
-          const returnAlt = Math.max(state.altitude, 48.5);
-          state.verticalSpeed += ((returnAlt - state.altitude) * 0.8 - state.verticalSpeed) * Math.min(1, dt * 4.0);
-          state.altitude = Math.max(MIN_ALTITUDE, Math.min(MAX_ALTITUDE, state.altitude + state.verticalSpeed * dt));
-        } else {
-          // Reached home area: stabilize and descend to land
-          state.forwardSpeed += (0 - state.forwardSpeed) * Math.min(1, dt * 6.0);
-          state.lateralSpeed += (0 - state.lateralSpeed) * Math.min(1, dt * 6.0);
-          state.pitch += (0 - state.pitch) * Math.min(1, dt * 6.0);
-          state.roll += (0 - state.roll) * Math.min(1, dt * 6.0);
-
-          state.verticalSpeed += (-1.5 - state.verticalSpeed) * Math.min(1, dt * 4.0);
-          state.altitude = Math.max(0, state.altitude + state.verticalSpeed * dt);
-          if (state.altitude <= 0.1) {
-            state.altitude = 0;
-            state.verticalSpeed = 0;
-            state.speed = 0;
-          }
-        }
-      } else if (currentMode === "LAND") {
-        // Immediate descent and landing at current coordinates
-        state.forwardSpeed += (0 - state.forwardSpeed) * Math.min(1, dt * 8.0);
-        state.lateralSpeed += (0 - state.lateralSpeed) * Math.min(1, dt * 8.0);
-        state.pitch += (0 - state.pitch) * Math.min(1, dt * 8.0);
-        state.roll += (0 - state.roll) * Math.min(1, dt * 8.0);
-
-        if (state.altitude > 0) {
-          state.verticalSpeed += (-1.6 - state.verticalSpeed) * Math.min(1, dt * 5.0);
-          state.altitude = Math.max(0, state.altitude + state.verticalSpeed * dt);
-        } else {
-          state.altitude = 0;
-          state.verticalSpeed = 0;
-          state.speed = 0;
-        }
-      } else if (currentMode === "BRAKE") {
-        // Emergency/Priority braking: bring all velocities rapidly to zero
-        state.forwardSpeed += (0 - state.forwardSpeed) * Math.min(1, dt * 14.0);
-        state.lateralSpeed += (0 - state.lateralSpeed) * Math.min(1, dt * 14.0);
-        state.verticalSpeed += (0 - state.verticalSpeed) * Math.min(1, dt * 12.0);
-        state.pitch += (0 - state.pitch) * Math.min(1, dt * 10.0);
-        state.roll += (0 - state.roll) * Math.min(1, dt * 10.0);
-      } else if (currentMode === "AUTO") {
-        // Autonomous Mission / Orbit Patrol
-        const orbitRate = 12.0;
-        state.heading = normalizeHeading(state.heading + orbitRate * dt);
-        state.roll += (12.0 - state.roll) * (dt * 2.5);
-        state.pitch += (Math.sin(ambientPhase * 0.6) * 2.5 - state.pitch) * (dt * 2.5);
-        state.speed = 8.4 + Math.sin(ambientPhase) * 1.0;
-        state.altitude = 48.5 + Math.sin(ambientPhase * 0.4) * 2.0;
-        state.verticalSpeed = Math.cos(ambientPhase * 0.4) * 0.8;
-      } else {
-        // MANUAL, STABILIZE, ALT_HOLD, POS_HOLD, LOITER, GUIDED
-        // 1. LEFT JOYSTICK - YAW (X-Axis): Rotate drone heading
-        if (yawInput !== 0) {
-          state.heading = normalizeHeading(state.heading + yawInput * YAW_RATE * dt);
-        }
-
-        // 2. LEFT JOYSTICK - THROTTLE (Y-Axis): Vertical Speed & Altitude
-        if (currentMode === "ALT_HOLD" || currentMode === "POS_HOLD" || currentMode === "LOITER") {
-          // Holds altitude when throttle is neutral
-          if (throttleInput !== 0) {
-            const targetVsi = throttleInput * MAX_CLIMB_RATE;
-            state.verticalSpeed += (targetVsi - state.verticalSpeed) * Math.min(1, dt * 7.0);
-            state.altitude = Math.max(
-              MIN_ALTITUDE,
-              Math.min(MAX_ALTITUDE, state.altitude + state.verticalSpeed * dt)
-            );
-          } else {
-            state.verticalSpeed += (0 - state.verticalSpeed) * Math.min(1, dt * 8.0);
-          }
-        } else {
-          // MANUAL, STABILIZE, GUIDED
-          const targetVsi = throttleInput * MAX_CLIMB_RATE;
-          state.verticalSpeed += (targetVsi - state.verticalSpeed) * Math.min(1, dt * 7.0);
-          state.altitude = Math.max(
-            MIN_ALTITUDE,
-            Math.min(MAX_ALTITUDE, state.altitude + state.verticalSpeed * dt)
-          );
-        }
-
-        if (state.altitude <= MIN_ALTITUDE && state.verticalSpeed < 0) {
-          state.verticalSpeed = 0;
-        }
-
-        // 3. RIGHT JOYSTICK - PITCH & ROLL ATTITUDE (Horizontal movement)
-        if (pitchInput !== 0 || rollInput !== 0) {
-          const targetPitch = -pitchInput * MAX_PITCH_DEG;
-          state.pitch += (targetPitch - state.pitch) * Math.min(1, dt * 8.0);
-
-          const targetRoll = rollInput * MAX_ROLL_DEG;
-          state.roll += (targetRoll - state.roll) * Math.min(1, dt * 8.0);
-
-          const targetFwdSpeed = pitchInput * MAX_SPEED;
-          const targetLatSpeed = rollInput * MAX_SPEED;
-
-          state.forwardSpeed += (targetFwdSpeed - state.forwardSpeed) * Math.min(1, dt * 5.0);
-          state.lateralSpeed += (targetLatSpeed - state.lateralSpeed) * Math.min(1, dt * 5.0);
-        } else {
-          // Neutral joysticks
-          if (currentMode === "POS_HOLD" || currentMode === "LOITER") {
-            // Swift braking to hold position
-            state.forwardSpeed += (0 - state.forwardSpeed) * Math.min(1, dt * 9.0);
-            state.lateralSpeed += (0 - state.lateralSpeed) * Math.min(1, dt * 9.0);
-            state.pitch += (0 - state.pitch) * Math.min(1, dt * 7.0);
-            state.roll += (0 - state.roll) * Math.min(1, dt * 7.0);
-          } else {
-            // MANUAL, STABILIZE, GUIDED: self-leveling attitude with gentle ambient stabilization
-            const ambientPitch = Math.sin(ambientPhase * 1.1) * 0.4;
-            const ambientRoll = Math.cos(ambientPhase * 0.9) * 0.4;
-
-            state.pitch += (ambientPitch - state.pitch) * Math.min(1, dt * 4.0);
-            state.roll += (ambientRoll - state.roll) * Math.min(1, dt * 4.0);
-            state.verticalSpeed += (0 - state.verticalSpeed) * Math.min(1, dt * 6.0);
-            state.forwardSpeed += (0 - state.forwardSpeed) * Math.min(1, dt * 4.0);
-            state.lateralSpeed += (0 - state.lateralSpeed) * Math.min(1, dt * 4.0);
-          }
-        }
-      }
-
-      state.speed = Math.hypot(state.forwardSpeed, state.lateralSpeed);
-      if (state.speed < 0.04) {
-        state.speed = 0;
-        state.forwardSpeed = 0;
-        state.lateralSpeed = 0;
-      }
-      if (Math.abs(state.verticalSpeed) < 0.04) state.verticalSpeed = 0;
-
-      let calculatedMovementHeading = state.heading;
-      // Apply continuous geographic displacement along heading vector
-      if (state.speed > 0.02) {
-        const headingRad = (state.heading * Math.PI) / 180;
-        const vNorth =
-          state.forwardSpeed * Math.cos(headingRad) -
-          state.lateralSpeed * Math.sin(headingRad);
-        const vEast =
-          state.forwardSpeed * Math.sin(headingRad) +
-          state.lateralSpeed * Math.cos(headingRad);
-
-        calculatedMovementHeading = ((Math.atan2(vEast, vNorth) * 180) / Math.PI + 360) % 360;
-
-        const metersPerDegLat = 111139;
-        const metersPerDegLng =
-          111139 * Math.cos((state.latitude * Math.PI) / 180);
-
-        state.latitude += (vNorth * dt) / metersPerDegLat;
-        state.longitude += (vEast * dt) / metersPerDegLng;
-      }
-
-      const debugInfo = {
-        droneHeading: Number(state.heading.toFixed(1)),
-        arrowDirection: getCardinalDirection(state.heading),
-        joystickX: Number((rawSticks.roll || 0).toFixed(2)),
-        joystickY: Number((rawSticks.pitch || 0).toFixed(2)),
-        joystickDirection: getJoystickDirectionLabel(rawSticks.pitch, rawSticks.roll),
-        calculatedMovementHeading: Number(calculatedMovementHeading.toFixed(1)),
-        calculatedMovementDirection: getCardinalDirection(calculatedMovementHeading),
-        latitude: Number(state.latitude.toFixed(6)),
-        longitude: Number(state.longitude.toFixed(6)),
-        speed: Number(state.speed.toFixed(1)),
-        isArmed,
-      };
-      debugFlightInfoRef.current = debugInfo;
-
-      if (typeof window !== "undefined") {
-        window.__DRONE_STATE__ = {
-          latitude: Number(state.latitude.toFixed(6)),
-          longitude: Number(state.longitude.toFixed(6)),
-          heading: Number(state.heading.toFixed(1)),
-          altitude: Number(state.altitude.toFixed(1)),
-          speed: Number(state.speed.toFixed(1)),
-          roll: Number(state.roll.toFixed(1)),
-          pitch: Number(state.pitch.toFixed(1)),
-          yaw: Number((rawSticks.yaw || 0).toFixed(2)),
-          armed: isArmed,
-          arrowDirection: getCardinalDirection(state.heading),
-          calculatedMovementHeading: Number(calculatedMovementHeading.toFixed(1)),
-          calculatedMovementDirection: getCardinalDirection(calculatedMovementHeading),
-        };
-      }
-
-      // Synchronize to React state at ~30 FPS only while moving or settling
-      const isMoving =
-        hasActiveStick ||
-        state.speed > 0.01 ||
-        Math.abs(state.verticalSpeed) > 0.01 ||
-        Math.abs(state.pitch) > 0.2 ||
-        Math.abs(state.roll) > 0.2 ||
-        currentMode === "RTL" ||
-        currentMode === "LAND" ||
-        currentMode === "AUTO" ||
-        currentMode === "BRAKE" ||
-        simMode !== "interactive";
-
-      if (isMoving) {
-        hasSettledRef.current = false;
-        if (currentTime - lastUiSync >= 33) {
-          lastUiSync = currentTime;
-          const safeLat = typeof state.latitude === "number" ? state.latitude : FALLBACK_DRONE_LOCATION.latitude;
-          const safeLng = typeof state.longitude === "number" ? state.longitude : FALLBACK_DRONE_LOCATION.longitude;
-          const safeHeading = typeof state.heading === "number" ? state.heading : 0;
-          const safeAlt = typeof state.altitude === "number" ? state.altitude : 0;
-
-          setSimTelemetry({
-            latitude: Number(safeLat.toFixed(6)),
-            longitude: Number(safeLng.toFixed(6)),
-            altitude: Number(safeAlt.toFixed(1)),
-            heading: Number(safeHeading.toFixed(1)),
-            pitch: Number(state.pitch.toFixed(1)),
-            roll: Number(state.roll.toFixed(1)),
-            speed: Number(state.speed.toFixed(1)),
-            groundSpeed: Number(state.speed.toFixed(1)),
-            verticalSpeed: Number(state.verticalSpeed.toFixed(2)),
-            climbRate: Number(state.verticalSpeed.toFixed(2)),
-            battery: 84,
-            voltage: 24.2,
-            satellites: 18,
-            gpsFix: "3D Fix",
-            armed: isArmed,
-            isArmed: isArmed,
-            flightMode: state.flightMode || canonicalFlightMode || "GUIDED",
-            status: "OK",
-            flightMovementDebug: debugFlightInfoRef.current,
-          });
-        }
-      } else if (!hasSettledRef.current) {
-        // Drone reached rest: sync final neutral telemetry once and pause React re-renders
-        hasSettledRef.current = true;
-        const safeLat = typeof state.latitude === "number" ? state.latitude : FALLBACK_DRONE_LOCATION.latitude;
-        const safeLng = typeof state.longitude === "number" ? state.longitude : FALLBACK_DRONE_LOCATION.longitude;
-        const safeHeading = typeof state.heading === "number" ? state.heading : 0;
-        const safeAlt = typeof state.altitude === "number" ? state.altitude : 0;
-
-        const settledDebug = {
-          droneHeading: Number(safeHeading.toFixed(1)),
-          arrowDirection: getCardinalDirection(safeHeading),
-          joystickX: 0,
-          joystickY: 0,
-          joystickDirection: "NEUTRAL",
-          calculatedMovementHeading: Number(safeHeading.toFixed(1)),
-          calculatedMovementDirection: getCardinalDirection(safeHeading),
-          latitude: Number(safeLat.toFixed(6)),
-          longitude: Number(safeLng.toFixed(6)),
-          speed: 0,
-          isArmed,
-        };
-        debugFlightInfoRef.current = settledDebug;
-
-        if (typeof window !== "undefined") {
-          window.__DRONE_STATE__ = {
-            latitude: Number(safeLat.toFixed(6)),
-            longitude: Number(safeLng.toFixed(6)),
-            heading: Number(safeHeading.toFixed(1)),
-            altitude: Number(safeAlt.toFixed(1)),
-            speed: 0,
-            roll: 0,
-            pitch: 0,
-            yaw: 0,
-            armed: isArmed,
-            arrowDirection: getCardinalDirection(safeHeading),
-            calculatedMovementHeading: Number(safeHeading.toFixed(1)),
-            calculatedMovementDirection: getCardinalDirection(safeHeading),
-          };
-        }
-
-        setSimTelemetry({
-          latitude: Number(safeLat.toFixed(6)),
-          longitude: Number(safeLng.toFixed(6)),
-          altitude: Number(safeAlt.toFixed(1)),
-          heading: Number(safeHeading.toFixed(1)),
-          pitch: 0,
-          roll: 0,
-          speed: 0,
-          groundSpeed: 0,
-          verticalSpeed: 0,
-          climbRate: 0,
-          battery: 84,
-          voltage: 24.2,
-          satellites: 18,
-          gpsFix: "3D Fix",
-          armed: isArmed,
-          isArmed: isArmed,
-          flightMode: state.flightMode || canonicalFlightMode || "GUIDED",
-          status: "OK",
-          flightMovementDebug: settledDebug,
-        });
-      }
-
-      animFrameId = requestAnimationFrame(step);
+    return () => {
+      stopMovementLoop();
     };
+  }, [stopMovementLoop]);
 
-    animFrameId = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(animFrameId);
-  }, [isLive, liveTelemetry, simMode, isArmed, canonicalFlightMode]);
 
   // Takeoff command with authoritative safety guard
   const takeoff = useCallback(() => {
     if (!isArmed) {
-      if (typeof showToast === "function") {
-        showToast("Takeoff blocked — Drone is UNARMED.", "warning");
-      }
       return false;
     }
     const state = simStateRef.current;
     state.verticalSpeed = 2.5;
     state.flightMode = "TAKEOFF";
     return true;
-  }, [isArmed, showToast]);
+  }, [isArmed]);
 
   // Active authoritative telemetry: Live WebSocket data takes priority ONLY if real connection and valid GPS fix exist
   const hasLiveGps = Boolean(
     isLive &&
     liveTelemetry &&
-    isValidGpsCoordinate(liveTelemetry.latitude, liveTelemetry.longitude)
+    isValidGpsCoordinate(liveTelemetry.latitude, liveTelemetry.longitude) &&
+    liveTelemetry.positionSource === PositionSource.LIVE
   );
 
   const activeTelemetry = hasLiveGps
@@ -775,9 +675,16 @@ export function useDroneTelemetry() {
           arrowDirection: getCardinalDirection(simTelemetry.heading || 0),
           joystickX: stickInputs.roll || 0,
           joystickY: stickInputs.pitch || 0,
-          joystickDirection: getJoystickDirectionLabel(stickInputs.roll || 0, stickInputs.pitch || 0),
+          joystickDirection: getJoystickDirectionLabel(
+            stickInputs.pitch || 0,
+            stickInputs.roll || 0,
+            stickInputs.throttle || 0,
+            stickInputs.yaw || 0
+          ),
           calculatedMovementHeading: simTelemetry.heading || 0,
-          calculatedMovementDirection: getCardinalDirection(simTelemetry.heading || 0),
+          calculatedMovementDirection: isArmed
+            ? getCardinalDirection(simTelemetry.heading || 0)
+            : "LOCKED (UNARMED)",
           latitude: simTelemetry.latitude ?? FALLBACK_DRONE_LOCATION.latitude,
           longitude: simTelemetry.longitude ?? FALLBACK_DRONE_LOCATION.longitude,
           speed: isArmed ? (simTelemetry.speed || 0) : 0,
@@ -794,8 +701,11 @@ export function useDroneTelemetry() {
     flightMode: activeTelemetry.flightMode,
     setFlightMode,
     updateStickInputs,
+    stickInputs,
     simMode,
     setSimMode,
+    simulationEnabled,
+    setSimulationEnabled,
     takeoff,
     isArmed,
     isLive,

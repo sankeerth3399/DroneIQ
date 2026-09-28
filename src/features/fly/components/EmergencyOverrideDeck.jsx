@@ -8,6 +8,7 @@ import { ConnectionState } from "@/services/telemetry/telemetryTypes.js"
 import { logService } from "@/services/api/logService.js"
 import { useFlyConfirmation } from "@/hooks/useFlyConfirmation.js"
 import { useMission } from "@/hooks/useMission.js"
+import { showAlert, AlertTypes, AlertCategories } from "@/services/notification/alertService.js"
 
 /**
  * Emergency Override Deck for Super Admin, Fleet Manager, and Flight Operator
@@ -15,7 +16,7 @@ import { useMission } from "@/hooks/useMission.js"
  * Protects dangerous commands with mandatory centralized confirmation dialogs.
  */
 export const EmergencyOverrideDeck = () => {
-  const { showToast, selectedDroneId, telemetry, connectionState, isLive } = useTelemetry()
+  const { selectedDroneId, telemetry, connectionState, isLive } = useTelemetry()
   const { hasPermission, isAuthenticated, user } = useAuth()
   const { requestActionConfirmation } = useFlyConfirmation()
   const { currentProject } = useMission()
@@ -58,74 +59,59 @@ export const EmergencyOverrideDeck = () => {
   const handleInitiateTakeoff = () => {
     // 1. Authenticated user check
     if (!isAuthenticated) {
-      showToast("Takeoff unavailable: user is not authenticated.", "warning")
+      showAlert({
+        type: AlertTypes.WARNING,
+        title: "Access Denied",
+        message: "User is not authenticated.",
+        category: AlertCategories.SECURITY,
+      })
       return
     }
 
-    // 2. Authorized role check
+    // 2. Authorized role check (Section 21 RBAC)
     if (!canExecuteFlight) {
-      showToast("Takeoff unavailable: unauthorized role.", "error")
+      showAlert({
+        type: AlertTypes.ERROR,
+        title: "Access Denied",
+        message: "You do not have permission to execute takeoff.",
+        category: AlertCategories.SECURITY,
+      })
       return
     }
 
-    // 3. Drone connection & telemetry validity check
-    const isDroneConnected = Boolean(
-      telemetry?.droneConnected ||
-      connectionState === ConnectionState.AUTHENTICATED ||
-      isLive
-    )
-    if (!isDroneConnected && telemetry?.status === "DISCONNECTED") {
-      showToast("Takeoff unavailable: drone is not ready (disconnected).", "warning")
-      return
-    }
-
-    if (!telemetry) {
-      showToast("Takeoff unavailable: valid telemetry not received.", "warning")
-      return
-    }
-
-    // 4. Pre-takeoff flight state: verify drone is currently on ground
-    const alt = typeof telemetry.altitude === "number" ? telemetry.altitude : 0
-    const vSpeed = typeof telemetry.verticalSpeed === "number" ? telemetry.verticalSpeed : (telemetry.climbRate || 0)
-    if (alt > 2.5 || vSpeed > 1.5) {
-      showToast("Takeoff unavailable: drone is already airborne.", "warning")
-      return
-    }
-
-    // 5. Flight mode validation: ensure not in abort/landing/RTL modes
-    const currentMode = String(telemetry.flightMode || "").toUpperCase()
-    if (currentMode === "RTL" || currentMode === "LAND" || currentMode === "BRAKE") {
-      showToast(`Takeoff unavailable: drone is in ${currentMode} mode.`, "warning")
-      return
-    }
-
+    // Section 16 & 4: Do NOT block TAKEOFF on client because of telemetry/GPS/status
     setIsOpen(false)
     const droneId = selectedDroneId || "DRONE-001"
 
     requestActionConfirmation({
       action: "TAKEOFF",
+      title: "Confirm Takeoff",
+      confirmLabel: "Confirm Takeoff",
+      cancelLabel: "Cancel",
       droneId,
       targetAltitude: "10 m",
       currentState: telemetry?.flightMode || "GUIDED",
-      validateState: () => {
-        const currentAlt = typeof telemetry?.altitude === "number" ? telemetry.altitude : 0
-        if (currentAlt > 2.5) {
-          return "Drone is already airborne."
-        }
-        return true
-      },
       onConfirm: async () => {
         try {
           await apiClient("/api/commands/override", {
             method: "POST",
             body: JSON.stringify({
+              commandType: "TAKEOFF",
               command: "TAKEOFF",
               droneId,
               timestamp: new Date().toISOString(),
             }),
           })
 
-          showToast(`Takeoff command sent to ${droneId}.`, "success")
+          // Section 4 & 18: ONE final SUCCESS notification
+          showAlert({
+            type: AlertTypes.SUCCESS,
+            title: "TAKEOFF SUCCESS",
+            message: `Takeoff initiated for ${droneId}.`,
+            key: "TAKEOFF_RESULT",
+            category: AlertCategories.FLIGHT,
+          })
+
           window.dispatchEvent(
             new CustomEvent("aeronexus:takeoff", {
               detail: { droneId, timestamp: new Date().toISOString() },
@@ -144,12 +130,15 @@ export const EmergencyOverrideDeck = () => {
             })
           }
         } catch (err) {
-          if (err?.isNetworkError || err?.status === 0) {
-            showToast("Unable to send takeoff command.", "error")
-          } else {
-            const backendMsg = err?.message || err?.data?.message || "Command rejected"
-            showToast(`Takeoff rejected: ${backendMsg}`, "error")
-          }
+          const backendMsg = err?.message || err?.data?.message || "Unable to send takeoff command."
+          // Section 4 & 18: ONE final FAILURE notification
+          showAlert({
+            type: AlertTypes.ERROR,
+            title: "TAKEOFF FAILED",
+            message: backendMsg,
+            key: "TAKEOFF_RESULT",
+            category: AlertCategories.FLIGHT,
+          })
         }
       },
     })
@@ -158,7 +147,12 @@ export const EmergencyOverrideDeck = () => {
   // Pre-flight validation & confirmation request for Priority Emergency Overrides
   const handleInitiateOverride = (actionKey) => {
     if (!canOverride) {
-      showToast("Emergency override unauthorized: Requires Fleet Manager or Super Admin role.", "warning")
+      showAlert({
+        type: AlertTypes.ERROR,
+        title: "Access Denied",
+        message: "You do not have permission to execute emergency overrides.",
+        category: AlertCategories.SECURITY,
+      })
       return
     }
 
@@ -166,12 +160,39 @@ export const EmergencyOverrideDeck = () => {
     const droneId = selectedDroneId || telemetry?.droneId || "DRONE-001"
     const isAbort = actionKey === "ABORT_MISSION" || actionKey === "ABORT"
 
+    // Section 14: ABORT MISSION does not require confirmation or result notification
+    if (isAbort) {
+      apiClient("/api/commands/override", {
+        method: "POST",
+        body: JSON.stringify({
+          commandType: "ABORT_MISSION",
+          command: "ABORT_MISSION",
+          droneId,
+          timestamp: new Date().toISOString(),
+        }),
+      }).catch((err) => console.warn("[EmergencyDeck] Abort error:", err.message))
+      window.dispatchEvent(new CustomEvent("aeronexus:emergency-abort"))
+      return
+    }
+
+    // Determine normalized action for confirmation (LAND, DISARM, FLIGHT_MODE_CHANGE)
+    const isLand = actionKey === "EMERGENCY_LAND" || actionKey === "LAND"
+    const isDisarm = actionKey === "FORCE_DISARM" || actionKey === "DISARM"
+    const isRtl = actionKey === "OVERRIDE_RTL" || actionKey === "RTL"
+
+    const confirmActionKey = isLand ? "LAND" : isDisarm ? "DISARM" : isRtl ? "FLIGHT_MODE_CHANGE" : actionKey
+    const confirmTitle = isLand ? "Confirm Land" : isDisarm ? "Confirm Disarm" : "CONFIRM FLIGHT MODE CHANGE"
+    const confirmLabel = isLand ? "Confirm Land" : isDisarm ? "Confirm Disarm" : "Confirm RTL"
+
     requestActionConfirmation({
-      action: actionKey,
+      action: confirmActionKey,
+      title: confirmTitle,
+      confirmLabel,
+      cancelLabel: "Cancel",
       droneId,
       currentState: telemetry?.flightMode || "GUIDED",
-      missionId: isAbort ? (currentProject?.id || telemetry?.missionId || "MSN-0104") : undefined,
-      missionName: isAbort ? (currentProject?.name || telemetry?.missionName || "Survey Alfa") : undefined,
+      currentMode: isRtl ? (telemetry?.flightMode || "GUIDED") : undefined,
+      newMode: isRtl ? "RTL" : undefined,
       onConfirm: async () => {
         const cmdMap = {
           OVERRIDE_RTL: "OVERRIDE_RTL",
@@ -180,8 +201,6 @@ export const EmergencyOverrideDeck = () => {
           LAND: "EMERGENCY_LAND",
           FORCE_DISARM: "FORCE_DISARM",
           DISARM: "FORCE_DISARM",
-          ABORT_MISSION: "ABORT_MISSION",
-          ABORT: "ABORT_MISSION",
         }
         const backendCommand = cmdMap[actionKey] || actionKey
 
@@ -189,27 +208,69 @@ export const EmergencyOverrideDeck = () => {
           await apiClient("/api/commands/override", {
             method: "POST",
             body: JSON.stringify({
+              commandType: backendCommand,
               command: backendCommand,
               droneId,
               timestamp: new Date().toISOString(),
             }),
           })
         } catch (err) {
-          console.warn("[EmergencyDeck] Override API dispatched (backend response):", err.message)
+          const failMsg = err?.data?.message || err?.message || "Command rejected by vehicle."
+          if (isRtl) {
+            showAlert({
+              type: AlertTypes.ERROR,
+              title: "FLIGHT MODE CHANGE FAILED",
+              message: failMsg,
+              key: "FLIGHT_MODE_CHANGE_RESULT",
+              category: AlertCategories.FLIGHT,
+            })
+          } else if (isLand) {
+            showAlert({
+              type: AlertTypes.ERROR,
+              title: "LAND FAILED",
+              message: failMsg,
+              key: "LAND_RESULT",
+              category: AlertCategories.FLIGHT,
+            })
+          } else if (isDisarm) {
+            showAlert({
+              type: AlertTypes.ERROR,
+              title: "DISARM FAILED",
+              message: failMsg,
+              key: "DISARM_RESULT",
+              category: AlertCategories.FLIGHT,
+            })
+          }
+          return
         }
 
-        if (actionKey === "OVERRIDE_RTL" || actionKey === "RTL") {
-          showToast("EMERGENCY OVERRIDE: Return-to-Launch (RTL) initiated.", "warning")
+        if (isRtl) {
+          showAlert({
+            type: AlertTypes.SUCCESS,
+            title: "FLIGHT MODE CHANGED",
+            message: `${droneId} switched to RTL.`,
+            key: "FLIGHT_MODE_CHANGE_RESULT",
+            category: AlertCategories.FLIGHT,
+          })
           window.dispatchEvent(new CustomEvent("aeronexus:emergency-rtl"))
-        } else if (actionKey === "EMERGENCY_LAND" || actionKey === "LAND") {
-          showToast("EMERGENCY OVERRIDE: Immediate Emergency Land executed.", "error")
+        } else if (isLand) {
+          showAlert({
+            type: AlertTypes.SUCCESS,
+            title: "LAND SUCCESS",
+            message: `Landing sequence initiated for ${droneId}.`,
+            key: "LAND_RESULT",
+            category: AlertCategories.FLIGHT,
+          })
           window.dispatchEvent(new CustomEvent("aeronexus:emergency-land"))
-        } else if (actionKey === "FORCE_DISARM" || actionKey === "DISARM") {
-          showToast("EMERGENCY OVERRIDE: Motors Force Disarmed.", "error")
+        } else if (isDisarm) {
+          showAlert({
+            type: AlertTypes.SUCCESS,
+            title: "DISARM SUCCESS",
+            message: `Immediate motor kill command sent to ${droneId}.`,
+            key: "DISARM_RESULT",
+            category: AlertCategories.FLIGHT,
+          })
           window.dispatchEvent(new CustomEvent("aeronexus:emergency-disarm"))
-        } else if (actionKey === "ABORT_MISSION" || actionKey === "ABORT") {
-          showToast("EMERGENCY OVERRIDE: Active Mission Aborted. Aircraft in Hold.", "error")
-          window.dispatchEvent(new CustomEvent("aeronexus:emergency-abort"))
         }
       },
     })

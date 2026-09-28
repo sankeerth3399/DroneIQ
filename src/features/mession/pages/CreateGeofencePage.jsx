@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import MapLoad from "@/components/Map/mapContainer.jsx";
 import { useMission } from "@/hooks/useMission.js";
@@ -10,6 +10,13 @@ import {
   formatDistance,
   validateMissionAgainstGeofence,
 } from "@/utils/geofence.js";
+import {
+  validateProposedVertex,
+  validateVertexDrag,
+  validateGeofenceClosure,
+  validateGeofencePolygon,
+  calculateDistance,
+} from "@/utils/geofenceValidation.js";
 import {
   Shield,
   Edit3,
@@ -24,6 +31,8 @@ import {
   ShieldAlert,
   ChevronDown,
   ChevronUp,
+  X,
+  AlertCircle,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth.js";
 import { Permissions } from "@/auth/permissions.js";
@@ -33,6 +42,26 @@ const mapStyleOptions = [
   { id: "normal", label: "Normal Map" },
   { id: "satellite", label: "Satellite Map" },
 ];
+
+/**
+ * Ensures all vertices have stable IDs and standardized coordinates
+ */
+const ensureVertexIds = (coordsList) => {
+  if (!Array.isArray(coordsList)) return [];
+  return coordsList.map((pt, idx) => {
+    const lat = Number(pt.lat ?? pt.latitude ?? 0);
+    const lng = Number(pt.lng ?? pt.longitude ?? 0);
+    const id = pt.id || `vertex-${idx + 1}`;
+    return {
+      ...pt,
+      id,
+      lat: Number(lat.toFixed(6)),
+      lng: Number(lng.toFixed(6)),
+      latitude: Number(lat.toFixed(6)),
+      longitude: Number(lng.toFixed(6)),
+    };
+  });
+};
 
 const CreateGeofencePage = () => {
   const navigate = useNavigate();
@@ -68,26 +97,58 @@ const CreateGeofencePage = () => {
   };
   const [lastLoadedProjectId, setLastLoadedProjectId] = useState(currentProjectId);
 
-  const initialCoords =
-    currentProject?.geofence?.polygon || currentProject?.geofence?.coordinates || [];
+  const rawInitialCoords =
+    currentProject?.geofence?.vertices ||
+    currentProject?.geofence?.polygon ||
+    currentProject?.geofence?.coordinates || [];
+  const initialCoords = ensureVertexIds(rawInitialCoords);
   const [vertices, setVertices] = useState(() => initialCoords);
   const [isClosed, setIsClosed] = useState(() => initialCoords.length >= 3);
   const [isDrawing, setIsDrawing] = useState(() => !isViewer && initialCoords.length < 3);
   const [isEditing, setIsEditing] = useState(false);
+  const [selectedVertexId, setSelectedVertexId] = useState(null);
+  const [inlineError, setInlineError] = useState(null);
   const [history, setHistory] = useState([]);
-  const [notification, setNotification] = useState(null);
+  const [invalidClickPoint, setInvalidClickPoint] = useState(null);
   const [metricsCollapsed, setMetricsCollapsed] = useState(() => typeof window !== "undefined" && window.innerWidth < 640);
+  const dragStartVerticesRef = useRef(null);
+  const errorTimerRef = useRef(null);
+
+  const setInlineErrorWithTimeout = (msg) => {
+    if (errorTimerRef.current) {
+      clearTimeout(errorTimerRef.current);
+      errorTimerRef.current = null;
+    }
+    setInlineError(msg);
+    if (msg) {
+      errorTimerRef.current = setTimeout(() => {
+        setInlineError(null);
+        errorTimerRef.current = null;
+      }, 4000);
+    }
+  };
+
+  const selectedVertexIndex = useMemo(() => {
+    if (!selectedVertexId) return -1;
+    return vertices.findIndex((v, idx) => (v.id || `vertex-${idx + 1}`) === selectedVertexId);
+  }, [vertices, selectedVertexId]);
 
   // Synchronize vertices when active project changes during render
   if (lastLoadedProjectId !== currentProjectId) {
     setLastLoadedProjectId(currentProjectId);
-    const coords =
-      currentProject?.geofence?.polygon || currentProject?.geofence?.coordinates || [];
+    const raw =
+      currentProject?.geofence?.vertices ||
+      currentProject?.geofence?.polygon ||
+      currentProject?.geofence?.coordinates || [];
+    const coords = ensureVertexIds(raw);
     setVertices(coords);
     setIsClosed(coords.length >= 3);
     setIsDrawing(coords.length < 3);
     setIsEditing(false);
+    setSelectedVertexId(null);
+    setInlineError(null);
     setHistory([]);
+    dragStartVerticesRef.current = null;
   }
 
   // Push to undo history when vertices change significantly
@@ -98,39 +159,179 @@ const CreateGeofencePage = () => {
 
   // Handle map click when in drawing mode
   const handleMapClick = (coords) => {
+    // Clicking empty map space deselects currently selected vertex
+    if (selectedVertexId) {
+      setSelectedVertexId(null);
+    }
+    setInlineError(null);
+
     if (isViewer || !isDrawing) return;
 
     // Check if clicking close to the first vertex to auto-close
     if (vertices.length >= 3) {
       const first = vertices[0];
+      const distToFirst = calculateDistance(coords, first);
+      // Auto-close threshold: within 15 meters or near-identical coordinates
       const distLat = Math.abs(coords.lat - first.lat);
       const distLng = Math.abs(coords.lng - first.lng);
-      if (distLat < 0.00015 && distLng < 0.00015) {
+      if (distToFirst <= 15 || (distLat < 0.00015 && distLng < 0.00015)) {
+        const closureValidation = validateGeofenceClosure(vertices);
+        if (!closureValidation.valid) {
+          setInvalidClickPoint({ lat: coords.lat, lng: coords.lng });
+          setTimeout(() => setInvalidClickPoint(null), 1800);
+          showToast(`Cannot close geofence: ${closureValidation.message}`, "error", "Invalid Boundary");
+          return;
+        }
+
+        const polygonValidation = validateGeofencePolygon(vertices);
+        if (!polygonValidation.valid) {
+          setInvalidClickPoint({ lat: coords.lat, lng: coords.lng });
+          setTimeout(() => setInvalidClickPoint(null), 1800);
+          showToast(`Cannot close geofence: ${polygonValidation.message}`, "error", "Invalid Boundary");
+          return;
+        }
+
         setIsClosed(true);
         setIsDrawing(false);
-        showToast("Geofence perimeter closed successfully!", "success");
+        showToast("Geofence perimeter closed successfully!", "success", "Geofence Closed");
         return;
       }
     }
 
-    pushHistory([...vertices, coords]);
+    // Validate proposed new vertex before modifying geometry
+    const validation = validateProposedVertex(vertices, coords);
+    if (!validation.valid) {
+      setInvalidClickPoint({ lat: coords.lat, lng: coords.lng });
+      setTimeout(() => setInvalidClickPoint(null), 1800);
+      const isBoundary = validation.reason === "SELF_INTERSECTING" || validation.reason === "BOUNDARY_CROSSING";
+      showToast(validation.message, isBoundary ? "error" : "warning", isBoundary ? "Invalid Boundary" : "Vertex Rejected");
+      return;
+    }
+
+    const newVertex = {
+      id: `vertex-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
+      lat: Number(coords.lat.toFixed(6)),
+      lng: Number(coords.lng.toFixed(6)),
+      latitude: Number(coords.lat.toFixed(6)),
+      longitude: Number(coords.lng.toFixed(6)),
+    };
+
+    pushHistory([...vertices, newVertex]);
   };
 
   // Vertex dragging during edit mode
   const handleVertexDrag = (index, newCoords) => {
     if (isViewer) return;
-    setVertices((prev) => {
-      const next = [...prev];
-      next[index] = newCoords;
-      return next;
-    });
+    if (!dragStartVerticesRef.current) {
+      dragStartVerticesRef.current = [...vertices];
+    }
+    const check = validateVertexDrag(
+      dragStartVerticesRef.current || vertices,
+      index,
+      newCoords,
+      isClosed
+    );
+    if (check.valid) {
+      setVertices((prev) => {
+        const next = [...prev];
+        const existing = next[index];
+        next[index] = {
+          ...existing,
+          lat: newCoords.lat,
+          lng: newCoords.lng,
+          latitude: newCoords.lat,
+          longitude: newCoords.lng,
+        };
+        return next;
+      });
+    }
   };
 
   const handleVertexDragEnd = (index, newCoords) => {
     if (isViewer) return;
-    pushHistory(
-      vertices.map((v, i) => (i === index ? newCoords : v))
+    const baseVertices = dragStartVerticesRef.current || vertices;
+    const validation = validateVertexDrag(baseVertices, index, newCoords, isClosed);
+
+    if (!validation.valid) {
+      setVertices(baseVertices);
+      setInvalidClickPoint({ lat: newCoords.lat, lng: newCoords.lng });
+      setTimeout(() => setInvalidClickPoint(null), 1800);
+      const isBoundary = validation.reason === "SELF_INTERSECTING" || validation.reason === "BOUNDARY_CROSSING";
+      showToast(validation.message, isBoundary ? "error" : "warning", isBoundary ? "Invalid Boundary" : "Vertex Rejected");
+      return { valid: false, reason: validation.reason, message: validation.message };
+    }
+
+    const nextVertices = baseVertices.map((v, i) =>
+      i === index
+        ? {
+            ...v,
+            lat: newCoords.lat,
+            lng: newCoords.lng,
+            latitude: newCoords.lat,
+            longitude: newCoords.lng,
+          }
+        : v
     );
+    pushHistory(nextVertices);
+    return { valid: true };
+  };
+
+  /**
+   * Delete an individual geofence vertex by stable ID (Requirements 1 - 13)
+   */
+  const handleDeleteVertex = (vertexIdToDelete) => {
+    if (isViewer) return;
+    const targetId = vertexIdToDelete || selectedVertexId;
+    if (!targetId) return;
+
+    // Minimum vertex rule (Requirements 3 & 28):
+    // A valid polygon requires at least 3 vertices.
+    // If the geofence currently has 3 vertices, do NOT allow deletion.
+    if (vertices.length <= 3 && (isClosed || vertices.length === 3)) {
+      setInlineErrorWithTimeout("Geofence requires at least 3 points.");
+      return;
+    }
+
+    const targetIdx = vertices.findIndex(
+      (v, idx) => (v.id || `vertex-${idx + 1}`) === targetId
+    );
+    if (targetIdx === -1) return;
+
+    // Filter out the selected vertex while strictly retaining original order of remaining vertices
+    const nextVertices = vertices.filter(
+      (v, idx) => (v.id || `vertex-${idx + 1}`) !== targetId
+    );
+
+    // Validate resulting geometry after deletion (Requirement 13)
+    if (nextVertices.length >= 3 && isClosed) {
+      const polygonValidation = validateGeofencePolygon(nextVertices);
+      if (!polygonValidation.valid) {
+        setInlineErrorWithTimeout(
+          `Cannot delete vertex: ${polygonValidation.message || "Resulting boundary is invalid."}`
+        );
+        return;
+      }
+    }
+
+    // Save initial state for cancel/undo if not already saved
+    if (!dragStartVerticesRef.current) {
+      dragStartVerticesRef.current = [...vertices];
+    }
+
+    pushHistory(nextVertices);
+    setSelectedVertexId(null);
+    setInlineErrorWithTimeout(null);
+  };
+
+  // Revert modifications made during edit mode (Requirement 18 & 29)
+  const handleCancelEdit = () => {
+    if (dragStartVerticesRef.current) {
+      setVertices(dragStartVerticesRef.current);
+      dragStartVerticesRef.current = null;
+    }
+    setIsEditing(false);
+    setSelectedVertexId(null);
+    setInlineError(null);
   };
 
   // Actions
@@ -147,13 +348,26 @@ const CreateGeofencePage = () => {
   const handleClosePolygon = () => {
     if (isViewer) return;
     if (vertices.length < 3) {
-      showToast("At least 3 vertices are required to close a geofence.", "warning");
+      showToast("At least 3 vertices are required to close a geofence.", "warning", "Geofence Incomplete");
       return;
     }
+
+    const closureValidation = validateGeofenceClosure(vertices);
+    if (!closureValidation.valid) {
+      showToast(`Cannot close geofence: ${closureValidation.message}`, "error", "Invalid Boundary");
+      return;
+    }
+
+    const polygonValidation = validateGeofencePolygon(vertices);
+    if (!polygonValidation.valid) {
+      showToast(`Cannot close geofence: ${polygonValidation.message}`, "error", "Invalid Boundary");
+      return;
+    }
+
     setIsClosed(true);
     setIsDrawing(false);
     setIsEditing(false);
-    showToast("Geofence polygon closed.", "success");
+    showToast("Geofence polygon closed.", "success", "Geofence Closed");
   };
 
   const handleStartDraw = () => {
@@ -166,11 +380,21 @@ const CreateGeofencePage = () => {
   const handleToggleEdit = () => {
     if (isViewer) return;
     if (vertices.length < 3) {
-      showToast("Create a geofence with at least 3 vertices first.", "warning");
+      showToast("Create a geofence with at least 3 vertices first.", "warning", "Geofence Incomplete");
       return;
     }
-    setIsEditing((prev) => !prev);
+    setIsEditing((prev) => {
+      const next = !prev;
+      if (next) {
+        dragStartVerticesRef.current = [...vertices];
+      } else {
+        dragStartVerticesRef.current = null;
+      }
+      return next;
+    });
     setIsDrawing(false);
+    setSelectedVertexId(null);
+    setInlineError(null);
   };
 
   const handleClear = () => {
@@ -181,70 +405,85 @@ const CreateGeofencePage = () => {
     setIsClosed(false);
     setIsDrawing(true);
     setIsEditing(false);
+    setSelectedVertexId(null);
+    setInlineError(null);
+    dragStartVerticesRef.current = null;
     if (currentProjectId) {
       clearGeofence(currentProjectId);
     }
-    showToast("Geofence cleared.", "info");
+    showToast("Active geofence removed.", "info", "Geofence Deleted");
   };
 
   const handleSave = () => {
     if (isViewer) return;
     if (vertices.length < 3) {
-      showToast("Cannot save: Polygon must have at least 3 vertices.", "error");
+      setInlineErrorWithTimeout("Cannot save: Polygon must have at least 3 vertices.");
       return;
     }
     if (!currentProjectId) {
-      showToast("No active project selected. Please select a project first.", "error");
+      setInlineErrorWithTimeout("No active project selected. Please select a project first.");
       return;
     }
 
-    const cleanCoords = vertices.map((v) => ({
+    const cleanCoords = vertices.map((v, idx) => ({
+      id: v.id || `vertex-${idx + 1}`,
       lat: Number(Number(v.lat).toFixed(6)),
       lng: Number(Number(v.lng).toFixed(6)),
       latitude: Number(Number(v.lat).toFixed(6)),
       longitude: Number(Number(v.lng).toFixed(6)),
     }));
 
+    // Mandatory Master Acceptance Validation before saving
+    const validation = validateGeofencePolygon(cleanCoords);
+    if (!validation.valid) {
+      setInlineErrorWithTimeout(
+        `Geofence cannot be saved because the boundary is invalid: ${validation.message}`
+      );
+      return;
+    }
+
     const areaRes = calculatePolygonArea(cleanCoords);
     const areaM2 = typeof areaRes === "object" ? areaRes.sqMeters : Number(areaRes) || 0;
     const perimeterM = calculatePolygonPerimeter(cleanCoords);
 
     saveGeofence(currentProjectId, {
+      vertices: cleanCoords, // Canonical source of truth (Requirement 3 & 23)
       coordinates: cleanCoords,
       polygon: cleanCoords,
       areaM2,
       perimeterM,
       enabled: true,
+      name: currentProject?.geofence?.name || "Flight Geofence Boundary",
       updatedAt: new Date().toISOString(),
     });
 
+    dragStartVerticesRef.current = null;
+    setSelectedVertexId(null);
+    setInlineError(null);
     setIsDrawing(false);
     setIsEditing(false);
     setIsClosed(true);
 
-    // Revalidate existing mission waypoints if any exist (Requirement 9)
+    // Revalidate existing mission waypoints if any exist
     const existingWaypoints =
       currentProject?.mission?.waypoints || currentProject?.mission?.items || [];
     if (existingWaypoints.length > 0) {
-      const validation = validateMissionAgainstGeofence(existingWaypoints, cleanCoords);
-      if (!validation.isValid) {
+      const missionValidation = validateMissionAgainstGeofence(existingWaypoints, cleanCoords);
+      if (!missionValidation.isValid) {
         showToast(
-          `Geofence saved successfully. Warning: ${validation.violations.length} waypoint violation(s) detected. Adjust in Waypoint Planning.`,
-          "warning"
+          `Geofence saved successfully. Warning: ${missionValidation.violations.length} waypoint violation(s) detected. Adjust in Waypoint Planning.`,
+          "warning",
+          "Geofence Saved"
         );
         return;
       }
     }
 
-    showToast("Geofence saved successfully.", "success");
+    showToast("Active geofence saved successfully.", "success", "Geofence Saved");
   };
 
-  const showToast = (message, type = "info") => {
-    setNotification({ message, type });
-    setTimeout(() => {
-      setNotification((curr) => (curr?.message === message ? null : curr));
-    }, 3800);
-  };
+  // Geofence notifications removed per Section 15 and 25
+  const showToast = () => {};
 
   // Metrics
   const areaM2 = useMemo(() => calculatePolygonArea(vertices), [vertices]);
@@ -262,10 +501,17 @@ const CreateGeofencePage = () => {
           geofence={vertices}
           isDrawingGeofence={isDrawing}
           isEditingGeofence={isEditing}
+          isClosedGeofence={isClosed}
+          selectedGeofenceVertexId={selectedVertexId}
+          onGeofenceVertexSelect={(vId) => {
+            setSelectedVertexId(vId);
+            setInlineError(null);
+          }}
           onGeofenceVertexDrag={handleVertexDrag}
           onGeofenceVertexDragEnd={handleVertexDragEnd}
           onMapClick={handleMapClick}
           showMissionRoute={false}
+          invalidClickPoint={invalidClickPoint}
           pageType="geofence"
         />
       </div>
@@ -315,7 +561,7 @@ const CreateGeofencePage = () => {
             {isDrawing
               ? "Drawing Mode (Click map to add points)"
               : isEditing
-              ? "Editing Mode (Drag numbered handles)"
+              ? "Editing Mode (Drag numbered handles or delete)"
               : vertices.length >= 3 && isClosed
               ? "GEOFENCE: ACTIVE"
               : "No Geofence Set"}
@@ -374,11 +620,56 @@ const CreateGeofencePage = () => {
                 ? "text-[#94A3B8] hover:text-white hover:bg-[#111A24]"
                 : "text-[#475569] cursor-not-allowed opacity-50"
             }`}
-            title={isViewer ? "Read-only in Viewer mode" : "Drag vertices interactively on the map"}
+            title={isViewer ? "Read-only in Viewer mode" : "Drag vertices or select to delete"}
           >
             <Edit3 className="w-3.5 h-3.5" />
             <span className="whitespace-nowrap">Edit</span>
           </button>
+
+          {/* Cancel Edit Button (Requirement 18 & 29) */}
+          {isEditing && (
+            <button
+              type="button"
+              onClick={handleCancelEdit}
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition text-[#94A3B8] hover:text-[#FFA3A3] hover:bg-[#EF444422] border border-[#334155] shrink-0 cursor-pointer"
+              title="Discard modifications and restore previous geofence"
+            >
+              <X className="w-3.5 h-3.5" />
+              <span className="whitespace-nowrap">Cancel</span>
+            </button>
+          )}
+
+          {/* Selected Vertex Chip & Delete Point Control (Requirements 1, 2, 14, 15, 16) */}
+          {selectedVertexIndex !== -1 && (
+            <>
+              <div className="h-5 w-[1px] bg-[#1E293B]" />
+              <div className="flex items-center gap-1.5 bg-[#0F1B2B] border border-[#35E0FF55] px-2.5 py-1 rounded-lg shadow-[0_0_12px_rgba(53,224,255,0.25)] shrink-0 animate-in fade-in">
+                <span className="text-[11px] font-mono font-bold text-[#35E0FF] whitespace-nowrap">
+                  Vertex {selectedVertexIndex + 1}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleDeleteVertex(selectedVertexId)}
+                  className="flex items-center gap-1 px-2 py-0.5 rounded bg-[#EF444422] hover:bg-[#EF444444] border border-[#EF444466] text-[#FF6B6B] hover:text-[#FFA3A3] text-[10px] font-mono font-bold transition whitespace-nowrap cursor-pointer"
+                  title="Delete this vertex"
+                >
+                  <Trash2 className="w-3 h-3 text-[#FF4141]" />
+                  <span>DELETE POINT</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedVertexId(null);
+                    setInlineError(null);
+                  }}
+                  className="p-0.5 text-[#64748B] hover:text-[#94A3B8] transition cursor-pointer"
+                  title="Deselect vertex"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            </>
+          )}
 
           <div className="h-5 w-[1px] bg-[#1E293B]" />
 
@@ -431,6 +722,22 @@ const CreateGeofencePage = () => {
           </button>
         </div>
       </div>
+
+      {/* Inline Validation Banner (Requirements 3, 13, 28) */}
+      {inlineError && (
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-25 pointer-events-auto px-3.5 py-1.5 rounded-lg bg-[#140A0AE6] border border-[#EF444488] shadow-2xl backdrop-blur-md flex items-center gap-2 text-xs font-mono text-[#FCA5A5] animate-in fade-in">
+          <AlertCircle className="w-4 h-4 text-[#EF4444] shrink-0" />
+          <span>{inlineError}</span>
+          <button
+            type="button"
+            onClick={() => setInlineError(null)}
+            className="ml-2 text-[#94A3B8] hover:text-white cursor-pointer"
+            title="Dismiss error"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* Auditor Mode Banner for Viewer */}
       {isViewer && (
@@ -544,30 +851,6 @@ const CreateGeofencePage = () => {
           <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 transition-transform group-hover:translate-x-1" />
         </button>
       </div>
-
-      {/* ==================== TOAST NOTIFICATION ==================== */}
-      {notification && (
-        <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
-          <div
-            className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl backdrop-blur-md shadow-2xl font-mono text-xs font-semibold border ${
-              notification.type === "success"
-                ? "bg-[#062419DD] border-[#2FE089] text-[#2FE089]"
-                : notification.type === "warning"
-                ? "bg-[#271E06DD] border-[#F59E0B] text-[#FBBF24]"
-                : notification.type === "error"
-                ? "bg-[#2B0E12DD] border-[#EF4444] text-[#F87171]"
-                : "bg-[#0B1A2ADD] border-[#35E0FF] text-[#35E0FF]"
-            }`}
-          >
-            {notification.type === "success" ? (
-              <CheckCircle2 className="w-4 h-4" />
-            ) : (
-              <Info className="w-4 h-4" />
-            )}
-            <span>{notification.message}</span>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

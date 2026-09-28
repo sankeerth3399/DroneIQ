@@ -31,17 +31,23 @@ export const INITIAL_DEMO_PROJECTS = [
       name: "Hyderabad Core Sector Geofence",
       type: "polygon",
       enabled: true,
+      vertices: [
+        { id: "vertex-1", lat: 17.388500, lng: 78.483000, latitude: 17.388500, longitude: 78.483000 },
+        { id: "vertex-2", lat: 17.388500, lng: 78.490500, latitude: 17.388500, longitude: 78.490500 },
+        { id: "vertex-3", lat: 17.381500, lng: 78.490500, latitude: 17.381500, longitude: 78.490500 },
+        { id: "vertex-4", lat: 17.381500, lng: 78.483000, latitude: 17.381500, longitude: 78.483000 },
+      ],
       polygon: [
-        { lat: 17.388500, lng: 78.483000, latitude: 17.388500, longitude: 78.483000 },
-        { lat: 17.388500, lng: 78.490500, latitude: 17.388500, longitude: 78.490500 },
-        { lat: 17.381500, lng: 78.490500, latitude: 17.381500, longitude: 78.490500 },
-        { lat: 17.381500, lng: 78.483000, latitude: 17.381500, longitude: 78.483000 },
+        { id: "vertex-1", lat: 17.388500, lng: 78.483000, latitude: 17.388500, longitude: 78.483000 },
+        { id: "vertex-2", lat: 17.388500, lng: 78.490500, latitude: 17.388500, longitude: 78.490500 },
+        { id: "vertex-3", lat: 17.381500, lng: 78.490500, latitude: 17.381500, longitude: 78.490500 },
+        { id: "vertex-4", lat: 17.381500, lng: 78.483000, latitude: 17.381500, longitude: 78.483000 },
       ],
       coordinates: [
-        { lat: 17.388500, lng: 78.483000, latitude: 17.388500, longitude: 78.483000 },
-        { lat: 17.388500, lng: 78.490500, latitude: 17.388500, longitude: 78.490500 },
-        { lat: 17.381500, lng: 78.490500, latitude: 17.381500, longitude: 78.490500 },
-        { lat: 17.381500, lng: 78.483000, latitude: 17.381500, longitude: 78.483000 },
+        { id: "vertex-1", lat: 17.388500, lng: 78.483000, latitude: 17.388500, longitude: 78.483000 },
+        { id: "vertex-2", lat: 17.388500, lng: 78.490500, latitude: 17.388500, longitude: 78.490500 },
+        { id: "vertex-3", lat: 17.381500, lng: 78.490500, latitude: 17.381500, longitude: 78.490500 },
+        { id: "vertex-4", lat: 17.381500, lng: 78.483000, latitude: 17.381500, longitude: 78.483000 },
       ],
       areaM2: 579000,
       perimeterM: 3100,
@@ -187,10 +193,11 @@ export const INITIAL_DEMO_PROJECTS = [
 export function normalizeVertexList(list) {
   if (!Array.isArray(list)) return [];
   return list
-    .map((pt) => {
+    .map((pt, idx) => {
       const norm = normalizeCoord(pt);
       if (!norm) return null;
       return {
+        id: pt.id || `vertex-${idx + 1}`,
         lat: Number(norm.lat.toFixed(6)),
         lng: Number(norm.lng.toFixed(6)),
         latitude: Number(norm.lat.toFixed(6)),
@@ -206,7 +213,9 @@ export function normalizeVertexList(list) {
 export function normalizeGeofence(geofence) {
   if (!geofence) return null;
 
-  const rawList = Array.isArray(geofence.polygon)
+  const rawList = Array.isArray(geofence.vertices)
+    ? geofence.vertices
+    : Array.isArray(geofence.polygon)
     ? geofence.polygon
     : Array.isArray(geofence.coordinates)
     ? geofence.coordinates
@@ -234,6 +243,7 @@ export function normalizeGeofence(geofence) {
     name: geofence.name || "Configured Geofence",
     type: "polygon",
     enabled: true,
+    vertices: cleanCoords, // Canonical source of truth (Requirement 3 & 23)
     polygon: cleanCoords,
     coordinates: cleanCoords,
     areaM2,
@@ -543,7 +553,9 @@ export function deleteProject(projectId) {
 export function saveProjectGeofence(projectId, geofenceData) {
   if (!projectId || !geofenceData) return null;
 
-  const rawList = Array.isArray(geofenceData.coordinates)
+  const rawList = Array.isArray(geofenceData.vertices)
+    ? geofenceData.vertices
+    : Array.isArray(geofenceData.coordinates)
     ? geofenceData.coordinates
     : Array.isArray(geofenceData.polygon)
     ? geofenceData.polygon
@@ -572,6 +584,7 @@ export function saveProjectGeofence(projectId, geofenceData) {
     name: geofenceData.name || "Flight Geofence Boundary",
     type: "polygon",
     enabled: true,
+    vertices: cleanCoords, // Canonical source of truth (Requirement 3 & 23)
     polygon: cleanCoords,
     coordinates: cleanCoords,
     areaM2,

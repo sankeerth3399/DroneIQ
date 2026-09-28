@@ -2,6 +2,7 @@ import { useTelemetry } from "@/hooks/useTelemetry.js";
 import { useAuth } from "@/hooks/useAuth.js";
 import { Permissions } from "@/auth/permissions.js";
 import { useFlyConfirmation } from "@/hooks/useFlyConfirmation.js";
+import { ConnectionState } from "@/services/telemetry/telemetryTypes.js";
 import { Lock } from "lucide-react";
 
 /**
@@ -13,14 +14,28 @@ import { Lock } from "lucide-react";
  *   Inhibited with lock indicator and explanation tooltip.
  */
 export const ArmStatusButton = () => {
-  const { isArmed, toggleArmed, showToast, selectedDroneId, telemetry } = useTelemetry();
+  const {
+    isArmed,
+    executeArmCommand,
+    showToast,
+    selectedDroneId,
+    telemetry,
+    connectionState,
+    isLive,
+    isStale,
+  } = useTelemetry();
+
   const { hasPermission } = useAuth();
-  const { requestActionConfirmation } = useFlyConfirmation();
+  const { isConfirmOpen, requestActionConfirmation } = useFlyConfirmation();
 
   const canExecuteFlight = hasPermission(Permissions.EXECUTE_FLIGHT_COMMANDS);
   const activeDroneId = selectedDroneId || telemetry?.droneId || "DRONE-001";
 
   const handleActionRequest = () => {
+    // Section 20: Duplicate command protection
+    if (isConfirmOpen) return;
+
+    // 1. RBAC Pre-check (Section 21)
     if (!canExecuteFlight) {
       if (typeof showToast === "function") {
         showToast("ARM/DISARM inhibited: Requires Flight Operator or Super Admin role.", "warning");
@@ -30,21 +45,23 @@ export const ArmStatusButton = () => {
 
     const nextAction = isArmed ? "DISARM" : "ARM";
 
+    // Section 2, 3, 16: Do NOT block ARM/DISARM on client because of stale telemetry, GPS, or connection!
+    // Send confirmation and let backend response determine success/failure.
     requestActionConfirmation({
       action: nextAction,
+      title: nextAction === "ARM" ? "Confirm Arm" : "Confirm Disarm",
+      confirmLabel: nextAction === "ARM" ? "Confirm Arm" : "Confirm Disarm",
+      cancelLabel: "Cancel",
+      severity: nextAction === "ARM" ? "warning" : "danger",
       droneId: activeDroneId,
       currentState: isArmed ? "ARMED" : "UNARMED",
-      validateState: () => {
-        if (nextAction === "ARM" && isArmed) {
-          return "Drone is already armed.";
-        }
-        if (nextAction === "DISARM" && !isArmed) {
-          return "Drone is already disarmed.";
-        }
-        return true;
+      onCancel: () => {
+        // Mode change / action cancel: no command, no notification
       },
       onConfirm: async () => {
-        toggleArmed("USER");
+        if (typeof executeArmCommand === "function") {
+          await executeArmCommand({ arm: !isArmed, droneId: activeDroneId });
+        }
       },
     });
   };
