@@ -219,27 +219,36 @@ export const syncGeofenceLayers = (
         });
       }
 
-      // 3. Violations Source & Layers
-      if (!map.getSource(VIOLATIONS_SOURCE_ID)) {
-        map.addSource(VIOLATIONS_SOURCE_ID, {
-          type: "geojson",
-          data: violationsData,
-        });
+      // 3. Violation route exists only while there are violating segments.
+      if (violationsData.features.length === 0) {
+        if (map.getLayer(VIOLATIONS_LINE_LAYER_ID)) {
+          map.removeLayer(VIOLATIONS_LINE_LAYER_ID);
+        }
+        if (map.getSource(VIOLATIONS_SOURCE_ID)) {
+          map.removeSource(VIOLATIONS_SOURCE_ID);
+        }
       } else {
-        map.getSource(VIOLATIONS_SOURCE_ID).setData(violationsData);
-      }
+        if (!map.getSource(VIOLATIONS_SOURCE_ID)) {
+          map.addSource(VIOLATIONS_SOURCE_ID, {
+            type: "geojson",
+            data: violationsData,
+          });
+        } else {
+          map.getSource(VIOLATIONS_SOURCE_ID).setData(violationsData);
+        }
 
-      if (!map.getLayer(VIOLATIONS_LINE_LAYER_ID) && map.getSource(VIOLATIONS_SOURCE_ID)) {
-        map.addLayer({
-          id: VIOLATIONS_LINE_LAYER_ID,
-          type: "line",
-          source: VIOLATIONS_SOURCE_ID,
-          paint: {
-            "line-color": "#EF4444",
-            "line-width": 4.5,
-            "line-opacity": 0.95,
-          },
-        });
+        if (!map.getLayer(VIOLATIONS_LINE_LAYER_ID) && map.getSource(VIOLATIONS_SOURCE_ID)) {
+          map.addLayer({
+            id: VIOLATIONS_LINE_LAYER_ID,
+            type: "line",
+            source: VIOLATIONS_SOURCE_ID,
+            paint: {
+              "line-color": "#EF4444",
+              "line-width": 4.5,
+              "line-opacity": 0.95,
+            },
+          });
+        }
       }
 
       // 4. Stacking: Ensure layers are above satellite raster if satellite exists

@@ -98,6 +98,17 @@ export function syncMissionRoute(mapInstance, waypoints = [], showMissionRoute =
 
   const routeData = showMissionRoute ? buildRouteGeoJson(waypoints) : { type: "FeatureCollection", features: [] };
 
+  if (routeData.features.length === 0) {
+    try {
+      if (map.getLayer?.(ROUTE_LINE_LAYER_ID)) map.removeLayer(ROUTE_LINE_LAYER_ID);
+      if (map.getLayer?.(ROUTE_LINE_CASING_LAYER_ID)) map.removeLayer(ROUTE_LINE_CASING_LAYER_ID);
+      if (map.getSource?.(ROUTE_SOURCE_ID)) map.removeSource(ROUTE_SOURCE_ID);
+    } catch (err) {
+      console.debug("[routeLayerHelper] Empty route cleanup note:", err.message);
+    }
+    return;
+  }
+
   try {
     // 1. Manage GeoJSON Source
     if (!map.getSource(ROUTE_SOURCE_ID)) {
@@ -171,7 +182,7 @@ export function syncMissionRoute(mapInstance, waypoints = [], showMissionRoute =
  * Synchronizes Directional Chevron Markers placed at midpoints of straight segments
  */
 export function syncDirectionMarkers(mapInstance, waypoints = [], showMissionRoute = true, directionMarkersMapRef) {
-  if (!mapInstance || !window.mappls?.Marker || !directionMarkersMapRef) return;
+  if (!mapInstance || !directionMarkersMapRef) return;
   const currentMarkers = directionMarkersMapRef.current;
 
   // If fewer than 2 waypoints or route hidden, remove all direction markers
@@ -186,6 +197,8 @@ export function syncDirectionMarkers(mapInstance, waypoints = [], showMissionRou
     currentMarkers.clear();
     return;
   }
+
+  if (!window.mappls?.Marker) return;
 
   const segmentCount = waypoints.length - 1;
   const activeSegmentKeys = new Set();

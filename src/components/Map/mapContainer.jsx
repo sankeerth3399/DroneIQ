@@ -325,10 +325,26 @@ const MapContainer = ({
   }, [mapStyle]);
 
   // Mission Planning Waypoint Refs & Dynamic Synchronization
+  const geofenceCoords = useMemo(() => {
+    if (Array.isArray(geofence)) return geofence;
+    if (Array.isArray(geofence?.vertices)) return geofence.vertices;
+    if (Array.isArray(geofence?.polygon)) return geofence.polygon;
+    if (Array.isArray(geofence?.coordinates)) return geofence.coordinates;
+    return [];
+  }, [geofence]);
+
   const waypointMarkersRef = useRef(new Map());
   const directionMarkersRef = useRef(new Map());
   const draggingWaypointIdRef = useRef(null);
-  const missionPolylineRef = useRef(null);
+  const missionRouteStateRef = useRef({
+    waypoints,
+    showMissionRoute,
+    isSatellite: mapStyle === "satellite",
+    geofenceCoords,
+    routeViolations: waypoints.length >= 2 ? routeViolations : [],
+    isDrawingGeofence,
+    isClosedGeofence,
+  });
   const onMapClickRef = useRef(onMapClick);
   const onWaypointSelectRef = useRef(onWaypointSelect);
   const onWaypointDragRef = useRef(onWaypointDrag);
@@ -342,6 +358,45 @@ const MapContainer = ({
   const onGeofenceEditHoverRef = useRef(onGeofenceEditHover);
 
   useEffect(() => {
+    missionRouteStateRef.current = {
+      waypoints,
+      showMissionRoute,
+      isSatellite: mapStyle === "satellite",
+      geofenceCoords,
+      routeViolations: waypoints.length >= 2 ? routeViolations : [],
+      isDrawingGeofence,
+      isClosedGeofence,
+    };
+  }, [
+    waypoints,
+    showMissionRoute,
+    mapStyle,
+    geofenceCoords,
+    routeViolations,
+    isDrawingGeofence,
+    isClosedGeofence,
+  ]);
+
+  const syncCurrentMissionRoute = (map) => {
+    const routeState = missionRouteStateRef.current;
+    syncMissionRoute(map, routeState.waypoints, routeState.showMissionRoute, routeState.isSatellite);
+    syncDirectionMarkers(map, routeState.waypoints, routeState.showMissionRoute, directionMarkersRef);
+  };
+
+  const syncCurrentGeofenceLayers = (map) => {
+    const routeState = missionRouteStateRef.current;
+    const isClosed =
+      routeState.isClosedGeofence !== undefined
+        ? routeState.isClosedGeofence
+        : !routeState.isDrawingGeofence || routeState.geofenceCoords.length >= 3;
+
+    syncGeofenceLayers(map, routeState.geofenceCoords, routeState.routeViolations, {
+      isDrawing: routeState.isDrawingGeofence,
+      isClosed,
+    });
+  };
+
+  useEffect(() => {
     onMapClickRef.current = onMapClick;
     onWaypointSelectRef.current = onWaypointSelect;
     onWaypointDragRef.current = onWaypointDrag;
@@ -351,14 +406,6 @@ const MapContainer = ({
     onGeofenceVertexSelectRef.current = onGeofenceVertexSelect;
     onGeofenceEditHoverRef.current = onGeofenceEditHover;
   }, [onMapClick, onWaypointSelect, onWaypointDrag, onWaypointDragEnd, onGeofenceVertexDrag, onGeofenceVertexDragEnd, onGeofenceVertexSelect, onGeofenceEditHover]);
-
-  const geofenceCoords = useMemo(() => {
-    if (Array.isArray(geofence)) return geofence;
-    if (Array.isArray(geofence?.vertices)) return geofence.vertices;
-    if (Array.isArray(geofence?.polygon)) return geofence.polygon;
-    if (Array.isArray(geofence?.coordinates)) return geofence.coordinates;
-    return [];
-  }, [geofence]);
 
   // Synchronize Geofence, Preview Line, and Route Violation Layers on Map
   useEffect(() => {
@@ -370,7 +417,7 @@ const MapContainer = ({
         ? isClosedGeofence
         : !isDrawingGeofence || geofenceCoords.length >= 3;
 
-    syncGeofenceLayers(map, geofenceCoords, routeViolations, {
+    syncGeofenceLayers(map, geofenceCoords, waypoints.length >= 2 ? routeViolations : [], {
       isDrawing: isDrawingGeofence,
       isClosed,
     });
@@ -400,6 +447,7 @@ const MapContainer = ({
   }, [
     geofenceCoords,
     routeViolations,
+    waypoints.length,
     mapStyle,
     isDrawingGeofence,
     isClosedGeofence,
@@ -801,38 +849,7 @@ const MapContainer = ({
     });
 
     // 3. Synchronize Straight Mission Route Layers & Direction Chevrons
-    syncMissionRoute(map, waypoints, showMissionRoute, mapStyle === "satellite");
-    syncDirectionMarkers(map, waypoints, showMissionRoute, directionMarkersRef);
-
-    // 4. Also keep Mappls Polyline (if available) synced for dual compatibility
-    if (showMissionRoute && waypoints.length >= 2) {
-      const path = waypoints.map((w) => ({ lat: w.lat, lng: w.lng }));
-      try {
-        const PolylineConstructor = window.mappls?.Polyline || window.mappls?.polyline;
-        if (missionPolylineRef.current && typeof missionPolylineRef.current.setPath === "function") {
-          missionPolylineRef.current.setPath(path);
-          missionPolylineRef.current.setTop?.();
-        } else if (!missionPolylineRef.current && PolylineConstructor) {
-          missionPolylineRef.current = new PolylineConstructor({
-            map,
-            path,
-            strokeColor: "#35E0FF",
-            strokeWeight: 3.5,
-            strokeOpacity: 0.85,
-          });
-          missionPolylineRef.current.setTop?.();
-        }
-      } catch (err) {
-        console.debug("[MapContainer] Mission polyline update note:", err.message);
-      }
-    } else if (missionPolylineRef.current && waypoints.length < 2) {
-      try {
-        missionPolylineRef.current.remove?.();
-      } catch {
-        // Safe ignore
-      }
-      missionPolylineRef.current = null;
-    }
+    syncCurrentMissionRoute(map);
   }, [waypoints, selectedWaypointId, showMissionRoute, mapStyle]);
 
   // Initialize Mappls Map with async SDK readiness polling & unique element ID
@@ -965,20 +982,11 @@ const MapContainer = ({
           setSdkAvailable(true);
           map.resize?.();
 
-          const isClosed =
-            isClosedGeofence !== undefined
-              ? isClosedGeofence
-              : !isDrawingGeofence || geofenceCoords.length >= 3;
-
           // Initialize satellite layer and apply style
           ensureSatelliteLayer(map, mapStyleRef.current === "satellite");
           applyMapStyle(map, mapStyleRef.current, polylineRef);
-          syncGeofenceLayers(map, geofenceCoords, routeViolations, {
-            isDrawing: isDrawingGeofence,
-            isClosed,
-          });
-          syncMissionRoute(map, waypoints, showMissionRoute, mapStyleRef.current === "satellite");
-          syncDirectionMarkers(map, waypoints, showMissionRoute, directionMarkersRef);
+          syncCurrentGeofenceLayers(map);
+          syncCurrentMissionRoute(map);
 
           // Track user map pan/drag to decouple camera centering from live marker updates
           map.on("dragstart", () => {
@@ -1018,19 +1026,10 @@ const MapContainer = ({
 
         const handleStyleLoad = () => {
           if (cancelled) return;
-          const isClosed =
-            isClosedGeofence !== undefined
-              ? isClosedGeofence
-              : !isDrawingGeofence || geofenceCoords.length >= 3;
-
           ensureSatelliteLayer(map, mapStyleRef.current === "satellite");
           applyMapStyle(map, mapStyleRef.current, polylineRef);
-          syncGeofenceLayers(map, geofenceCoords, routeViolations, {
-            isDrawing: isDrawingGeofence,
-            isClosed,
-          });
-          syncMissionRoute(map, waypoints, showMissionRoute, mapStyleRef.current === "satellite");
-          syncDirectionMarkers(map, waypoints, showMissionRoute, directionMarkersRef);
+          syncCurrentGeofenceLayers(map);
+          syncCurrentMissionRoute(map);
         };
 
         if (map.loaded?.()) {
@@ -1116,15 +1115,6 @@ const MapContainer = ({
             // Safe ignore
           }
         }
-        const missionPolyline = missionPolylineRef.current;
-        if (missionPolyline?.remove) {
-          try {
-            missionPolyline.remove();
-          } catch {
-            // Safe ignore
-          }
-        }
-        missionPolylineRef.current = null;
         removeRouteLayers(mapRef.current, directionMarkersRef);
         removeGeofenceLayers(mapRef.current);
         geofenceInsertionMarkerRef.current?.remove?.();
