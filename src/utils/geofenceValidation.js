@@ -23,7 +23,6 @@ export const MIN_VERTEX_DISTANCE_METERS = 2.0;
 export const EDGE_VERTEX_TOLERANCE_METERS = 2.0;
 export const MIN_EDGE_LENGTH_METERS = 2.0;
 export const MIN_GEOFENCE_AREA_M2 = 10.0;
-export const GEOFENCE_EDGE_INSERTION_TOLERANCE_METERS = 500;
 
 // Canonical Validation Reason Codes
 export const GeofenceValidationReasons = {
@@ -90,14 +89,10 @@ export function projectSinglePoint(point, origin) {
 }
 
 /** Finds the closest polygon edge to a candidate coordinate in local meters. */
-export function findNearestPolygonEdge(
-  vertices = [],
-  candidate,
-  maxDistanceMeters = GEOFENCE_EDGE_INSERTION_TOLERANCE_METERS
-) {
+export function findNearestPolygonEdge(vertices = [], candidate) {
   const coords = vertices.map(normalizeCoord).filter(Boolean);
   const point = normalizeCoord(candidate);
-  if (coords.length < 3 || !point || maxDistanceMeters < 0) return null;
+  if (coords.length < 3 || !point) return null;
 
   let nearest = null;
   for (let edgeIndex = 0; edgeIndex < coords.length; edgeIndex++) {
@@ -119,11 +114,52 @@ export function findNearestPolygonEdge(
         edgeIndex,
         insertionIndex: edgeIndex + 1,
         distanceMeters,
+        projectedPoint: {
+          lat: start.lat + (end.lat - start.lat) * t,
+          lng: start.lng + (end.lng - start.lng) * t,
+        },
       };
     }
   }
 
-  return nearest && nearest.distanceMeters <= maxDistanceMeters ? nearest : null;
+  return nearest;
+}
+
+/** Snaps a candidate to its nearest polygon edge and validates the full result. */
+export function insertVertexOnNearestEdge(vertices = [], candidate) {
+  const nearestEdge = findNearestPolygonEdge(vertices, candidate);
+  if (!nearestEdge) {
+    return {
+      valid: false,
+      reason: GeofenceValidationReasons.INSUFFICIENT_VERTICES,
+      message: "At least 3 valid geofence vertices are required before inserting a point.",
+    };
+  }
+
+  const snappedCandidate = {
+    ...candidate,
+    ...nearestEdge.projectedPoint,
+    latitude: nearestEdge.projectedPoint.lat,
+    longitude: nearestEdge.projectedPoint.lng,
+  };
+
+  const nextVertices = [...vertices];
+  nextVertices.splice(nearestEdge.insertionIndex, 0, snappedCandidate);
+
+  const validation = validateGeofencePolygon(nextVertices);
+  if (!validation.valid) {
+    return {
+      valid: false,
+      reason: validation.reason,
+      message: validation.message,
+    };
+  }
+
+  return {
+    valid: true,
+    vertices: nextVertices,
+    nearestEdge,
+  };
 }
 
 /**
@@ -748,6 +784,7 @@ export default {
   isVertexTooClose,
   isPointOnSegment,
   findNearestPolygonEdge,
+  insertVertexOnNearestEdge,
   segmentsIntersect,
   segmentsOverlap,
   hasDuplicateVertices,

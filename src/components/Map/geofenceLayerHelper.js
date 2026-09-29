@@ -145,7 +145,7 @@ export const syncGeofenceLayers = (
   if (!map || typeof map.getSource !== "function" || typeof map.addSource !== "function") return;
 
   const { isDrawing = false, isClosed = true } = options;
-  const isActuallyClosed = isClosed || (!isDrawing && geofenceCoords.length >= 3);
+  const isActuallyClosed = isClosed || geofenceCoords.length >= 3;
 
   // When drawing with fewer than 3 vertices, do NOT create a filled polygon yet (Requirement 5)
   const shouldRenderPolygon = geofenceCoords.length >= 3;

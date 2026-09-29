@@ -7,7 +7,7 @@ const checklistItems = [
   { label: "GPS 3D Fix & Satellites", status: "PASSED", val: "18 Sats Locked" },
   { label: "Compass & IMU Calibration", status: "PASSED", val: "HDG 000° Valid" },
   { label: "RC & Telemetry Link", status: "PASSED", val: "Signal 99%" },
-  { label: "Geofence Enforcement", status: "ACTIVE", val: "500m Max Radius" },
+  { label: "Geofence Enforcement", status: "ACTIVE", val: "Project Boundary Active" },
   { label: "Airspace Clear / No TFRs", status: "CLEAR", val: "Sector Verified" },
 ]
 

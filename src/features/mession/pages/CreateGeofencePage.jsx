@@ -17,8 +17,8 @@ import {
   validateGeofencePolygon,
   calculateDistance,
   findNearestPolygonEdge,
+  insertVertexOnNearestEdge,
   GeofenceValidationReasons,
-  GEOFENCE_EDGE_INSERTION_TOLERANCE_METERS,
 } from "@/utils/geofenceValidation.js";
 import {
   Shield,
@@ -115,7 +115,6 @@ const CreateGeofencePage = () => {
   const [selectedVertexId, setSelectedVertexId] = useState(null);
   const [inlineError, setInlineError] = useState(null);
   const [history, setHistory] = useState([]);
-  const [invalidClickPoint, setInvalidClickPoint] = useState(null);
   const [geofenceEditHover, setGeofenceEditHover] = useState(null);
   const [metricsCollapsed, setMetricsCollapsed] = useState(() => typeof window !== "undefined" && window.innerWidth < 640);
   const dragStartVerticesRef = useRef(null);
@@ -191,31 +190,22 @@ const CreateGeofencePage = () => {
     if (isEditing) {
       const nearestEdge = findNearestPolygonEdge(vertices, coords);
       if (!nearestEdge) {
-        setInlineErrorWithTimeout(
-          `Click within ${GEOFENCE_EDGE_INSERTION_TOLERANCE_METERS} m of the geofence boundary to add a point.`
-        );
+        setInlineErrorWithTimeout("A valid geofence boundary is required before adding a point.");
         return;
       }
 
       const newVertex = {
         id: createGeofenceVertexId(),
-        lat: Number(coords.lat.toFixed(6)),
-        lng: Number(coords.lng.toFixed(6)),
-        latitude: Number(coords.lat.toFixed(6)),
-        longitude: Number(coords.lng.toFixed(6)),
+        lat: coords.lat,
+        lng: coords.lng,
       };
-      const nextVertices = [...vertices];
-      nextVertices.splice(nearestEdge.insertionIndex, 0, newVertex);
-
-      const validation = validateGeofencePolygon(nextVertices);
-      if (!validation.valid) {
+      const insertion = insertVertexOnNearestEdge(vertices, newVertex);
+      if (!insertion.valid) {
         const message =
-          validation.reason === GeofenceValidationReasons.DUPLICATE_VERTEX ||
-          validation.reason === GeofenceValidationReasons.VERTEX_TOO_CLOSE
+          insertion.reason === GeofenceValidationReasons.DUPLICATE_VERTEX ||
+          insertion.reason === GeofenceValidationReasons.VERTEX_TOO_CLOSE
             ? "Point is too close to an existing vertex."
             : "Point cannot be added here because it would create invalid geometry.";
-        setInvalidClickPoint({ lat: newVertex.lat, lng: newVertex.lng });
-        setTimeout(() => setInvalidClickPoint(null), 1800);
         setInlineErrorWithTimeout(message);
         if (import.meta.env?.DEV) {
           console.debug("[GEOFENCE EDIT]", {
@@ -225,18 +215,18 @@ const CreateGeofencePage = () => {
             polygonLayerCount: 1,
             polylineLayerCount: 1,
             valid: false,
-            reason: validation.reason,
+            reason: insertion.reason,
           });
         }
         return;
       }
 
-      pushHistory(nextVertices);
+      pushHistory(insertion.vertices);
       if (import.meta.env?.DEV) {
         console.debug("[GEOFENCE EDIT]", {
           action: "ADD_POINT",
           targetEdge: `${vertices[nearestEdge.edgeIndex]?.id} -> ${vertices[(nearestEdge.edgeIndex + 1) % vertices.length]?.id}`,
-          vertexCount: nextVertices.length,
+          vertexCount: insertion.vertices.length,
           polygonLayerCount: 1,
           polylineLayerCount: 1,
           valid: true,
@@ -257,17 +247,13 @@ const CreateGeofencePage = () => {
       if (distToFirst <= 15 || (distLat < 0.00015 && distLng < 0.00015)) {
         const closureValidation = validateGeofenceClosure(vertices);
         if (!closureValidation.valid) {
-          setInvalidClickPoint({ lat: coords.lat, lng: coords.lng });
-          setTimeout(() => setInvalidClickPoint(null), 1800);
-          showToast(`Cannot close geofence: ${closureValidation.message}`, "error", "Invalid Boundary");
+          setInlineErrorWithTimeout(`Cannot close geofence: ${closureValidation.message}`);
           return;
         }
 
         const polygonValidation = validateGeofencePolygon(vertices);
         if (!polygonValidation.valid) {
-          setInvalidClickPoint({ lat: coords.lat, lng: coords.lng });
-          setTimeout(() => setInvalidClickPoint(null), 1800);
-          showToast(`Cannot close geofence: ${polygonValidation.message}`, "error", "Invalid Boundary");
+          setInlineErrorWithTimeout(`Cannot close geofence: ${polygonValidation.message}`);
           return;
         }
 
@@ -281,10 +267,7 @@ const CreateGeofencePage = () => {
     // Validate proposed new vertex before modifying geometry
     const validation = validateProposedVertex(vertices, coords);
     if (!validation.valid) {
-      setInvalidClickPoint({ lat: coords.lat, lng: coords.lng });
-      setTimeout(() => setInvalidClickPoint(null), 1800);
-      const isBoundary = validation.reason === "SELF_INTERSECTING" || validation.reason === "BOUNDARY_CROSSING";
-      showToast(validation.message, isBoundary ? "error" : "warning", isBoundary ? "Invalid Boundary" : "Vertex Rejected");
+      setInlineErrorWithTimeout(validation.message || "Point cannot be added here because it would create invalid geometry.");
       return;
     }
 
@@ -296,7 +279,17 @@ const CreateGeofencePage = () => {
       longitude: Number(coords.lng.toFixed(6)),
     };
 
-    pushHistory([...vertices, newVertex]);
+    const nextVertices = [...vertices, newVertex];
+    if (nextVertices.length >= 3) {
+      const polygonValidation = validateGeofencePolygon(nextVertices);
+      if (!polygonValidation.valid) {
+        setInlineErrorWithTimeout(
+          `Point cannot be added here because it would create invalid geometry: ${polygonValidation.message}`
+        );
+        return;
+      }
+    }
+    pushHistory(nextVertices);
   };
 
   const handleMapHover = (coords) => {
@@ -304,7 +297,8 @@ const CreateGeofencePage = () => {
       setGeofenceEditHover(null);
       return;
     }
-    const nextHover = findNearestPolygonEdge(vertices, coords) ? coords : null;
+    const nearestEdge = findNearestPolygonEdge(vertices, coords);
+    const nextHover = nearestEdge?.projectedPoint || null;
     setGeofenceEditHover((previous) =>
       previous?.lat === nextHover?.lat && previous?.lng === nextHover?.lng
         ? previous
@@ -364,10 +358,7 @@ const CreateGeofencePage = () => {
     if (!validation.valid) {
       setVertices(baseVertices);
       dragStartVerticesRef.current = null;
-      setInvalidClickPoint({ lat: newCoords.lat, lng: newCoords.lng });
-      setTimeout(() => setInvalidClickPoint(null), 1800);
-      const isBoundary = validation.reason === "SELF_INTERSECTING" || validation.reason === "BOUNDARY_CROSSING";
-      showToast(validation.message, isBoundary ? "error" : "warning", isBoundary ? "Invalid Boundary" : "Vertex Rejected");
+      setInlineErrorWithTimeout(validation.message || "Point cannot be moved because it would create invalid geometry.");
       return { valid: false, reason: validation.reason, message: validation.message };
     }
 
@@ -479,19 +470,19 @@ const CreateGeofencePage = () => {
   const handleClosePolygon = () => {
     if (isViewer) return;
     if (vertices.length < 3) {
-      showToast("At least 3 vertices are required to close a geofence.", "warning", "Geofence Incomplete");
+      setInlineErrorWithTimeout("At least 3 vertices are required to close a geofence.");
       return;
     }
 
     const closureValidation = validateGeofenceClosure(vertices);
     if (!closureValidation.valid) {
-      showToast(`Cannot close geofence: ${closureValidation.message}`, "error", "Invalid Boundary");
+      setInlineErrorWithTimeout(`Cannot close geofence: ${closureValidation.message}`);
       return;
     }
 
     const polygonValidation = validateGeofencePolygon(vertices);
     if (!polygonValidation.valid) {
-      showToast(`Cannot close geofence: ${polygonValidation.message}`, "error", "Invalid Boundary");
+      setInlineErrorWithTimeout(`Cannot close geofence: ${polygonValidation.message}`);
       return;
     }
 
@@ -649,7 +640,6 @@ const CreateGeofencePage = () => {
           onMapClick={handleMapClick}
           onGeofenceEditHover={handleMapHover}
           showMissionRoute={false}
-          invalidClickPoint={invalidClickPoint}
           pageType="geofence"
         />
       </div>
