@@ -8,9 +8,12 @@ import { ROLE_METADATA, Roles } from "@/auth/roleConfig.js"
 import { Permissions } from "@/auth/permissions.js"
 import ArmStatusButton from "./ArmStatusButton.jsx"
 import EmergencyOverrideDeck from "@/features/fly/components/EmergencyOverrideDeck.jsx"
+import InfoLogPanel from "@/features/fly/components/InfoLogPanel.jsx"
 import NotificationCenterModal from "@/components/notification/NotificationCenterModal.jsx"
+import { useLocation } from "react-router-dom"
 
 const Header = ({ onToggleMobile, mobileOpen }) => {
+    const location = useLocation()
     const { telemetry, flightMode: contextFlightMode, selectedDroneId, connectionState, isLive } = useTelemetry()
     const { role, hasPermission } = useAuth()
     const { unreadCount, isHistoryOpen, setIsHistoryOpen } = useNotification()
@@ -131,6 +134,7 @@ const Header = ({ onToggleMobile, mobileOpen }) => {
             <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
                 {/* EMERGENCY FLIGHT OVERRIDE DECK (Super Admin, Fleet Manager & Flight Operator) */}
                 {(canOverrideFlight || canExecuteFlight) && <EmergencyOverrideDeck />}
+                {location.pathname === "/fly" && <InfoLogPanel />}
 
                 {/* COMPACT ACTIVE ROLE BADGE (AeroNexus Aerospace Design) */}
                 <div

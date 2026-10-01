@@ -23,6 +23,7 @@ export class DroneIqClient {
 
     // Subscriptions & listeners
     this.telemetryListeners = new Set()
+    this.backendEventListeners = new Set()
     this.stateListeners = new Set()
     this.subscribedDrones = new Set()
     this.subscribeAllMode = true
@@ -34,6 +35,11 @@ export class DroneIqClient {
   onTelemetry(callback) {
     this.telemetryListeners.add(callback)
     return () => this.telemetryListeners.delete(callback)
+  }
+
+  onBackendEvent(callback) {
+    this.backendEventListeners.add(callback)
+    return () => this.backendEventListeners.delete(callback)
   }
 
   /**
@@ -150,7 +156,13 @@ export class DroneIqClient {
             break
 
           default:
-            // Unhandled custom message
+            this.backendEventListeners.forEach((listener) => {
+              try {
+                listener(message, Date.now())
+              } catch (err) {
+                console.error("[DroneIqClient] Backend event listener error:", err)
+              }
+            })
             break
         }
       } catch (err) {
