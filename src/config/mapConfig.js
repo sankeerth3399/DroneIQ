@@ -3,7 +3,7 @@ import {
   GLOBAL_DEFAULT_ZOOM,
   OPERATIONAL_MAP_ZOOM,
   FALLBACK_DRONE_LOCATION,
-} from "@/services/telemetry/telemetryTypes.js";
+} from "../services/telemetry/telemetryTypes.js";
 
 /**
  * Page-Specific Map Configuration Matrix
@@ -45,6 +45,14 @@ export const MAP_CONFIG = {
     defaultCenter: [FALLBACK_DRONE_LOCATION.latitude, FALLBACK_DRONE_LOCATION.longitude], // [17.3850, 78.4867]
     defaultZoom: 14,
     operationalZoom: 14,
+    followDroneOnLiveFix: false,
+  },
+
+  dashboard: {
+    name: "dashboard",
+    defaultCenter: [FALLBACK_DRONE_LOCATION.latitude, FALLBACK_DRONE_LOCATION.longitude], // [17.3850, 78.4867]
+    defaultZoom: OPERATIONAL_MAP_ZOOM, // 15
+    operationalZoom: OPERATIONAL_MAP_ZOOM, // 15
     followDroneOnLiveFix: false,
   },
 };
@@ -113,11 +121,23 @@ export function resolveInitialMapState({
   const effectivePage = (pageType || "fly").toLowerCase().trim();
   const config = MAP_CONFIG[effectivePage] || MAP_CONFIG.fly;
 
-  // 2. FLY PAGE: Global world overview unless real drone is live with valid GPS fix
+  // 2. FLY PAGE: Operational zoom on live drone if active; or operational zoom on active mission waypoints/geofence if present; else global world overview
   if (effectivePage === "fly") {
     if (hasLiveDroneLocation) {
       return {
         center: customCenter || [activeLat, activeLng],
+        zoom: customZoom ?? config.operationalZoom,
+      };
+    }
+    if (Array.isArray(waypoints) && waypoints.length > 0) {
+      return {
+        center: customCenter || getCoordinatesCentroid(waypoints, [activeLat, activeLng]),
+        zoom: customZoom ?? config.operationalZoom,
+      };
+    }
+    if (Array.isArray(geofenceCoords) && geofenceCoords.length > 0) {
+      return {
+        center: customCenter || getCoordinatesCentroid(geofenceCoords, [activeLat, activeLng]),
         zoom: customZoom ?? config.operationalZoom,
       };
     }
@@ -135,15 +155,17 @@ export function resolveInitialMapState({
     return { center, zoom };
   }
 
-  // 4. WAYPOINT PLANNING PAGE: Operational editing zoom (15).
-  // Centered on existing waypoints or geofence if present, otherwise Hyderabad fallback [17.3850, 78.4867]
-  if (effectivePage === "waypoints") {
+  // 4. WAYPOINT PLANNING & COMMAND CENTER DASHBOARD: Operational zoom (15).
+  // Centered on existing waypoints, geofence, live drone, or Hyderabad fallback
+  if (effectivePage === "waypoints" || effectivePage === "dashboard") {
     let center = customCenter;
     if (!center) {
       if (Array.isArray(waypoints) && waypoints.length > 0) {
         center = getCoordinatesCentroid(waypoints, config.defaultCenter);
       } else if (Array.isArray(geofenceCoords) && geofenceCoords.length > 0) {
         center = getCoordinatesCentroid(geofenceCoords, config.defaultCenter);
+      } else if (hasLiveDroneLocation) {
+        center = [activeLat, activeLng];
       } else {
         center = config.defaultCenter;
       }

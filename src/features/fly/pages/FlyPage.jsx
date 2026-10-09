@@ -1,12 +1,12 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import MapLoad from "@/components/Map/mapContainer.jsx";
 import { useDroneTelemetry } from "@/hooks/useDroneTelemetry.js";
-import { getMovementAbbreviation } from "@/utils/joystick.js";
+import { useMission } from "@/hooks/useMission.js";
 import DualJoystickOverlay from "@/features/mession/components/joysticks/DualJoystickOverlay.jsx";
 import FlightInstrumentsWidget from "@/features/mession/components/widgets/FlightInstrumentsWidget.jsx";
 import CameraWidget from "@/features/fly/components/CameraWidget.jsx";
 import FlightModeDropdown from "@/features/fly/components/FlightModeDropdown.jsx";
-import { LayoutGrid, ShieldAlert } from "lucide-react";
+import { LayoutGrid, ShieldAlert, X as CloseIcon } from "lucide-react";
 
 import { useAuth } from "@/hooks/useAuth.js";
 import { Permissions } from "@/auth/permissions.js";
@@ -14,14 +14,14 @@ import { Roles } from "@/auth/roleConfig.js";
 import { DEFAULT_SHOW_JOYSTICKS } from "@/services/telemetry/telemetryTypes.js";
 
 const pipClass =
-  "absolute right-2 top-2 sm:right-4 sm:top-4 z-20 flex cursor-pointer flex-col overflow-hidden rounded-xl border border-[#223240] bg-[#171F27B2] shadow-2xl backdrop-blur-md transition-all duration-300 h-[124px] w-[155px] sm:h-[156px] sm:w-[205px] md:h-[188px] md:w-[245px]";
+  "absolute right-2 top-2 sm:right-4 sm:top-4 z-20 flex cursor-pointer flex-col overflow-hidden rounded-[5px] border border-[#D2DCE7] bg-white shadow-[0_8px_26px_rgba(18,42,72,0.22)] backdrop-blur-md transition-all duration-300 h-[124px] w-[155px] sm:h-[156px] sm:w-[205px] md:h-[188px] md:w-[245px]";
 const fullClass = "absolute inset-0 z-0 overflow-hidden";
 
 const toggleBtn = (active) =>
   `text-[8px] sm:text-[8.5px] font-mono font-semibold rounded-[4px] px-2 sm:px-2.5 py-0.5 transition ${
     active
-      ? "bg-[#35E0FF2E] border border-[#1A5A68] text-[#35E0FF] shadow-[0_0_8px_rgba(53,224,255,0.2)]"
-      : "text-[#5D707C] hover:text-[#94A3B8]"
+      ? "bg-[#E7F2FC] border border-[#B8D2EC] text-[#176DB5]"
+      : "text-[#718197] hover:text-[#244768]"
   }`;
 
 const MapStyleBar = ({ options, value, onChange }) => (
@@ -70,7 +70,54 @@ const FlyPage = () => {
 
   // Dual Virtual Joysticks visibility state (Mandatory Default: HIDDEN / false)
   const [joysticksVisible, setJoysticksVisible] = useState(DEFAULT_SHOW_JOYSTICKS);
-  const [joystickActivity, setJoystickActivity] = useState({ left: false, right: false });
+
+  // Canonical central mission, project, and geofence state (single source of truth)
+  const { currentProject, currentProjectId, projects, selectProject } = useMission();
+
+  // Canonical mission waypoints from active project (exact coordinates, sequence, and labels)
+  const mapWaypoints = useMemo(() => {
+    if (!currentProject?.mission) return [];
+    const raw = currentProject.mission.waypoints || currentProject.mission.items || [];
+    if (!Array.isArray(raw)) return [];
+    return raw
+      .filter((wp) => wp && (typeof wp.lat === "number" || typeof wp.latitude === "number"))
+      .map((wp, index) => {
+        const lat = typeof wp.lat === "number" ? wp.lat : Number(wp.latitude);
+        const lng = typeof wp.lng === "number" ? wp.lng : Number(wp.longitude);
+        const alt = typeof wp.alt === "number" ? wp.alt : Number(wp.altitude || 50);
+        const seq = index + 1;
+        return {
+          ...wp,
+          id: wp.id || `wp-${seq}`,
+          seq,
+          sequence: seq,
+          lat: Number(lat.toFixed(6)),
+          lng: Number(lng.toFixed(6)),
+          alt: Math.round(alt),
+          type: wp.type || "WAYPOINT",
+          label: `WP${seq}`,
+        };
+      })
+      .filter((wp) => !isNaN(wp.lat) && !isNaN(wp.lng) && (wp.lat !== 0 || wp.lng !== 0));
+  }, [currentProject]);
+
+  // Canonical geofence polygon from active project
+  const mapGeofence = useMemo(() => {
+    return currentProject?.geofence || null;
+  }, [currentProject]);
+
+  const [selectedWaypointId, setSelectedWaypointId] = useState(null);
+
+  // Clear selected waypoint if it is no longer part of the mission
+  useEffect(() => {
+    if (selectedWaypointId && !mapWaypoints.some((wp) => wp.id === selectedWaypointId)) {
+      setSelectedWaypointId(null);
+    }
+  }, [mapWaypoints, selectedWaypointId]);
+
+  const selectedWaypoint = useMemo(() => {
+    return mapWaypoints.find((wp) => wp.id === selectedWaypointId) || null;
+  }, [mapWaypoints, selectedWaypointId]);
 
   // RBAC permissions and role inspection
   const { hasPermission, role } = useAuth();
@@ -81,8 +128,6 @@ const FlyPage = () => {
   const {
     telemetry,
     updateStickInputs,
-    stickInputs,
-    isArmed,
     gimbalState,
     setGimbalRoll,
     centerGimbal,
@@ -207,7 +252,7 @@ const FlyPage = () => {
   };
 
   return (
-    <div className="relative h-full min-h-0 w-full overflow-hidden bg-[#06090E] select-none">
+    <div className="relative h-full min-h-0 w-full overflow-hidden bg-[#E9EFF5] select-none">
       {/* SCREENSHOT FULL SCREEN FLASH OVERLAY */}
       {isScreenFlashing && (
         <div className="absolute inset-0 z-50 bg-white/95 pointer-events-none transition-opacity duration-200 animate-out fade-out" />
@@ -216,7 +261,16 @@ const FlyPage = () => {
       {/* MAP LAYER (Full screen or PiP) */}
       <div className={mapIsLarge ? fullClass : pipClass}>
         <div className={`relative ${mapIsLarge ? "h-full w-full" : "min-h-0 flex-1"}`}>
-          <MapLoad mapStyle={mapStyle} telemetry={telemetry} pageType="fly" />
+          <MapLoad
+            mapStyle={mapStyle}
+            telemetry={telemetry}
+            pageType="fly"
+            waypoints={mapWaypoints}
+            showMissionRoute={true}
+            geofence={mapGeofence}
+            selectedWaypointId={selectedWaypointId}
+            onWaypointSelect={setSelectedWaypointId}
+          />
           {!mapIsLarge && (
             <button
               type="button"
@@ -268,7 +322,6 @@ const FlyPage = () => {
           onToggleVisible={() => setJoysticksVisible((prev) => !prev)}
           camSelected={camSelected}
           mapIsLarge={mapIsLarge}
-          onActivityChange={setJoystickActivity}
         />
       )}
 
@@ -282,155 +335,146 @@ const FlyPage = () => {
         </div>
       )}
 
-      {/* TOP-CENTER MISSION TELEMETRY HUD STRIP */}
-      <div className="absolute top-1.5 sm:top-3 left-1/2 -translate-x-1/2 z-25 pointer-events-auto flex flex-wrap items-center justify-center gap-1.5 sm:gap-2.5 px-2.5 sm:px-3.5 py-1 rounded-md bg-[#080C14CC] border border-[#1A2633] backdrop-blur-md shadow-lg text-[8.5px] sm:text-[10px] font-mono max-w-[calc(100vw-30px)] sm:max-w-none overflow-visible">
-        {/* Live Stream vs Stale vs Disconnected / Hyderabad Fallback Status */}
-        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
-          <div
-            className={`w-1.5 h-1.5 rounded-full ${
-              telemetry.isLive
-                ? "bg-[#2FE089] shadow-[0_0_6px_#2FE089] animate-pulse"
-                : telemetry.isStale
-                ? "bg-[#F59E0B] shadow-[0_0_6px_#F59E0B] animate-pulse"
-                : "bg-[#38BDF8]"
-            }`}
-          />
-          <span
-            className={`font-semibold hidden xs:inline ${
-              telemetry.isLive
-                ? "text-[#2FE089]"
-                : telemetry.isStale
-                ? "text-[#F59E0B]"
-                : "text-[#38BDF8]"
-            }`}
-          >
-            {telemetry.isLive
-              ? "LIVE"
-              : telemetry.isStale
-              ? "STALE"
-              : "FALLBACK (HYD)"}
+      {/* OPERATIONAL MISSION & GEOFENCE HUD OVERLAY (TOP-LEFT) */}
+      <div className="absolute top-2 sm:top-3 left-2 sm:left-3 z-25 flex flex-col gap-1.5 pointer-events-auto">
+        <div className="flex items-center gap-2 rounded-[5px] border border-[#2A3C50] bg-[#101923F5] px-2.5 py-1 text-xs font-mono shadow-[0_6px_22px_rgba(0,0,0,0.38)] backdrop-blur-md">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span
+              className={`h-2 w-2 shrink-0 rounded-full ${
+                mapWaypoints.length > 0 ? "bg-[#35E0FF] shadow-[0_0_8px_#35E0FF]" : "bg-[#64748B]"
+              }`}
+            />
+            {projects && projects.length > 1 ? (
+              <select
+                value={currentProjectId || ""}
+                onChange={(e) => selectProject(e.target.value)}
+                className="bg-transparent text-[11px] font-bold text-[#E2E8F0] outline-none cursor-pointer pr-1 truncate max-w-[130px] sm:max-w-[190px]"
+                title="Switch active mission project"
+              >
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id} className="bg-[#101923] text-white">
+                    {p.name || p.id}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span className="text-[11px] font-bold text-[#E2E8F0] tracking-wide truncate max-w-[130px] sm:max-w-[190px]">
+                {currentProject?.name || "Active Mission"}
+              </span>
+            )}
+          </div>
+          <span className="h-3 w-px shrink-0 bg-[#35465A]" />
+          <span className="whitespace-nowrap text-[10px] sm:text-[10.5px] font-semibold text-[#8CC8FF]">
+            {mapWaypoints.length > 0 ? `${mapWaypoints.length} WPs` : "0 WPs"}
           </span>
+          {mapGeofence && (
+            <>
+              <span className="h-3 w-px shrink-0 bg-[#35465A]" />
+              <span className="whitespace-nowrap text-[9.5px] sm:text-[10px] font-semibold text-[#57D99A]">
+                Geofence
+              </span>
+            </>
+          )}
         </div>
 
-        <div className="w-[1px] h-2.5 bg-[#223240] shrink-0" />
-
-        {/* FUNCTIONAL FLIGHT MODE DROPDOWN (10 Canonical Modes) */}
-        <FlightModeDropdown />
-
-        <div className="w-[1px] h-2.5 bg-[#223240] shrink-0" />
-
-        {/* Altitude & Speed */}
-        <div className="flex items-center gap-1 sm:gap-2 text-[#8E9EAA] shrink-0">
-          <span>
-            ALT: <strong className="text-[#35E0FF]">{typeof telemetry.altitude === "number" ? telemetry.altitude.toFixed(1) : (telemetry.altitude || "0.0")}m</strong>
-          </span>
-          <span>
-            SPD: <strong className="text-[#EEF4F8]">{typeof telemetry.speed === "number" ? Math.round(telemetry.speed) : typeof telemetry.groundSpeed === "number" ? Math.round(telemetry.groundSpeed) : 0}m/s</strong>
-          </span>
-        </div>
-
-        <div className="w-[1px] h-2.5 bg-[#223240] shrink-0" />
-
-        {/* Live GPS Coordinates (LAT & LNG) */}
-        <div className="flex items-center gap-1.5 sm:gap-2 text-[#8E9EAA] shrink-0">
-          <span>
-            LAT: <strong className="text-[#35E0FF] font-mono">{typeof telemetry.latitude === "number" ? telemetry.latitude.toFixed(6) : "—"}</strong>
-          </span>
-          <span>
-            LNG: <strong className="text-[#35E0FF] font-mono">{typeof telemetry.longitude === "number" ? telemetry.longitude.toFixed(6) : "—"}</strong>
-          </span>
-        </div>
-
-        <div className="w-[1px] h-2.5 bg-[#223240] hidden sm:block shrink-0" />
-
-        {/* Quick Map Style (Normal / Satellite) */}
-        <div className="flex items-center gap-0.5 bg-[#05080DB3] p-0.5 rounded border border-[#1E293B] shrink-0">
-          <button
-            type="button"
-            onClick={() => handleMapStyleChange("normal")}
-            className={`px-1.5 py-0.5 rounded text-[8px] sm:text-[9px] font-mono font-semibold transition ${
-              mapStyle === "normal"
-                ? "bg-[#35E0FF26] text-[#35E0FF] border border-[#1A5A68]"
-                : "text-[#5D707C] hover:text-[#94A3B8]"
-            }`}
-            title="Switch map to standard vector view"
-          >
-            NORMAL
-          </button>
-          <button
-            type="button"
-            onClick={() => handleMapStyleChange("satellite")}
-            className={`px-1.5 py-0.5 rounded text-[8px] sm:text-[9px] font-mono font-semibold transition ${
-              mapStyle === "satellite"
-                ? "bg-[#35E0FF26] text-[#35E0FF] border border-[#1A5A68]"
-                : "text-[#5D707C] hover:text-[#94A3B8]"
-            }`}
-            title="Switch map to satellite imagery view"
-          >
-            SATELLITE
-          </button>
-        </div>
-
-        <div className="w-[1px] h-2.5 bg-[#223240] hidden sm:block shrink-0" />
-
-        {/* Reset Layout Button */}
-        <button
-          type="button"
-          onClick={handleResetLayout}
-          className="flex items-center gap-1 text-[8.5px] sm:text-[9.5px] text-[#8E9EAA] hover:text-[#35E0FF] transition shrink-0 cursor-pointer"
-          title="Reset all draggable widgets to default positions"
-        >
-          <LayoutGrid className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
-          <span className="hidden sm:inline">Reset</span>
-        </button>
+        {/* Selected Waypoint Inspection Chip */}
+        {selectedWaypoint && (
+          <div className="flex items-center gap-2 rounded-[5px] border border-[#35E0FF]/40 bg-[#0E1926F5] px-2.5 py-1 text-[10px] sm:text-[11px] font-mono text-[#E2E8F0] shadow-lg backdrop-blur-md animate-in fade-in">
+            <span className="font-bold text-[#35E0FF]">
+              {selectedWaypoint.label || `WP${selectedWaypoint.seq || 1}`}
+            </span>
+            <span className="text-[#91A0B2]">·</span>
+            <span>LAT {selectedWaypoint.lat.toFixed(6)}</span>
+            <span>LNG {selectedWaypoint.lng.toFixed(6)}</span>
+            <span className="font-bold text-[#35E0FF]">{selectedWaypoint.alt}m</span>
+            <button
+              type="button"
+              onClick={() => setSelectedWaypointId(null)}
+              className="ml-1 p-0.5 text-[#8E9EAA] transition hover:text-white"
+              title="Deselect waypoint"
+            >
+              <CloseIcon className="h-3 w-3" />
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* REAL-TIME DEVELOPMENT DEBUG HUD (Section 26) */}
-      {import.meta.env.DEV && canExecuteFlight && (
-        <div
-          id="flight-movement-debug-hud"
-          className="absolute top-11 sm:top-12 left-1/2 -translate-x-1/2 z-15 pointer-events-auto flex flex-wrap items-center justify-center gap-1.5 sm:gap-2.5 px-2.5 sm:px-3.5 py-0.5 sm:py-1 rounded-md bg-[#080C14E6] border border-[#1E293B] shadow-xl backdrop-blur-md text-[8px] sm:text-[9.5px] font-mono select-none max-w-[calc(100vw-24px)] sm:max-w-none"
-        >
-          <div className="flex items-center gap-1">
-            <span className="text-[#8E9EAA]">LEFT:</span>
-            <span className={joystickActivity.left ? "text-[#2FE089] font-bold" : "text-[#64748B]"}>
-              [{joystickActivity.left ? "ACTIVE" : "IDLE"}]
+      {/* UNIFIED FLIGHT MODE, TELEMETRY, MAP STYLE, AND LAYOUT STRIP */}
+      <div
+        className="fly-telemetry-strip absolute left-1/2 top-2 z-25 h-[34px] w-[580px] max-w-[calc(100vw-16px)] -translate-x-1/2 overflow-x-auto overflow-y-hidden rounded-[5px] border border-[#2A3C50] bg-[#101923F5] px-2 shadow-[0_6px_22px_rgba(0,0,0,0.38)] backdrop-blur-md sm:top-3"
+        role="group"
+        aria-label="Flight mode, telemetry, and map controls"
+      >
+        <div className="fly-telemetry-content flex h-full min-w-max items-center gap-1.5 px-0.5 font-mono text-[8px] text-[#91A0B2] sm:gap-2 sm:text-[9px]">
+          <div className="fly-strip-flight-group flex shrink-0 items-center gap-1.5 sm:gap-2">
+            <span
+              className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                telemetry.isLive
+                  ? "bg-[#2FE089] shadow-[0_0_6px_#2FE089]"
+                  : telemetry.isStale
+                  ? "bg-[#F59E0B] shadow-[0_0_6px_#F59E0B]"
+                  : "bg-[#38BDF8]"
+              }`}
+              title={telemetry.isLive ? "Live telemetry" : telemetry.isStale ? "Telemetry stale" : "Telemetry unavailable"}
+            />
+            <FlightModeDropdown />
+            <span className="fly-strip-divider h-3 w-px shrink-0 bg-[#35465A]" />
+            <span className="shrink-0 whitespace-nowrap">
+              ALT: <strong className="text-[#35E0FF]">{typeof telemetry.altitude === "number" ? telemetry.altitude.toFixed(1) : (telemetry.altitude || "0.0")}m</strong>
             </span>
-            <span className="text-[#EEF4F8]">
-              X: <strong className="text-[#35E0FF]">{(stickInputs?.yaw || 0).toFixed(2)}</strong> Y: <strong className="text-[#35E0FF]">{(stickInputs?.throttle || 0).toFixed(2)}</strong>
+            <span className="shrink-0 whitespace-nowrap">
+              SPD: <strong className="text-[#EEF4F8]">{typeof telemetry.speed === "number" ? Math.round(telemetry.speed) : typeof telemetry.groundSpeed === "number" ? Math.round(telemetry.groundSpeed) : 0}m/s</strong>
             </span>
           </div>
-          <div className="w-[1px] h-2.5 bg-[#223240]" />
-          <div className="flex items-center gap-1">
-            <span className="text-[#8E9EAA]">RIGHT:</span>
-            <span className={joystickActivity.right ? "text-[#2FE089] font-bold" : "text-[#64748B]"}>
-              [{joystickActivity.right ? "ACTIVE" : "IDLE"}]
+          <span className="fly-strip-divider h-3 w-px shrink-0 bg-[#35465A]" />
+          <div className="fly-strip-position-group flex shrink-0 items-center gap-1.5 sm:gap-2">
+            <span className="shrink-0 whitespace-nowrap">
+              LAT: <strong className="font-mono text-[#35E0FF]">{typeof telemetry.latitude === "number" ? telemetry.latitude.toFixed(6) : "—"}</strong>
             </span>
-            <span className="text-[#EEF4F8]">
-              X: <strong className="text-[#35E0FF]">{(stickInputs?.roll || 0).toFixed(2)}</strong> Y: <strong className="text-[#35E0FF]">{(stickInputs?.pitch || 0).toFixed(2)}</strong>
+            <span className="shrink-0 whitespace-nowrap">
+              LNG: <strong className="font-mono text-[#35E0FF]">{typeof telemetry.longitude === "number" ? telemetry.longitude.toFixed(6) : "—"}</strong>
             </span>
           </div>
-          <div className="w-[1px] h-2.5 bg-[#223240]" />
-          <div className="flex items-center gap-1">
-            <span className="text-[#8E9EAA]">ARMED:</span>
-            <strong className={isArmed ? "text-[#2FE089]" : "text-[#FF4757]"}>
-              {isArmed ? "true" : "false"}
-            </strong>
+          <span className="fly-strip-divider h-3 w-px shrink-0 bg-[#35465A]" />
+          <div className="fly-strip-actions-group flex shrink-0 items-center gap-1.5">
+            <div className="flex shrink-0 items-center gap-0.5 rounded-[3px] border border-[#25364A] bg-[#080F18] p-0.5">
+            <button
+              type="button"
+              onClick={() => handleMapStyleChange("normal")}
+              className={`whitespace-nowrap rounded-[2px] border px-1.5 py-0.5 text-[8px] font-semibold transition sm:text-[9px] ${
+                mapStyle === "normal"
+                  ? "border-[#287D92] bg-[#153542] text-[#54E4F1]"
+                  : "border-transparent text-[#8594A7] hover:text-[#D8E4EF]"
+              }`}
+              title="Switch map to standard vector view"
+            >
+              NORMAL
+            </button>
+            <button
+              type="button"
+              onClick={() => handleMapStyleChange("satellite")}
+              className={`whitespace-nowrap rounded-[2px] border px-1.5 py-0.5 text-[8px] font-semibold transition sm:text-[9px] ${
+                mapStyle === "satellite"
+                  ? "border-[#287D92] bg-[#153542] text-[#54E4F1]"
+                  : "border-transparent text-[#8594A7] hover:text-[#D8E4EF]"
+              }`}
+              title="Switch map to satellite imagery view"
+            >
+              SATELLITE
+            </button>
           </div>
-          <div className="w-[1px] h-2.5 bg-[#223240]" />
-          <div className="flex items-center gap-1">
-            <span className="text-[#8E9EAA]">MOVEMENT:</span>
-            <strong className="text-[#2FE089]">
-              {getMovementAbbreviation(
-                stickInputs?.pitch || 0,
-                stickInputs?.roll || 0,
-                stickInputs?.throttle || 0,
-                stickInputs?.yaw || 0
-              )}
-            </strong>
+            <button
+              type="button"
+              onClick={handleResetLayout}
+              className="flex shrink-0 items-center gap-1 whitespace-nowrap text-[8px] text-[#91A0B2] transition hover:text-[#35E0FF] sm:text-[9px]"
+              title="Reset all draggable widgets to default positions"
+            >
+              <LayoutGrid className="h-2.5 w-2.5" />
+              <span>Reset</span>
+            </button>
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 };

@@ -11,6 +11,8 @@ import {
   CheckCircle2,
   AlertTriangle,
   AlertOctagon,
+  ChevronLeft,
+  ChevronDown,
 } from "lucide-react"
 import { formatLogDate, formatLogTime } from "@/services/api/logService.js"
 
@@ -32,51 +34,53 @@ const getCategoryIcon = (category) => {
 const getCategoryBadge = (cat = "") => {
   switch (cat.toUpperCase()) {
     case "MISSION":
-      return "text-[#35E0FF] bg-[#35E0FF1A] border-[#35E0FF33]"
+      return "text-[#1E64D4] bg-[#EFF6FF] border-[#BFDBFE]"
     case "FLIGHT":
-      return "text-[#2FE089] bg-[#2FE0891A] border-[#2FE08933]"
+      return "text-[#15803D] bg-[#F0FDF4] border-[#BBF7D0]"
     case "TELEMETRY":
-      return "text-[#38BDF8] bg-[#38BDF81A] border-[#38BDF833]"
+      return "text-[#0284C7] bg-[#F0F9FF] border-[#BAE6FD]"
     case "COMMAND":
-      return "text-[#EAB308] bg-[#EAB3081A] border-[#EAB30833]"
+      return "text-[#B45309] bg-[#FFFBEB] border-[#FDE68A]"
     case "SYSTEM":
-      return "text-[#A855F7] bg-[#A855F71A] border-[#A855F733]"
+      return "text-[#7C3AED] bg-[#FAF5FF] border-[#E9D5FF]"
     case "INCIDENT":
-      return "text-[#FF4141] bg-[#FF41411A] border-[#FF414133]"
+      return "text-[#DC2626] bg-[#FEF2F2] border-[#FECACA]"
     default:
-      return "text-[#94A3B8] bg-[#1E293B] border-[#334155]"
+      return "text-[#475569] bg-[#F1F5F9] border-[#E2E8F0]"
   }
 }
 
-const getSeverityBadge = (severity = "INFO") => {
-  switch (severity.toUpperCase()) {
-    case "CRITICAL":
-      return {
-        icon: AlertOctagon,
-        cls: "text-[#FF4141] bg-[#FF41411F] border-[#FF41414D]",
-      }
-    case "WARNING":
-      return {
-        icon: AlertTriangle,
-        cls: "text-[#F59E0B] bg-[#F59E0B1F] border-[#F59E0B4D]",
-      }
-    case "SUCCESS":
-      return {
-        icon: CheckCircle2,
-        cls: "text-[#2FE089] bg-[#2FE0891F] border-[#2FE0894D]",
-      }
-    case "INFO":
-    default:
-      return {
-        icon: Info,
-        cls: "text-[#94A3B8] bg-[#1E293B] border-[#334155]",
-      }
-  }
-}
+const getSeverityBadge = (severity = "INFO", status = "") => {
+  const check = (status || severity || "INFO").toUpperCase()
 
-const renderCategoryEmptyIcon = (category) => {
-  const Icon = getCategoryIcon(category)
-  return <Icon className="w-10 h-10 text-[#64748B] mx-auto mb-3 opacity-60" />
+  if (check.includes("CRITICAL") || check.includes("FAIL") || check.includes("ERROR")) {
+    return {
+      icon: AlertOctagon,
+      cls: "text-[#DC2626] bg-[#FEF2F2] border-[#FECACA]",
+    }
+  }
+  if (check.includes("WARN") || check.includes("ALERT")) {
+    return {
+      icon: AlertTriangle,
+      cls: "text-[#B45309] bg-[#FFFBEB] border-[#FDE68A]",
+    }
+  }
+  if (check.includes("SUCCESS") || check.includes("HEALTHY") || check.includes("AUTH") || check.includes("COMPLETED")) {
+    return {
+      icon: CheckCircle2,
+      cls: "text-[#15803D] bg-[#F0FDF4] border-[#BBF7D0]",
+    }
+  }
+  if (check.includes("ACTIVE") || check.includes("RUNNING") || check.includes("READY")) {
+    return {
+      icon: Activity,
+      cls: "text-[#1E64D4] bg-[#EFF6FF] border-[#BFDBFE]",
+    }
+  }
+  return {
+    icon: Info,
+    cls: "text-[#475569] bg-[#F1F5F9] border-[#E2E8F0]",
+  }
 }
 
 export const GenericLogsTable = ({
@@ -93,11 +97,12 @@ export const GenericLogsTable = ({
   const paginatedLogs = logs.slice((currentPage - 1) * actualPageSize, currentPage * actualPageSize)
 
   if (logs.length === 0) {
+    const Icon = getCategoryIcon(category)
     return (
-      <div className="rounded-xl bg-[#0A0E16] border border-[#1A2633] p-12 text-center font-mono">
-        {renderCategoryEmptyIcon(category)}
-        <h3 className="text-white font-semibold text-sm">No Log Entries Found</h3>
-        <p className="text-xs text-[#8E9EAA] mt-1 max-w-sm mx-auto">
+      <div className="rounded-2xl bg-white border border-[#D5E1ED] p-12 text-center font-sans shadow-xs">
+        <Icon className="w-10 h-10 text-[#94A3B8] mx-auto mb-3 opacity-80" />
+        <h3 className="text-[#0D233A] font-bold text-sm sm:text-base">No Log Entries Found</h3>
+        <p className="text-xs text-[#64748B] mt-1 max-w-sm mx-auto">
           No records currently exist for this category matching active search filters.
         </p>
       </div>
@@ -105,80 +110,90 @@ export const GenericLogsTable = ({
   }
 
   return (
-    <div className="rounded-xl bg-[#0A0E16] border border-[#1A2633] overflow-hidden shadow-xl select-none font-mono">
+    <div className="rounded-2xl bg-white border border-[#D5E1ED] overflow-hidden shadow-xs select-none font-sans flex flex-col">
       {/* Mobile Card View (< lg) */}
-      <div className="lg:hidden divide-y divide-[#16212E]">
+      <div className="lg:hidden divide-y divide-[#F1F5F9]">
         {paginatedLogs.map((log) => {
-          const sev = getSeverityBadge(log.severity)
+          const sev = getSeverityBadge(log.severity, log.status)
           const SevIcon = sev.icon
 
           return (
-            <div key={log.id} className="p-3.5 space-y-2.5 hover:bg-[#111A26] transition font-mono">
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-semibold text-xs text-[#35E0FF] truncate">{log.id}</span>
-                {category === "all" && log.category && (
+            <div key={log.id} className="p-4 space-y-2.5 hover:bg-[#F8FAFC] transition font-sans">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <span className="font-mono font-bold text-xs text-[#1E64D4]">{log.id}</span>
+                <div className="flex items-center gap-1.5">
+                  {category === "all" && log.category && (
+                    <span
+                      className={`text-[10px] px-2 py-0.5 rounded-md border uppercase font-bold ${getCategoryBadge(
+                        log.category
+                      )}`}
+                    >
+                      {log.category}
+                    </span>
+                  )}
                   <span
-                    className={`text-[9px] px-1.5 py-0.5 rounded border uppercase font-bold ${getCategoryBadge(
-                      log.category
-                    )}`}
+                    className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md border font-bold ${sev.cls}`}
                   >
-                    {log.category}
+                    <SevIcon className="w-3 h-3" />
+                    <span>{log.status || log.severity || "OK"}</span>
                   </span>
-                )}
-                <span
-                  className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border font-semibold ${sev.cls}`}
-                >
-                  <SevIcon className="w-2.5 h-2.5" />
-                  <span>{log.status || log.severity || "OK"}</span>
-                </span>
+                </div>
               </div>
 
-              <div className="flex items-center justify-between text-xs font-bold text-white">
+              <div className="flex items-center justify-between text-xs sm:text-sm font-bold text-[#0D233A]">
                 <span className="truncate">{log.event || log.type || log.id}</span>
-                <span className="text-[10px] text-[#64748B] font-normal font-mono">
+                <span className="text-xs text-[#64748B] font-mono font-normal">
                   {formatLogTime(log.timestamp)}
                 </span>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 text-[10px] text-[#94A3B8] bg-[#070B11] p-2 rounded-lg border border-[#141E2B]">
+              <div className="grid grid-cols-2 gap-2 text-xs text-[#475569] bg-[#F8FAFC] p-2.5 rounded-xl border border-[#E2E8F0]">
                 <div>
-                  <span className="text-[#64748B] block text-[9px]">TARGET / DRONE</span>
-                  <span className="text-white font-bold">{log.droneId || log.callsign || "GCS System"}</span>
+                  <span className="text-[#64748B] block text-[10px] font-semibold uppercase">TARGET / DRONE</span>
+                  <span className="text-[#0D233A] font-bold">{log.droneId || log.callsign || "GCS System"}</span>
                 </div>
                 <div>
-                  <span className="text-[#64748B] block text-[9px]">OPERATOR / SOURCE</span>
-                  <span className="text-[#CBD5E1] truncate block">{log.operator || "System Daemon"}</span>
+                  <span className="text-[#64748B] block text-[10px] font-semibold uppercase">OPERATOR / SOURCE</span>
+                  <span className="text-[#0E2646] font-medium truncate block">{log.operator || "System Daemon"}</span>
                 </div>
               </div>
 
-              <p className="text-[11px] text-[#8E9EAA] leading-relaxed line-clamp-2">
+              <p className="text-xs text-[#334155] leading-relaxed line-clamp-2">
                 {log.details || log.description || "--"}
               </p>
 
-              {(log.missionId || log.flightId) && (
-                <div className="flex items-center gap-2 pt-1">
+              <div className="flex items-center justify-between pt-1">
+                <div className="flex items-center gap-2">
                   {log.missionId && (
                     <button
                       type="button"
                       onClick={() => onInspectMission?.(log)}
-                      className="inline-flex items-center gap-1 text-[10px] text-[#35E0FF] hover:underline"
+                      className="inline-flex items-center gap-1 text-xs text-[#1E64D4] font-semibold hover:underline"
                     >
                       <span>Mission: {log.missionId}</span>
-                      <ExternalLink className="w-2.5 h-2.5" />
+                      <ExternalLink className="w-3 h-3" />
                     </button>
                   )}
                   {log.flightId && (
                     <button
                       type="button"
                       onClick={() => onViewFlight?.(log.flightId)}
-                      className="inline-flex items-center gap-1 text-[10px] text-[#2FE089] hover:underline"
+                      className="inline-flex items-center gap-1 text-xs text-[#15803D] font-semibold hover:underline"
                     >
                       <span>Flight Sortie</span>
-                      <ExternalLink className="w-2.5 h-2.5" />
+                      <ExternalLink className="w-3 h-3" />
                     </button>
                   )}
                 </div>
-              )}
+
+                <button
+                  type="button"
+                  onClick={() => onInspectMission?.(log)}
+                  className="text-xs font-bold text-[#1E64D4] hover:underline flex items-center"
+                >
+                  <span>Inspect &gt;</span>
+                </button>
+              </div>
             </div>
           )
         })}
@@ -186,103 +201,95 @@ export const GenericLogsTable = ({
 
       {/* Desktop View: Full Table (lg+) */}
       <div className="hidden lg:block overflow-x-auto">
-        <table className="w-full text-left text-xs font-mono">
-          <thead className="bg-[#0D1420] text-[#8E9EAA] border-b border-[#1A2633] uppercase text-[10px] tracking-wider">
+        <table className="w-full text-left text-xs font-sans border-collapse">
+          <thead className="bg-[#F8FAFC] text-[#64748B] border-b border-[#E2E8F0] uppercase text-[11px] font-bold tracking-wider">
             <tr>
-              <th className="px-3.5 py-3">Timestamp</th>
-              {category === "all" && <th className="px-3 py-3">Category</th>}
-              <th className="px-3.5 py-3">Event / Operation</th>
-              <th className="px-3 py-3">Target / Drone</th>
-              <th className="px-3.5 py-3">Operator / Source</th>
-              <th className="px-3 py-3">Severity / Status</th>
-              <th className="px-4 py-3">Log Details & Context</th>
-              <th className="px-3 py-3 text-right">Reference</th>
+              <th className="px-4 py-3.5 w-[140px]">Timestamp</th>
+              {category === "all" && <th className="px-3 py-3.5 w-[100px]">Category</th>}
+              <th className="px-4 py-3.5 w-[200px]">Event / Operation</th>
+              <th className="px-3.5 py-3.5 w-[130px]">Target / Drone</th>
+              <th className="px-3.5 py-3.5 w-[130px]">Operator / Source</th>
+              <th className="px-3.5 py-3.5 w-[140px]">Severity / Status</th>
+              <th className="px-4 py-3.5">Log Details & Context</th>
+              <th className="px-4 py-3.5 text-right w-[110px]">Reference</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-[#16212E] text-[#EEF4F8]">
+          <tbody className="divide-y divide-[#F1F5F9] text-xs">
             {paginatedLogs.map((log) => {
-              const sev = getSeverityBadge(log.severity)
+              const sev = getSeverityBadge(log.severity, log.status)
               const SevIcon = sev.icon
 
               return (
-                <tr key={log.id} className="hover:bg-[#111A26] transition">
+                <tr key={log.id} className="hover:bg-[#F8FAFC] transition">
                   {/* Timestamp */}
-                  <td className="px-3.5 py-3 whitespace-nowrap">
-                    <div className="font-semibold text-white text-[11px]">
+                  <td className="px-4 py-3.5 align-middle whitespace-nowrap">
+                    <div className="font-mono font-bold text-[#0D233A] text-xs">
                       {formatLogTime(log.timestamp)}
                     </div>
-                    <div className="text-[10px] text-[#64748B]">
+                    <div className="text-[10px] text-[#64748B] font-mono mt-0.5">
                       {formatLogDate(log.timestamp)}
                     </div>
                   </td>
 
-                  {/* Category (for All Logs) */}
+                  {/* Category */}
                   {category === "all" && (
-                    <td className="px-3 py-3 whitespace-nowrap">
+                    <td className="px-3 py-3.5 align-middle">
                       <span
-                        className={`text-[9px] px-1.5 py-0.5 rounded border uppercase font-bold ${getCategoryBadge(
+                        className={`inline-block px-2 py-0.5 rounded-md border text-[10px] font-bold uppercase tracking-wider ${getCategoryBadge(
                           log.category
                         )}`}
                       >
-                        {log.category || "LOG"}
+                        {log.category}
                       </span>
                     </td>
                   )}
 
-                  {/* Event Name */}
-                  <td className="px-3.5 py-3 whitespace-nowrap font-bold text-white">
-                    <div className="max-w-[190px] truncate">{log.event || log.type || log.id}</div>
+                  {/* Event / Operation */}
+                  <td className="px-4 py-3.5 align-middle">
+                    <div className="font-bold text-[#0D233A] text-xs leading-snug">
+                      {log.event || log.type || log.id}
+                    </div>
                   </td>
 
                   {/* Target / Drone */}
-                  <td className="px-3 py-3 whitespace-nowrap text-white font-bold">
+                  <td className="px-3.5 py-3.5 align-middle font-mono font-semibold text-[#0E2646]">
                     {log.droneId || log.callsign || "GCS System"}
                   </td>
 
-                  {/* Operator */}
-                  <td className="px-3.5 py-3 whitespace-nowrap text-[#CBD5E1]">
+                  {/* Operator / Source */}
+                  <td className="px-3.5 py-3.5 align-middle text-[#475569] font-medium">
                     {log.operator || "System Daemon"}
                   </td>
 
                   {/* Severity / Status */}
-                  <td className="px-3 py-3 whitespace-nowrap">
+                  <td className="px-3.5 py-3.5 align-middle">
                     <span
-                      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded border text-[10px] font-semibold ${sev.cls}`}
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-[11px] font-bold whitespace-nowrap ${sev.cls}`}
                     >
-                      <SevIcon className="w-3 h-3 shrink-0" />
+                      <SevIcon className="w-3.5 h-3.5" />
                       <span>{log.status || log.severity || "OK"}</span>
                     </span>
                   </td>
 
-                  {/* Details */}
-                  <td className="px-4 py-3 max-w-[320px]">
-                    <div className="text-[11px] text-[#94A3B8] truncate">
+                  {/* Log Details & Context */}
+                  <td className="px-4 py-3.5 align-middle text-[#334155] leading-relaxed max-w-md">
+                    <div className="line-clamp-2">
                       {log.details || log.description || "--"}
                     </div>
                   </td>
 
-                  {/* Reference Actions */}
-                  <td className="px-3 py-3 text-right whitespace-nowrap">
-                    {log.missionId ? (
+                  {/* Reference / Action */}
+                  <td className="px-4 py-3.5 align-middle text-right whitespace-nowrap">
+                    {log.missionId || log.event?.includes("MISSION") || log.event?.includes("GEOFENCE") || log.event?.includes("WAYPOINT") ? (
                       <button
                         type="button"
                         onClick={() => onInspectMission?.(log)}
-                        className="inline-flex items-center gap-1 px-2 py-1 rounded bg-[#172230] border border-[#23354A] hover:border-[#35E0FF] hover:text-[#35E0FF] text-[#B7F3FF] text-[11px] transition cursor-pointer"
+                        className="inline-flex items-center gap-1 text-xs font-bold text-[#1E64D4] hover:underline cursor-pointer"
                       >
-                        <span>Inspect</span>
-                        <ChevronRight className="w-3 h-3" />
-                      </button>
-                    ) : log.flightId ? (
-                      <button
-                        type="button"
-                        onClick={() => onViewFlight?.(log.flightId)}
-                        className="inline-flex items-center gap-1 px-2 py-1 rounded bg-[#172230] border border-[#23354A] hover:border-[#2FE089] hover:text-[#2FE089] text-[#2FE089] text-[11px] transition cursor-pointer"
-                      >
-                        <span>Flight</span>
-                        <ExternalLink className="w-3 h-3" />
+                        <span>Inspect &gt;</span>
                       </button>
                     ) : (
-                      <span className="text-[10px] text-[#64748B]">Recorded</span>
+                      <span className="text-[11px] font-mono text-[#94A3B8]">Recorded</span>
                     )}
                   </td>
                 </tr>
@@ -292,52 +299,58 @@ export const GenericLogsTable = ({
         </table>
       </div>
 
-      {/* Pagination Bar */}
-      <div className="px-4 py-3 bg-[#0B1017] border-t border-[#1A2633] flex flex-wrap items-center justify-between gap-2.5 text-xs">
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="text-[#8E9EAA] text-[11px]">
-            Page <span className="text-white font-bold">{currentPage}</span> of{" "}
-            <span className="text-white font-bold">{totalPages}</span> ({logs.length} Total Logs)
+      {/* Pagination Footer */}
+      <div className="px-4 py-3 bg-white border-t border-[#E2E8F0] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-[#64748B]">
+        <div className="flex items-center gap-3">
+          <span>
+            Showing <strong className="text-[#0D233A]">{(currentPage - 1) * actualPageSize + 1}</strong> to{" "}
+            <strong className="text-[#0D233A]">
+              {Math.min(currentPage * actualPageSize, logs.length)}
+            </strong>{" "}
+            of <strong className="text-[#0D233A]">{logs.length}</strong> records
           </span>
 
-          <div className="flex items-center gap-1.5 text-[11px] text-[#8E9EAA]">
-            <span>Rows:</span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px]">Rows:</span>
             <select
               value={pageSize}
               onChange={(e) => {
-                const val = e.target.value === "ALL" ? "ALL" : Number(e.target.value)
-                setPageSize(val)
+                setPageSize(e.target.value === "ALL" ? "ALL" : Number(e.target.value))
                 setCurrentPage(1)
               }}
-              className="bg-[#16212E] text-white border border-[#23354A] rounded px-1.5 py-0.5 text-xs focus:outline-none focus:border-[#35E0FF] cursor-pointer"
+              className="h-7 px-1.5 rounded-lg bg-[#F8FAFC] border border-[#CAD8E6] text-xs font-semibold text-[#0E2646] focus:border-[#1E64D4] outline-none"
             >
-              <option value={15}>15</option>
+              <option value={10}>10</option>
               <option value={25}>25</option>
               <option value={50}>50</option>
-              <option value={100}>100</option>
               <option value="ALL">All</option>
             </select>
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            disabled={currentPage <= 1}
-            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-            className="px-2.5 py-1 rounded bg-[#16212E] text-[#CBD5E1] hover:bg-[#202F42] hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition text-xs cursor-pointer"
-          >
-            Prev
-          </button>
-          <button
-            type="button"
-            disabled={currentPage >= totalPages}
-            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-            className="px-2.5 py-1 rounded bg-[#16212E] text-[#CBD5E1] hover:bg-[#202F42] hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition text-xs cursor-pointer"
-          >
-            Next
-          </button>
-        </div>
+        {pageSize !== "ALL" && totalPages > 1 && (
+          <div className="flex items-center gap-1 self-end sm:self-auto">
+            <button
+              type="button"
+              disabled={currentPage === 1}
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              className="p-1.5 rounded-lg border border-[#CAD8E6] text-[#475569] hover:bg-[#F8FAFC] disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <span className="px-2 font-bold text-[#0D233A]">
+              {currentPage} / {totalPages}
+            </span>
+            <button
+              type="button"
+              disabled={currentPage === totalPages}
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              className="p-1.5 rounded-lg border border-[#CAD8E6] text-[#475569] hover:bg-[#F8FAFC] disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )

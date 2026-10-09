@@ -16,6 +16,9 @@ import {
   Play,
   Upload,
   Info,
+  Layers,
+  Activity,
+  Radio,
 } from "lucide-react"
 import { logService, formatLogDate, formatLogTime } from "@/services/api/logService.js"
 
@@ -53,312 +56,168 @@ export const MissionLogDetailDrawer = ({
 
   const getEventIcon = (event = "") => {
     const ev = event.toUpperCase()
-    if (ev.includes("COMPLETED")) return <CheckCircle2 className="w-3.5 h-3.5 text-[#2FE089]" />
-    if (ev.includes("ABORTED") || ev.includes("FAILED")) return <AlertTriangle className="w-3.5 h-3.5 text-[#FF4141]" />
-    if (ev.includes("STARTED")) return <Play className="w-3.5 h-3.5 text-[#38BDF8]" />
-    if (ev.includes("WAYPOINT")) return <MapPin className="w-3.5 h-3.5 text-[#35E0FF]" />
-    if (ev.includes("GEOFENCE")) return <Shield className="w-3.5 h-3.5 text-[#F59E0B]" />
-    if (ev.includes("UPLOADED")) return <Upload className="w-3.5 h-3.5 text-[#A855F7]" />
-    return <Info className="w-3.5 h-3.5 text-[#94A3B8]" />
+    if (ev.includes("COMPLETED")) return <CheckCircle2 className="w-4 h-4 text-[#15803D]" />
+    if (ev.includes("ABORTED") || ev.includes("FAILED")) return <AlertTriangle className="w-4 h-4 text-[#DC2626]" />
+    if (ev.includes("STARTED")) return <Play className="w-4 h-4 text-[#1E64D4]" />
+    if (ev.includes("WAYPOINT")) return <MapPin className="w-4 h-4 text-[#0284C7]" />
+    if (ev.includes("GEOFENCE")) return <Shield className="w-4 h-4 text-[#B45309]" />
+    return <Info className="w-4 h-4 text-[#64748B]" />
   }
 
-  // Waypoints extraction
-  const waypoints = log.waypoints || (log.waypoint ? [log.waypoint] : [])
-  const geofence = log.geofence
-
   return (
-    <div className="fixed inset-0 z-50 flex justify-end font-mono select-none">
+    <div className="fixed inset-0 z-50 overflow-hidden flex justify-end font-sans">
       {/* Backdrop */}
       <div
+        className="fixed inset-0 bg-[#091E36]/60 backdrop-blur-xs transition-opacity duration-300"
         onClick={onClose}
-        className="fixed inset-0 bg-black/70 backdrop-blur-sm transition-opacity"
       />
 
-      {/* Slide-over Content Container */}
-      <div className="relative w-full max-w-xl bg-[#090D14] border-l border-[#1A2633] text-[#EEF4F8] shadow-2xl flex flex-col h-full z-10 overflow-hidden">
+      {/* Drawer Panel */}
+      <div className="relative w-full max-w-xl bg-white border-l border-[#D5E1ED] shadow-2xl flex flex-col h-full z-10 animate-in slide-in-from-right duration-250">
         {/* Header */}
-        <div className="p-4 sm:p-5 border-b border-[#1A2633] flex items-center justify-between bg-[#0C121C]">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-[#35E0FF1A] border border-[#35E0FF33] text-[#35E0FF] shrink-0">
-              <Target className="w-5 h-5" />
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-white truncate">
-                  {log.missionName || log.projectName}
+        <div className="p-5 sm:p-6 border-b border-[#E2E8F0] flex items-start justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="w-8 h-8 rounded-xl bg-[#EFF6FF] border border-[#BFDBFE] text-[#1E64D4] flex items-center justify-center shrink-0">
+                <Target className="w-4 h-4" />
+              </span>
+              <div>
+                <h2 className="text-base sm:text-lg font-bold text-[#0D233A]">
+                  Audit Record · {log.id}
                 </h2>
-                <span className="text-[10px] text-[#35E0FF] bg-[#35E0FF1A] px-1.5 py-0.5 rounded border border-[#35E0FF33]">
-                  {log.missionId}
+                <span className="text-xs text-[#64748B] block mt-0.5">
+                  {formatLogDate(log.timestamp)} at {formatLogTime(log.timestamp)}
                 </span>
               </div>
-              <p className="text-[11px] text-[#8E9EAA] truncate mt-0.5">
-                Audit Record • {log.event}
-              </p>
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 rounded-lg bg-[#141F2C] text-[#8E9EAA] hover:text-white hover:bg-[#1E2E42] transition cursor-pointer"
-          >
-            <X className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleCopyJson}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#CAD8E6] bg-white text-xs font-semibold text-[#18314C] hover:bg-[#F8FAFC] transition shadow-2xs cursor-pointer"
+              title="Copy complete JSON record"
+            >
+              {copied ? <Check className="w-3.5 h-3.5 text-[#16A34A]" /> : <Copy className="w-3.5 h-3.5" />}
+              <span>{copied ? "Copied" : "JSON"}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-1.5 rounded-lg text-[#64748B] hover:text-[#0D233A] hover:bg-[#F1F5F9] transition"
+              aria-label="Close drawer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Scrollable Body */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-5 scrollbar-thin">
-          {/* Section 1: Overview Grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 bg-[#06090E] p-3.5 rounded-xl border border-[#16212E] text-xs">
-            <div>
-              <span className="text-[10px] text-[#64748B] block">STATUS</span>
-              <span className="font-bold text-[#35E0FF]">{log.status}</span>
+        <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-6">
+          {/* Overview Grid */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="p-3.5 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0]">
+              <span className="text-[11px] font-semibold text-[#64748B] uppercase block">Event / Milestone</span>
+              <span className="text-sm font-bold text-[#0D233A] mt-0.5 block">{log.event || log.type}</span>
             </div>
-            <div>
-              <span className="text-[10px] text-[#64748B] block">FLIGHT MODE</span>
-              <span className="font-bold text-[#A855F7]">{log.flightMode || "GUIDED"}</span>
-            </div>
-            <div>
-              <span className="text-[10px] text-[#64748B] block">DRONE</span>
-              <span className="font-bold text-white flex items-center gap-1">
-                <Plane className="w-3 h-3 text-[#35E0FF]" />
-                {log.droneId}
+
+            <div className="p-3.5 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0]">
+              <span className="text-[11px] font-semibold text-[#64748B] uppercase block">Severity / Status</span>
+              <span className="inline-block px-2.5 py-0.5 rounded-md font-bold text-xs bg-[#EFF6FF] text-[#1E64D4] border border-[#BFDBFE] mt-1">
+                {log.status || log.severity || "Ready"}
               </span>
             </div>
-            <div>
-              <span className="text-[10px] text-[#64748B] block">OPERATOR</span>
-              <span className="font-bold text-[#CBD5E1] truncate block flex items-center gap-1">
-                <User className="w-3 h-3 text-[#38BDF8]" />
-                {log.operator}
-              </span>
+
+            <div className="p-3.5 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0]">
+              <span className="text-[11px] font-semibold text-[#64748B] uppercase block">Target Aircraft</span>
+              <span className="text-sm font-mono font-bold text-[#0D233A] mt-0.5 block">{log.droneId || "DRONE-001"}</span>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0]">
+              <span className="text-[11px] font-semibold text-[#64748B] uppercase block">Operator / Source</span>
+              <span className="text-sm font-semibold text-[#0E2646] mt-0.5 block">{log.operator || "System Daemon"}</span>
             </div>
           </div>
 
-          {/* Bidirectional Link to Flight Log */}
-          {log.flightId && (
-            <div className="p-3 rounded-xl bg-[#0D1E1E] border border-[#2FE08933] flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-2 h-2 rounded-full bg-[#2FE089] animate-ping shrink-0" />
-                <div className="min-w-0">
-                  <div className="text-xs font-bold text-white truncate">
-                    Sortie Telemetry Linked: {log.flightId}
+          {/* Full Message / Details */}
+          <div>
+            <h3 className="text-xs font-bold text-[#18314C] uppercase tracking-wider mb-2">
+              Log Details & Audit Context
+            </h3>
+            <div className="p-4 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] text-xs sm:text-sm text-[#334155] leading-relaxed">
+              {log.details || log.description || "No extended details provided."}
+            </div>
+          </div>
+
+          {/* Mission & Flight Association */}
+          {(log.missionId || log.flightId) && (
+            <div>
+              <h3 className="text-xs font-bold text-[#18314C] uppercase tracking-wider mb-2">
+                Operational Associations
+              </h3>
+              <div className="p-4 rounded-xl bg-white border border-[#CAD8E6] flex flex-col gap-2.5 shadow-2xs">
+                {log.missionId && (
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-[#64748B] font-medium">Mission Project:</span>
+                    <span className="font-bold text-[#0D233A]">
+                      {log.missionName || log.missionId} ({log.missionId})
+                    </span>
                   </div>
-                  <div className="text-[10px] text-[#8E9EAA]">
-                    MAVLink flight trajectory and binary logs recorded
+                )}
+                {log.flightId && (
+                  <div className="flex items-center justify-between text-xs pt-2 border-t border-[#F1F5F9]">
+                    <span className="text-[#64748B] font-medium">Recorded Flight Sortie:</span>
+                    <button
+                      type="button"
+                      onClick={() => onViewFlight?.(log.flightId)}
+                      className="font-bold text-[#15803D] hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <span>{log.flightId}</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </button>
                   </div>
-                </div>
+                )}
               </div>
-              <button
-                type="button"
-                onClick={() => onViewFlight?.(log.flightId)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#2FE0891F] text-[#2FE089] border border-[#2FE08940] hover:bg-[#2FE089] hover:text-[#06090E] transition text-xs font-semibold shrink-0 cursor-pointer"
-              >
-                <span>View Flight</span>
-                <ExternalLink className="w-3 h-3" />
-              </button>
             </div>
           )}
 
-          {/* Section 2: Milestone Details */}
-          <div className="space-y-2">
-            <h3 className="text-xs font-bold text-[#8E9EAA] uppercase tracking-wider flex items-center gap-1.5">
-              <Clock className="w-3.5 h-3.5 text-[#35E0FF]" />
-              Event Description & Parameters
-            </h3>
-            <div className="p-3.5 rounded-xl bg-[#06090E] border border-[#16212E] space-y-2 text-xs">
-              <p className="text-[#EEF4F8] leading-relaxed">{log.details}</p>
-              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[#141E2B] text-[11px]">
-                <div>
-                  <span className="text-[#64748B]">Timestamp:</span>{" "}
-                  <span className="text-white">
-                    {formatLogDate(log.timestamp)} {formatLogTime(log.timestamp)}
-                  </span>
-                </div>
-                {log.missionResult && (
-                  <div>
-                    <span className="text-[#64748B]">Result:</span>{" "}
-                    <span className="text-[#2FE089] font-medium">{log.missionResult}</span>
-                  </div>
-                )}
-                {log.duration && log.duration !== "--" && (
-                  <div>
-                    <span className="text-[#64748B]">Duration:</span>{" "}
-                    <span className="text-white">{log.duration}</span>
-                  </div>
-                )}
-                {log.distance && log.distance !== "--" && (
-                  <div>
-                    <span className="text-[#64748B]">Distance:</span>{" "}
-                    <span className="text-white">{log.distance}</span>
-                  </div>
-                )}
-                {log.batteryUsed && (
-                  <div>
-                    <span className="text-[#64748B]">Battery Expended:</span>{" "}
-                    <span className="text-[#F59E0B] font-bold">{log.batteryUsed}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Section 3: Chronological Mission Timeline */}
-          <div className="space-y-2.5">
-            <h3 className="text-xs font-bold text-[#8E9EAA] uppercase tracking-wider flex items-center gap-1.5">
-              <Target className="w-3.5 h-3.5 text-[#35E0FF]" />
-              Chronological Mission Lifecycle ({timeline.length} Milestones)
-            </h3>
-
-            <div className="p-3.5 rounded-xl bg-[#06090E] border border-[#16212E]">
-              {timeline.length === 0 ? (
-                <div className="text-xs text-[#64748B] py-2">No previous events logged for this mission.</div>
-              ) : (
-                <div className="relative pl-6 space-y-4 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-[2px] before:bg-[#1A2633]">
-                  {timeline.map((item) => {
-                    const isSelected = item.id === log.id
-                    return (
-                      <div key={item.id} className="relative group">
-                        {/* Dot indicator */}
-                        <div
-                          className={`absolute -left-6 top-0.5 w-4 h-4 rounded-full border-2 flex items-center justify-center bg-[#0B1017] ${
-                            isSelected
-                              ? "border-[#35E0FF] bg-[#35E0FF33] shadow-[0_0_8px_#35E0FF]"
-                              : "border-[#1E293B]"
-                          }`}
-                        >
-                          {getEventIcon(item.event)}
-                        </div>
-
-                        {/* Event details */}
-                        <div
-                          className={`p-2 rounded-lg border transition ${
-                            isSelected
-                              ? "bg-[#35E0FF0F] border-[#35E0FF4D]"
-                              : "bg-[#090D14] border-[#141F2C] hover:border-[#1E2E42]"
-                          }`}
-                        >
-                          <div className="flex items-center justify-between text-[10px]">
-                            <span className="font-bold text-white flex items-center gap-1">
-                              {item.event}
-                            </span>
-                            <span className="text-[#64748B] font-mono">
-                              {formatLogTime(item.timestamp)}
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-[#8E9EAA] mt-1 leading-normal line-clamp-2">
-                            {item.details}
-                          </p>
-                        </div>
+          {/* Mission Event Timeline (if mission logs available) */}
+          {timeline.length > 0 && (
+            <div>
+              <h3 className="text-xs font-bold text-[#18314C] uppercase tracking-wider mb-3">
+                Mission Lifecycle Timeline
+              </h3>
+              <div className="relative pl-6 space-y-4 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-[#E2E8F0]">
+                {timeline.map((item, idx) => (
+                  <div key={idx} className="relative">
+                    <span className="absolute -left-6 top-0.5 w-4 h-4 rounded-full bg-white border border-[#CBD5E1] flex items-center justify-center">
+                      {getEventIcon(item.event)}
+                    </span>
+                    <div className="p-3 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0]">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-bold text-[#0D233A]">{item.event}</span>
+                        <span className="font-mono text-[10px] text-[#64748B]">{formatLogTime(item.timestamp)}</span>
                       </div>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Section 4: Waypoints Breakdown (if present) */}
-          {waypoints.length > 0 && (
-            <div className="space-y-2">
-              <h3 className="text-xs font-bold text-[#8E9EAA] uppercase tracking-wider flex items-center gap-1.5">
-                <MapPin className="w-3.5 h-3.5 text-[#35E0FF]" />
-                Waypoint Sequence ({waypoints.length} Total)
-              </h3>
-              <div className="rounded-xl border border-[#16212E] bg-[#06090E] overflow-hidden">
-                <table className="w-full text-left text-[11px]">
-                  <thead className="bg-[#0A0E16] text-[#64748B] border-b border-[#16212E] text-[10px] uppercase">
-                    <tr>
-                      <th className="p-2">#</th>
-                      <th className="p-2">Coordinates</th>
-                      <th className="p-2">Alt</th>
-                      <th className="p-2">Hold</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#141F2C] text-[#CBD5E1]">
-                    {waypoints.map((wp, idx) => (
-                      <tr key={idx} className="hover:bg-[#0B1017]">
-                        <td className="p-2 font-bold text-[#35E0FF]">WP {wp.seq || idx + 1}</td>
-                        <td className="p-2 font-mono text-[10px] text-[#94A3B8]">
-                          {wp.lat ? `${Number(wp.lat).toFixed(5)}, ${Number(wp.lng).toFixed(5)}` : "Position Staged"}
-                        </td>
-                        <td className="p-2 text-white">{wp.alt ? `${wp.alt}m` : "50m"}</td>
-                        <td className="p-2 text-[#8E9EAA]">{wp.holdTime ? `${wp.holdTime}s` : "0s"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                      <p className="text-xs text-[#475569] mt-1 leading-snug">{item.details}</p>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}
-
-          {/* Section 5: Geofence Details (if present) */}
-          {geofence && (
-            <div className="space-y-2">
-              <h3 className="text-xs font-bold text-[#8E9EAA] uppercase tracking-wider flex items-center gap-1.5">
-                <Shield className="w-3.5 h-3.5 text-[#F59E0B]" />
-                Geofence Containment Boundary
-              </h3>
-              <div className="p-3 rounded-xl bg-[#06090E] border border-[#16212E] grid grid-cols-3 gap-2 text-xs">
-                <div>
-                  <span className="text-[10px] text-[#64748B] block">TYPE</span>
-                  <span className="text-white font-bold capitalize">{geofence.type || "Polygon"}</span>
-                </div>
-                <div>
-                  <span className="text-[10px] text-[#64748B] block">VERTICES</span>
-                  <span className="text-[#35E0FF] font-bold">
-                    {geofence.polygon?.length || 4} Boundary Points
-                  </span>
-                </div>
-                <div>
-                  <span className="text-[10px] text-[#64748B] block">AREA</span>
-                  <span className="text-[#2FE089] font-bold">
-                    {Math.round((geofence.areaM2 || 579000) / 10000)} ha
-                  </span>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Section 6: Raw Event JSON Inspector */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <h3 className="text-xs font-bold text-[#8E9EAA] uppercase tracking-wider flex items-center gap-1.5">
-                <FileCode className="w-3.5 h-3.5 text-[#64748B]" />
-                Raw Event Payload
-              </h3>
-              <button
-                type="button"
-                onClick={handleCopyJson}
-                className="inline-flex items-center gap-1 text-[10px] text-[#35E0FF] hover:underline cursor-pointer"
-              >
-                {copied ? (
-                  <>
-                    <Check className="w-3 h-3 text-[#2FE089]" />
-                    <span className="text-[#2FE089]">Copied</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="w-3 h-3" />
-                    <span>Copy JSON</span>
-                  </>
-                )}
-              </button>
-            </div>
-            <pre className="p-3 rounded-xl bg-[#05080E] border border-[#16212E] text-[10px] text-[#A6ACCD] overflow-x-auto max-h-48 leading-relaxed">
-              {JSON.stringify(log, null, 2)}
-            </pre>
-          </div>
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-[#1A2633] bg-[#0C121C] flex items-center justify-between">
-          <span className="text-[11px] text-[#64748B]">Log Record ID: {log.id}</span>
+        <div className="p-4 border-t border-[#E2E8F0] bg-[#F8FAFC] flex items-center justify-between text-xs text-[#64748B]">
+          <span>Security Class: C-4 Autonomous Flight Audit</span>
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 rounded-lg bg-[#16212E] text-[#CBD5E1] hover:text-white hover:bg-[#223246] transition text-xs font-semibold cursor-pointer"
+            className="px-4 py-2 rounded-xl bg-white border border-[#CAD8E6] text-[#0D233A] hover:bg-[#F1F5F9] font-bold transition cursor-pointer"
           >
-            Close Inspector
+            Close Drawer
           </button>
         </div>
       </div>

@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { MissionContext } from "./missionContextCore.js";
 import {
   isPointInsideGeofence,
@@ -22,6 +22,20 @@ export const MissionProvider = ({ children }) => {
 
   // 2. Active project ID initialized from storage
   const [currentProjectId, setCurrentProjectId] = useState(() => getActiveProjectId());
+
+  // Real-time synchronization across pages and window events
+  useEffect(() => {
+    const handleSync = () => {
+      setProjects(getProjects());
+      setCurrentProjectId(getActiveProjectId());
+    };
+    window.addEventListener("storage", handleSync);
+    window.addEventListener("aeronexus_projects_updated", handleSync);
+    return () => {
+      window.removeEventListener("storage", handleSync);
+      window.removeEventListener("aeronexus_projects_updated", handleSync);
+    };
+  }, []);
 
   // 3. Derived current active project object (always up to date)
   const currentProject = useMemo(() => {

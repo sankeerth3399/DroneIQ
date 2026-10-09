@@ -30,8 +30,8 @@ export const TELEMETRY_STALE_THRESHOLD_MS = 6000
 
 // Centralized temporary fallback location for development (EASY TO REMOVE LATER)
 export const FALLBACK_DRONE_LOCATION = {
-  latitude: 17.3850,
-  longitude: 78.4867,
+  latitude: 17.385000,
+  longitude: 78.486700,
 }
 
 export const FALLBACK_MAP_ZOOM = GLOBAL_DEFAULT_ZOOM
@@ -57,6 +57,31 @@ export const MAP_CONFIG = {
 export const PositionSource = {
   HYDERABAD_FALLBACK: "HYDERABAD_FALLBACK",
   LIVE: "LIVE",
+}
+
+export const resolveDroneDisplayPosition = (state = {}) => {
+  const fallback = {
+    latitude: FALLBACK_DRONE_LOCATION.latitude,
+    longitude: FALLBACK_DRONE_LOCATION.longitude,
+  }
+
+  const hasActiveDrone = Boolean(state.activeDroneId)
+  const isLiveConnected = Boolean(state.liveDroneConnected)
+  const hasValidLiveGps = Boolean(state.validLiveGps)
+  const gpsIsValid = isValidGpsCoordinate(state.latitude, state.longitude)
+
+  if (isLiveConnected && hasValidLiveGps && hasActiveDrone && gpsIsValid) {
+    return {
+      latitude: Number(Number(state.latitude).toFixed(6)),
+      longitude: Number(Number(state.longitude).toFixed(6)),
+      source: "LIVE_TELEMETRY",
+    }
+  }
+
+  return {
+    ...fallback,
+    source: "HYDERABAD_FALLBACK",
+  }
 }
 
 /**

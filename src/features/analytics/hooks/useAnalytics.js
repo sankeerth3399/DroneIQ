@@ -58,6 +58,7 @@ export function useAnalytics() {
   const [error, setError] = useState(null)
 
   useEffect(() => {
+    if (!activeDashboard) return
     let active = true
 
     const run = async () => {
@@ -124,7 +125,7 @@ export function useAnalytics() {
     return () => {
       active = false
     }
-  }, [filters])
+  }, [filters, activeDashboard])
 
   const refreshAnalytics = useCallback(async () => {
     setIsRefreshing(true)

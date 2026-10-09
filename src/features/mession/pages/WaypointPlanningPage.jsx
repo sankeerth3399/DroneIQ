@@ -467,6 +467,15 @@ const WaypointPlanningPage = () => {
             </>
           )}
         </div>
+
+        {/* Quick Link to Mission Planning */}
+        <button
+          type="button"
+          onClick={() => navigate("/mission-planning")}
+          className="flex items-center gap-1 text-[10px] font-mono font-semibold text-[#8E9EAA] hover:text-[#35E0FF] bg-[#080C14E6] border border-[#1A2633] px-2.5 py-1 rounded-lg transition w-fit"
+        >
+          <span>&larr; Mission Planning</span>
+        </button>
       </div>
 
       {/* 2. Floating Mission Planning Toolbar (Top-Center) */}

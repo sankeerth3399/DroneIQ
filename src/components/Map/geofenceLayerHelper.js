@@ -1,4 +1,4 @@
-import { getUnderlyingMap, SATELLITE_LAYER_ID } from "./satelliteLayerHelper.js";
+import { getUnderlyingMap, SATELLITE_LAYER_ID, enforceMapLayerOrder } from "./satelliteLayerHelper.js";
 
 export const GEOFENCE_SOURCE_ID = "aeronexus-geofence-source";
 export const GEOFENCE_FILL_LAYER_ID = "aeronexus-geofence-fill";
@@ -177,7 +177,7 @@ export const syncGeofenceLayers = (
           source: GEOFENCE_SOURCE_ID,
           paint: {
             "fill-color": "#06B6D4",
-            "fill-opacity": 0.18,
+            "fill-opacity": 0.22,
           },
         });
       }
@@ -190,8 +190,8 @@ export const syncGeofenceLayers = (
           source: GEOFENCE_SOURCE_ID,
           paint: {
             "line-color": "#35E0FF",
-            "line-width": 2.5,
-            "line-dasharray": [3, 2],
+            "line-width": 3.2,
+            "line-dasharray": [4, 2],
           },
         });
       }
@@ -251,37 +251,8 @@ export const syncGeofenceLayers = (
         }
       }
 
-      // 4. Stacking: Ensure layers are above satellite raster if satellite exists
-      if (map.getLayer(SATELLITE_LAYER_ID)) {
-        if (map.getLayer(GEOFENCE_FILL_LAYER_ID)) {
-          try {
-            map.moveLayer(GEOFENCE_FILL_LAYER_ID);
-          } catch {
-            // Safe ignore
-          }
-        }
-        if (map.getLayer(GEOFENCE_LINE_LAYER_ID)) {
-          try {
-            map.moveLayer(GEOFENCE_LINE_LAYER_ID);
-          } catch {
-            // Safe ignore
-          }
-        }
-        if (map.getLayer(GEOFENCE_PREVIEW_LINE_LAYER_ID)) {
-          try {
-            map.moveLayer(GEOFENCE_PREVIEW_LINE_LAYER_ID);
-          } catch {
-            // Safe ignore
-          }
-        }
-        if (map.getLayer(VIOLATIONS_LINE_LAYER_ID)) {
-          try {
-            map.moveLayer(VIOLATIONS_LINE_LAYER_ID);
-          } catch {
-            // Safe ignore
-          }
-        }
-      }
+      // 4. Stacking: Enforce strict layer order (satellite -> geofence -> route)
+      enforceMapLayerOrder(map);
     } catch (err) {
       console.warn("[GeofenceLayerHelper] Sync note:", err.message);
     }

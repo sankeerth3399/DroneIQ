@@ -25,8 +25,8 @@ import {
 
 console.log("=== RUNNING GEOFENCE VERTEX DELETION ACCEPTANCE SUITE ===");
 
-// Helper to simulate 10-vertex circular regular polygon around Hyderabad
-function createCircleVertices(n = 10, centerLat = 17.385, centerLng = 78.486, radiusM = 500) {
+// Helper to simulate a valid circular polygon around Hyderabad
+function createCircleVertices(n = 10, centerLat = 17.385, centerLng = 78.486, radiusM = 250) {
   const points = [];
   const rLat = radiusM / 111139;
   const rLng = radiusM / (111139 * Math.cos((centerLat * Math.PI) / 180));
@@ -46,7 +46,7 @@ function createCircleVertices(n = 10, centerLat = 17.385, centerLng = 78.486, ra
 // 1. TEST WITH 10 VALID VERTICES -> DELETE VERTEX 5 (Section 25)
 {
   console.log("\n[Test 1] 10 vertices: Delete Vertex 5");
-  const vertices = createCircleVertices(10);
+  const vertices = createCircleVertices(10, 17.385, 78.486, 300);
   assert.strictEqual(vertices.length, 10);
   const v5 = vertices[4]; // 5th vertex
   assert.strictEqual(v5.id, "vertex-5");
@@ -142,9 +142,9 @@ function createCircleVertices(n = 10, centerLat = 17.385, centerLng = 78.486, ra
   // Let's create an explicit bowtie:
   const bowtie = [
     { id: "v1", lat: 17.385, lng: 78.486 },
-    { id: "v2", lat: 17.388, lng: 78.490 },
-    { id: "v3", lat: 17.385, lng: 78.490 },
-    { id: "v4", lat: 17.388, lng: 78.486 },
+    { id: "v2", lat: 17.387, lng: 78.488 },
+    { id: "v3", lat: 17.385, lng: 78.488 },
+    { id: "v4", lat: 17.387, lng: 78.486 },
   ];
   const bowtieVal = validateGeofencePolygon(bowtie);
   assert.strictEqual(bowtieVal.valid, false, "Self-intersecting geometry must fail validation");

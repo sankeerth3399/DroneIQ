@@ -16,6 +16,7 @@ import { MissionLogTable } from "../components/MissionLogTable.jsx"
 import { FlightLogsTable } from "../components/FlightLogsTable.jsx"
 import { GenericLogsTable } from "../components/GenericLogsTable.jsx"
 import { MissionLogDetailDrawer } from "../components/MissionLogDetailDrawer.jsx"
+import BottomInfoStrip from "@/features/reports/components/BottomInfoStrip.jsx"
 import { showAlert, AlertTypes, AlertCategories } from "@/services/notification/alertService.js"
 
 const INITIAL_FILTERS = {
@@ -72,7 +73,7 @@ export const Logs = () => {
       showAlert({
         type: AlertTypes.SUCCESS,
         title: "Logs Exported",
-        message: `Binary log ${logId}.ulg ready.`,
+        message: `Binary flight log package ready.`,
         category: AlertCategories.SYSTEM,
         key: `EXPORT_${logId}`,
       })
@@ -266,153 +267,166 @@ export const Logs = () => {
   }
 
   return (
-    <div className="relative h-full min-h-0 w-full overflow-y-auto overflow-x-hidden bg-[#06090E] select-none font-sans text-[#EEF4F8] scrollbar-thin">
-      <div className="p-3.5 sm:p-6 lg:p-8 space-y-5 sm:space-y-6 max-w-7xl mx-auto min-w-0 pb-12 sm:pb-16">
-        {/* Top Header & Global Actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-[#1A2633]">
-        <div>
-          <div className="flex items-center gap-2.5">
-            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white flex items-center gap-2">
-              <FileText className="w-6 h-6 text-[#35E0FF]" />
-              Operations, Flight & Mission Logs
-            </h1>
+    <div className="h-full min-h-0 w-full overflow-y-auto overflow-x-hidden bg-[#F0F4F9] font-sans select-none text-[#0E2646]">
+      <div className="mx-auto flex w-full max-w-[1780px] flex-col gap-6 p-4 sm:p-5 xl:p-6 2xl:p-7">
+        {/* ================================================== */}
+        {/* PAGE HEADER                                        */}
+        {/* ================================================== */}
+        <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-[#D5E1ED]">
+          <div>
+            <div className="flex items-center gap-3 flex-wrap">
+              <h1 className="text-2xl sm:text-[28px] font-extrabold text-[#0D233A] tracking-tight leading-tight flex items-center gap-2.5">
+                <FileText className="w-6 h-6 text-[#1E64D4]" />
+                <span>Operations, Flight & Mission Logs</span>
+              </h1>
 
-            {/* Live Telemetry Indicator */}
-            <div
-              className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold border ${
-                isLive
-                  ? "bg-[#2FE0891F] text-[#2FE089] border-[#2FE0894D]"
-                  : "bg-[#1E293B] text-[#94A3B8] border-[#334155]"
-              }`}
-            >
-              <span
-                className={`w-1.5 h-1.5 rounded-full ${
-                  isLive ? "bg-[#2FE089] animate-pulse" : "bg-[#64748B]"
+              {/* Status Indicator */}
+              <div
+                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${
+                  isLive
+                    ? "bg-[#F0FDF4] text-[#15803D] border-[#BBF7D0]"
+                    : "bg-[#F1F5F9] text-[#64748B] border-[#E2E8F0]"
                 }`}
-              />
-              <span>{isLive ? "LIVE STREAM" : "OFFLINE"}</span>
+              >
+                <span
+                  className={`w-2 h-2 rounded-full ${
+                    isLive ? "bg-[#16A34A] animate-pulse" : "bg-[#94A3B8]"
+                  }`}
+                />
+                <span>{isLive ? "LIVE STREAM" : "OFFLINE"}</span>
+              </div>
             </div>
+
+            <p className="mt-1 text-xs sm:text-sm text-[#4F657F] font-medium">
+              Audit autonomous waypoint missions, inspect recorded MAVLink telemetry, track pilot commands, and export binary flight records.
+            </p>
           </div>
 
-          <p className="text-xs sm:text-sm text-[#8E9EAA] mt-1">
-            Audit autonomous waypoint missions, inspect recorded MAVLink telemetry, track pilot commands, and export binary flight records.
-          </p>
-        </div>
+          {/* Export Controls Header */}
+          <div className="flex items-center gap-2.5 self-start sm:self-auto shrink-0">
+            {/* Format Export Dropdown */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowExportMenu((prev) => !prev)}
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white text-[#0E2646] border border-[#CAD8E6] hover:bg-[#F8FAFC] text-xs sm:text-sm font-bold shadow-xs transition cursor-pointer"
+              >
+                <Download className="w-4 h-4 text-[#1E64D4]" />
+                <span>Export</span>
+                <ChevronDown className="w-3.5 h-3.5 text-[#64748B]" />
+              </button>
 
-        {/* Action Buttons: Export Dropdown + Export All Zips */}
-        <div className="flex items-center gap-2 self-start sm:self-auto font-mono">
-          {/* Format Export Dropdown */}
-          <div className="relative">
+              {showExportMenu && (
+                <div className="absolute right-0 mt-1.5 w-48 rounded-2xl bg-white border border-[#D5E1ED] shadow-2xl p-1.5 z-30 space-y-1 animate-in fade-in zoom-in-95 duration-100">
+                  <button
+                    type="button"
+                    onClick={() => handleTriggerExport("csv")}
+                    className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold text-[#0E2646] hover:bg-[#F8FAFC] transition cursor-pointer"
+                  >
+                    <FileSpreadsheet className="w-4 h-4 text-[#16A34A]" />
+                    <span>Export as CSV</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleTriggerExport("json")}
+                    className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold text-[#0E2646] hover:bg-[#F8FAFC] transition cursor-pointer"
+                  >
+                    <FileJson className="w-4 h-4 text-[#1E64D4]" />
+                    <span>Export as JSON</span>
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Export All Logs (.zip) button */}
             <button
               type="button"
-              onClick={() => setShowExportMenu((prev) => !prev)}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#0F1622] text-[#CBD5E1] border border-[#1E293B] hover:border-[#35E0FF] hover:text-[#35E0FF] text-xs font-semibold transition cursor-pointer"
+              onClick={() => handleExportUlog("ALL_LATEST")}
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#1E64D4] hover:bg-[#1553B8] text-white text-xs sm:text-sm font-bold shadow-xs transition shrink-0 cursor-pointer"
             >
-              <Download className="w-3.5 h-3.5" />
-              <span>Export</span>
-              <ChevronDown className="w-3 h-3 ml-0.5 text-[#64748B]" />
+              <Download className="w-4 h-4" />
+              <span>Export All Logs (.zip)</span>
             </button>
-
-            {showExportMenu && (
-              <div className="absolute right-0 mt-1 w-44 rounded-xl bg-[#090D14] border border-[#1A2633] shadow-2xl p-1 z-20 space-y-0.5">
-                <button
-                  type="button"
-                  onClick={() => handleTriggerExport("csv")}
-                  className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs text-[#CBD5E1] hover:text-white hover:bg-[#131C28] transition cursor-pointer"
-                >
-                  <FileSpreadsheet className="w-3.5 h-3.5 text-[#2FE089]" />
-                  <span>Export as CSV</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleTriggerExport("json")}
-                  className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs text-[#CBD5E1] hover:text-white hover:bg-[#131C28] transition cursor-pointer"
-                >
-                  <FileJson className="w-3.5 h-3.5 text-[#35E0FF]" />
-                  <span>Export as JSON</span>
-                </button>
-              </div>
-            )}
           </div>
+        </header>
 
-          {/* Original Export All Logs (.zip) button */}
-          <button
-            type="button"
-            onClick={() => handleExportUlog("ALL_LATEST")}
-            className="inline-flex items-center justify-center gap-2 px-3.5 py-2 rounded-lg bg-[#1A2634] text-[#35E0FF] border border-[#35E0FF4D] text-xs font-semibold hover:bg-[#35E0FF] hover:text-[#06090E] transition shrink-0 font-mono cursor-pointer"
-          >
-            <Download className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Export All Logs (.zip)</span>
-            <span className="sm:hidden">.ZIP</span>
-          </button>
-        </div>
-      </div>
+        {/* ================================================== */}
+        {/* LOG CATEGORY TABS                                  */}
+        {/* ================================================== */}
+        <LogCategoryTabs
+          activeCategory={activeCategory}
+          onSelectCategory={(cat) => {
+            setActiveCategory(cat)
+          }}
+          categoryCounts={categoryCounts}
+        />
 
-      {/* 7 Log Category Tabs Navigation */}
-      <LogCategoryTabs
-        activeCategory={activeCategory}
-        onSelectCategory={(cat) => {
-          setActiveCategory(cat)
-          // Maintain or adjust filters
-        }}
-        categoryCounts={categoryCounts}
-      />
-
-      {/* Mission KPI Summary Cards (visible for 'mission' and 'all' views) */}
-      {(activeCategory === "mission" || activeCategory === "all") && (
-        <MissionLogSummary summary={missionSummary} />
-      )}
-
-      {/* Filter and Search Bar */}
-      <MissionLogFilters
-        filters={filters}
-        onChange={setFilters}
-        onReset={handleResetFilters}
-        missions={missions}
-        drones={drones}
-        operators={operators}
-        eventTypes={eventTypes}
-        flightModes={flightModes}
-        statuses={statuses}
-        totalCount={categoryCounts[activeCategory] || 0}
-        filteredCount={currentDataset.length}
-      />
-
-      {/* Main Table Content based on active category */}
-      <div>
-        {activeCategory === "mission" && (
-          <MissionLogTable
-            logs={missionLogs}
-            onSelectLog={handleOpenMissionDrawer}
-            onViewFlight={handleViewFlightFromMission}
-          />
+        {/* ================================================== */}
+        {/* SUMMARY KPI CARDS                                  */}
+        {/* ================================================== */}
+        {(activeCategory === "mission" || activeCategory === "all") && (
+          <MissionLogSummary summary={missionSummary} />
         )}
 
-        {activeCategory === "flight" && (
-          <FlightLogsTable
-            flightLogs={flightLogs}
-            onExport={handleExportUlog}
-            onViewMission={handleViewMissionFromFlight}
-          />
-        )}
+        {/* ================================================== */}
+        {/* SEARCH + FILTER WIDGET                             */}
+        {/* ================================================== */}
+        <MissionLogFilters
+          filters={filters}
+          onChange={setFilters}
+          onReset={handleResetFilters}
+          missions={missions}
+          drones={drones}
+          operators={operators}
+          eventTypes={eventTypes}
+          flightModes={flightModes}
+          statuses={statuses}
+          totalCount={categoryCounts[activeCategory] || 0}
+          filteredCount={currentDataset.length}
+        />
 
-        {activeCategory !== "mission" && activeCategory !== "flight" && (
-          <GenericLogsTable
-            category={activeCategory}
-            logs={currentDataset}
-            onInspectMission={handleOpenMissionDrawer}
-            onViewFlight={handleViewFlightFromMission}
-          />
-        )}
-      </div>
+        {/* ================================================== */}
+        {/* MAIN LOG TABLE CONTENT                             */}
+        {/* ================================================== */}
+        <main>
+          {activeCategory === "mission" && (
+            <MissionLogTable
+              logs={missionLogs}
+              onSelectLog={handleOpenMissionDrawer}
+              onViewFlight={handleViewFlightFromMission}
+            />
+          )}
 
-      {/* Mission Detail Drawer */}
-      <MissionLogDetailDrawer
-        log={selectedMissionLog}
-        isOpen={isDrawerOpen}
-        onClose={() => setIsDrawerOpen(false)}
-        onViewFlight={handleViewFlightFromMission}
-      />
+          {activeCategory === "flight" && (
+            <FlightLogsTable
+              flightLogs={flightLogs}
+              onExport={handleExportUlog}
+              onViewMission={handleViewMissionFromFlight}
+            />
+          )}
+
+          {activeCategory !== "mission" && activeCategory !== "flight" && (
+            <GenericLogsTable
+              category={activeCategory}
+              logs={currentDataset}
+              onInspectMission={handleOpenMissionDrawer}
+              onViewFlight={handleViewFlightFromMission}
+            />
+          )}
+        </main>
+
+        {/* Mission Detail Inspection Drawer */}
+        <MissionLogDetailDrawer
+          log={selectedMissionLog}
+          isOpen={isDrawerOpen}
+          onClose={() => setIsDrawerOpen(false)}
+          onViewFlight={handleViewFlightFromMission}
+        />
+
+        {/* ================================================== */}
+        {/* BOTTOM VALUE PROPOSITION STRIP                     */}
+        {/* ================================================== */}
+        <BottomInfoStrip />
       </div>
     </div>
   )

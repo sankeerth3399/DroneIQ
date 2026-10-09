@@ -68,7 +68,7 @@ export const buildDroneMarkerHtml = (callsign, initialHeading = 0) => {
 
         <!-- Callsign Badge (Anchored below, non-rotating so text remains horizontal) -->
         <div style="position: absolute; top: 70px; left: 50%; transform: translateX(-50%); white-space: nowrap; pointer-events: none;">
-          <span style="display: inline-block; font-family: monospace; font-size: 9.5px; font-weight: 700; color: #35E0FF; background: rgba(8, 12, 20, 0.92); border: 1px solid rgba(53, 224, 255, 0.5); padding: 1px 5px; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.7); letter-spacing: 0.05em;">
+          <span style="display: inline-block; font-family: monospace; font-size: 11px; font-weight: 800; color: #35E0FF; background: rgba(11, 25, 44, 0.95); border: 1.5px solid rgba(53, 224, 255, 0.65); padding: 2px 7px; border-radius: 5px; box-shadow: 0 2px 10px rgba(0,0,0,0.8); letter-spacing: 0.06em;">
             ${callsign}
           </span>
         </div>

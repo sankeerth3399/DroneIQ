@@ -319,17 +319,29 @@ function filterFlights(flights, filters = {}) {
  * Centralized Analytics Service
  */
 export const analyticsService = {
+  async getBackendOverview(filters = {}) {
+    const params = new URLSearchParams()
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== "" && value !== "ALL") {
+        params.set(key, String(value))
+      }
+    })
+    const query = params.toString()
+    const response = await apiClient(`/api/analytics/overview${query ? `?${query}` : ""}`, {
+      method: "GET",
+      suppressForbiddenToast: true,
+      silent: true,
+    })
+    return response?.data ?? response
+  },
+
   /**
    * Fetch complete Fleet Overview KPIs & Analytics
    */
   async getFleetOverview(filters = {}) {
     try {
-      const res = await apiClient("/api/analytics/overview", {
-        method: "GET",
-        suppressForbiddenToast: true,
-        silent: true,
-      })
-      if (res && res.data) return res.data
+      const overview = await this.getBackendOverview(filters)
+      if (overview) return overview
     } catch {
       // Graceful aggregation fallback
     }

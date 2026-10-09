@@ -17,6 +17,7 @@ import {
   TELEMETRY_STALE_THRESHOLD_MS,
   FALLBACK_DRONE_LOCATION,
   PositionSource,
+  resolveDroneDisplayPosition,
 } from "@/services/telemetry/telemetryTypes.js"
 
 export const TelemetryProvider = ({ children }) => {
@@ -40,6 +41,20 @@ export const TelemetryProvider = ({ children }) => {
   // Centralized ARM/DISARM Flight Safety State (Initial state: false — strictly unarmed by default)
   const [isArmed, setIsArmedState] = useState(DEFAULT_ARMED_STATE)
 
+  // Authoritative Drone Geographic Position (Initial state: strictly fixed Hyderabad fallback 17.385000, 78.486700)
+  const [dronePosition, setDronePosition] = useState({
+    latitude: FALLBACK_DRONE_LOCATION.latitude,
+    longitude: FALLBACK_DRONE_LOCATION.longitude,
+  })
+
+  // Live-drone state is separate from telemetry connectivity.
+  const [liveDroneConnected, setLiveDroneConnected] = useState(false)
+  const [validLiveGps, setValidLiveGps] = useState(false)
+
+  // Live Telemetry Attachment Flag (false = fixed fallback, true = following live valid GPS)
+  const [liveTelemetryAttached, setLiveTelemetryAttached] = useState(false)
+  const lastAcceptedTelemetryTimestampRef = useRef({})
+
   // Centralized Canonical Flight Mode State (Mandatory Default: "GUIDED")
   const [flightMode, setFlightModeState] = useState(DEFAULT_FLIGHT_MODE)
 
@@ -60,7 +75,6 @@ export const TelemetryProvider = ({ children }) => {
   const prevGpsFixRef = useRef(null)
   const prevBatteryPercentRef = useRef(null)
   const hasEverConnectedRef = useRef(false)
-  const lastValidGpsTimestampRef = useRef({})
 
   const clearToast = useCallback(() => {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
@@ -87,86 +101,254 @@ export const TelemetryProvider = ({ children }) => {
     })
   }, [])
 
-  // Handle incoming live telemetry event (OBSERVED STATE ONLY - never mutate user command state)
-  const handleTelemetryUpdate = useCallback((data) => {
-    if (!data || !data.droneId) return
+  /**
+   * Section 1, 5, 6, 37, 38: The ONE authoritative function for changing drone ARM/DISARM state.
+   * INVARIANT 1: No user ARM confirmation = ARMED state cannot change from UNARMED.
+   * INVARIANT 2: No user DISARM confirmation = UNARMED state cannot change from ARMED.
+   */
+  const updateArmedState = useCallback((newArmed, {
+    source = "USER_COMMAND",
+    commandId = null,
+    userAction = null,
+    backendResponse = null,
+    isConfirmed = false,
+  } = {}) => {
+    setIsArmedState((prev) => {
+      const next = Boolean(newArmed)
+      if (prev === next) return prev
 
-    setLastTelemetryTime(Date.now())
-
-    // Validate GPS coordinates if provided in incoming packet
-    let validatedGps = {}
-    if (data.latitude !== undefined && data.longitude !== undefined) {
-      if (isValidGpsCoordinate(data.latitude, data.longitude)) {
-        const incomingTime = data.timestamp ? new Date(data.timestamp).getTime() : Date.now()
-        const lastTime = lastValidGpsTimestampRef.current[data.droneId] || 0
-
-        if (incomingTime >= lastTime) {
-          lastValidGpsTimestampRef.current[data.droneId] = incomingTime
-          validatedGps = {
-            latitude: Number(data.latitude),
-            longitude: Number(data.longitude),
-            positionSource: PositionSource.LIVE,
-          }
-
+      // Invariant 1: UNARMED -> ARMED requires user ARM confirmation & successful backend response
+      if (!prev && next) {
+        if (!isConfirmed || userAction !== "USER_ARM_CONFIRMED" || !backendResponse?.success) {
           if (import.meta.env?.DEV) {
-            console.debug(
-              `[DRONE POSITION CHANGE] source: TELEMETRY droneId: ${data.droneId} next: ${validatedGps.latitude.toFixed(6)},${validatedGps.longitude.toFixed(6)} timestamp: ${data.timestamp || incomingTime}`
+            console.warn(
+              `[UNEXPECTED ARM STATE CHANGE] Attempted transition UNARMED -> ARMED without confirmed user command and successful backend response.\nprevious: UNARMED\nnew: ARMED\nsource: ${source}\ncommandId: ${commandId}\nuserAction: ${userAction}\nbackendResponse: ${JSON.stringify(backendResponse)}`
             )
           }
-        } else {
-          if (import.meta.env?.DEV) {
-            console.debug(
-              `[DRONE POSITION REJECTED] reason: STALE_TELEMETRY droneId: ${data.droneId} incomingTime: ${incomingTime} lastTime: ${lastTime}`
-            )
-          }
+          return prev
         }
-      } else {
-        if (import.meta.env?.DEV) {
-          console.debug(
-            `[DRONE POSITION REJECTED] reason: INVALID_COORDINATE droneId: ${data.droneId} lat: ${data.latitude} lng: ${data.longitude}`
-          )
+      }
+
+      // Invariant 2: ARMED -> UNARMED requires user DISARM confirmation & successful response (or emergency disarm override)
+      if (prev && !next) {
+        const isEmergency = source === "EMERGENCY_OVERRIDE"
+        if (!isEmergency && (!isConfirmed || userAction !== "USER_DISARM_CONFIRMED" || !backendResponse?.success)) {
+          if (import.meta.env?.DEV) {
+            console.warn(
+              `[UNEXPECTED ARM STATE CHANGE] Attempted transition ARMED -> UNARMED without confirmed user command and successful backend response.\nprevious: ARMED\nnew: UNARMED\nsource: ${source}\ncommandId: ${commandId}\nuserAction: ${userAction}\nbackendResponse: ${JSON.stringify(backendResponse)}`
+            )
+          }
+          return prev
+        }
+      }
+
+      if (import.meta.env?.DEV) {
+        console.log(
+          `[ARM STATE CHANGE]\nprevious: ${prev ? "ARMED" : "UNARMED"}\nnew: ${next ? "ARMED" : "UNARMED"}\nsource: ${source}\ncommandId: ${commandId || "CMD-" + Date.now()}\nuserAction: ${userAction || "UNKNOWN"}\nbackendResponse: ${JSON.stringify(backendResponse || {})}`
+        )
+      }
+
+      return next
+    })
+  }, [])
+
+  /**
+   * Section 11, 17, 18, 25: The ONE authoritative function for changing drone position.
+   * Only this function is permitted to update droneState.latitude and droneState.longitude.
+   */
+  const acceptLiveDronePosition = useCallback((droneId, lat, lng, timestamp, source = "LIVE_TELEMETRY") => {
+    if (!droneId || droneId !== selectedDroneId) {
+      return false
+    }
+
+    if (lat === null || lat === undefined || lat === "" || (typeof lat === "string" && lat.trim() === "")) {
+      return false
+    }
+    const numLat = Number(lat)
+    if (!Number.isFinite(numLat) || numLat < -90 || numLat > 90) {
+      if (import.meta.env?.DEV) {
+        console.warn(`[DRONE POSITION REJECTED] reason: INVALID_LATITUDE lat=${lat}`)
+      }
+      return false
+    }
+
+    if (lng === null || lng === undefined || lng === "" || (typeof lng === "string" && lng.trim() === "")) {
+      return false
+    }
+    const numLng = Number(lng)
+    if (!Number.isFinite(numLng) || numLng < -180 || numLng > 180) {
+      if (import.meta.env?.DEV) {
+        console.warn(`[DRONE POSITION REJECTED] reason: INVALID_LONGITUDE lng=${lng}`)
+      }
+      return false
+    }
+
+    if (Math.abs(numLat) < 0.0001 && Math.abs(numLng) < 0.0001) {
+      if (import.meta.env?.DEV) {
+        console.warn(`[DRONE POSITION REJECTED] reason: NULL_ISLAND_COORDINATES (0, 0)`)
+      }
+      return false
+    }
+
+    const incomingTime = timestamp
+      ? (typeof timestamp === "number" ? timestamp : new Date(timestamp).getTime())
+      : Date.now()
+
+    const targetId = droneId || selectedDroneId || "DRONE-001"
+    const lastTime = lastAcceptedTelemetryTimestampRef.current[targetId] || 0
+
+    if (incomingTime <= lastTime && lastTime !== 0) {
+      if (import.meta.env?.DEV) {
+        console.warn(`[DRONE POSITION REJECTED] reason: STALE_OR_DUPLICATE_TELEMETRY incomingTime=${incomingTime} lastTime=${lastTime}`)
+      }
+      return false
+    }
+
+    if (source !== "LIVE_TELEMETRY" && source !== "SIMULATION") {
+      if (import.meta.env?.DEV) {
+        console.warn(`[UNEXPECTED POSITION CHANGE]\nprevious: ${dronePosition.latitude.toFixed(6)}, ${dronePosition.longitude.toFixed(6)}\nnew: ${numLat.toFixed(6)}, ${numLng.toFixed(6)}\nsource: ${source}\ntelemetryTimestamp: ${incomingTime}`)
+      }
+      return false
+    }
+
+    const acceptedLat = Number(numLat.toFixed(6))
+    const acceptedLng = Number(numLng.toFixed(6))
+
+    lastAcceptedTelemetryTimestampRef.current[targetId] = incomingTime
+
+    setDronePosition((prev) => {
+      if (prev.latitude === acceptedLat && prev.longitude === acceptedLng) {
+        return prev
+      }
+      if (import.meta.env?.DEV) {
+        console.log(
+          `[DRONE POSITION CHANGE]\nprevious: ${prev.latitude.toFixed(6)}, ${prev.longitude.toFixed(6)}\nnew: ${acceptedLat.toFixed(6)}, ${acceptedLng.toFixed(6)}\nsource: ${source}\ntelemetryTimestamp: ${timestamp || incomingTime}`
+        )
+      }
+      return {
+        latitude: acceptedLat,
+        longitude: acceptedLng,
+      }
+    })
+    setLiveDroneConnected(true)
+    setValidLiveGps(true)
+    setLiveTelemetryAttached(true)
+
+    return true
+  }, [selectedDroneId, dronePosition])
+
+  // Handle incoming live telemetry event (OBSERVED METRICS ONLY - never mutate user command state)
+  const handleTelemetryUpdate = useCallback((data) => {
+    const timestampMs = data?.timestamp ? new Date(data.timestamp).getTime() : Date.now()
+    const now = Date.now()
+    const isFresh = Number.isFinite(timestampMs) && timestampMs <= now + 5000 && now - timestampMs <= TELEMETRY_STALE_THRESHOLD_MS
+    const isAuthenticated = telemetryClient.connectionState === ConnectionState.AUTHENTICATED
+    const metadataSource = data?.metadata?.source || data?.source || ""
+    const isSimulatorTelemetry = [
+      data?.metadata?.simulator,
+      data?.metadata?.mock,
+      data?.metadata?.simulation,
+    ].some((value) => value === true || String(value).toLowerCase() === "true") || /simulator|mock|simulation/i.test(String(metadataSource))
+    const isRealTelemetry = isAuthenticated && !isSimulatorTelemetry && data?.liveDroneConnected !== false && data?.isLiveDrone !== false && data?.live !== false
+    const hasValidGps = isValidGpsCoordinate(data?.latitude, data?.longitude)
+
+    console.info("TELEMETRY RECEIVED", {
+      "DRONE ID": data?.droneId || null,
+      LATITUDE: data?.latitude ?? null,
+      LONGITUDE: data?.longitude ?? null,
+      TIMESTAMP: data?.timestamp ?? null,
+      "CONNECTION STATE": connectionState,
+      "POSITION SOURCE": isSimulatorTelemetry ? "SIMULATOR" : isRealTelemetry ? "REAL_LIVE" : "UNVERIFIED",
+    })
+
+    if (!data?.droneId || !isFresh || !isAuthenticated) {
+      console.warn("TELEMETRY REJECTED", {
+        "DRONE ID": data?.droneId || null,
+        LATITUDE: data?.latitude ?? null,
+        LONGITUDE: data?.longitude ?? null,
+        TIMESTAMP: data?.timestamp ?? null,
+        "CONNECTION STATE": telemetryClient.connectionState,
+        "POSITION SOURCE": "REJECTED",
+        reason: !data?.droneId ? "MISSING_DRONE_ID" : !isAuthenticated ? "WEBSOCKET_NOT_AUTHENTICATED" : "STALE_OR_INVALID_TIMESTAMP",
+      })
+      return
+    }
+
+    setLastTelemetryTime(now)
+    if (connectionState === ConnectionState.STALE) {
+      setConnectionState(ConnectionState.AUTHENTICATED)
+    }
+
+    let validatedGps = {}
+    if (isRealTelemetry && hasValidGps && data.droneId === selectedDroneId) {
+      const accepted = acceptLiveDronePosition(
+        data.droneId,
+        data.latitude,
+        data.longitude,
+        data.timestamp,
+        "LIVE_TELEMETRY"
+      )
+      if (accepted) {
+        setLiveDroneConnected(true)
+        setValidLiveGps(true)
+        setLiveTelemetryAttached(true)
+        validatedGps = {
+          latitude: Number(Number(data.latitude).toFixed(6)),
+          longitude: Number(Number(data.longitude).toFixed(6)),
+          positionSource: PositionSource.LIVE,
         }
       }
     }
 
-    // Monitor battery threshold crossings (30%, 20%, 10%) - state tracking only, no user popups (Section 15)
+    console.info("TELEMETRY ACCEPTED", {
+      "DRONE ID": data.droneId,
+      LATITUDE: data.latitude ?? null,
+      LONGITUDE: data.longitude ?? null,
+      TIMESTAMP: data.timestamp ?? null,
+      "CONNECTION STATE": connectionState === ConnectionState.STALE ? ConnectionState.AUTHENTICATED : connectionState,
+      "POSITION SOURCE": validatedGps.positionSource || (isSimulatorTelemetry ? "SIMULATOR" : hasValidGps ? "NO_VALID_REAL_POSITION" : "INVALID_GPS"),
+    })
+
+    // Monitor battery threshold crossings - state tracking only, no user popups (Section 15)
     const batt = typeof data.battery === "number" ? data.battery : (typeof data.batteryPercent === "number" ? data.batteryPercent : null)
     if (batt !== null && typeof batt === "number" && !isNaN(batt)) {
       prevBatteryPercentRef.current = batt
     }
 
-    // Update fleet telemetry store with incoming observed metrics (GPS, battery, altitude, etc.)
+    // Update fleet telemetry store with incoming observed metrics (battery, altitude, heading, etc.)
     setFleetTelemetry((prev) => {
       const prevData = prev[data.droneId] || {}
+      if (isSimulatorTelemetry && prevData.positionSource === PositionSource.LIVE) {
+        return prev
+      }
       return {
         ...prev,
         [data.droneId]: {
           ...prevData,
           ...data,
-          // CRITICAL: Preserve previously accepted valid GPS coordinates if incoming packet has no GPS
-          latitude: validatedGps.latitude !== undefined ? validatedGps.latitude : prevData.latitude,
-          longitude: validatedGps.longitude !== undefined ? validatedGps.longitude : prevData.longitude,
-          positionSource: validatedGps.positionSource || prevData.positionSource || PositionSource.HYDERABAD_FALLBACK,
+          latitude: validatedGps.latitude !== undefined
+            ? validatedGps.latitude
+            : isRealTelemetry && hasValidGps
+            ? Number(Number(data.latitude).toFixed(6))
+            : prevData.latitude,
+          longitude: validatedGps.longitude !== undefined
+            ? validatedGps.longitude
+            : isRealTelemetry && hasValidGps
+            ? Number(Number(data.longitude).toFixed(6))
+            : prevData.longitude,
+          positionSource: validatedGps.positionSource || (isRealTelemetry && hasValidGps
+            ? PositionSource.LIVE
+            : prevData.positionSource || PositionSource.HYDERABAD_FALLBACK),
+          _telemetryReceivedAt: now,
+          _isRealTelemetry: isRealTelemetry,
           timestamp: data.timestamp || new Date().toISOString(),
         },
       }
     })
 
-    // Sync authoritative armed state if present in incoming live telemetry for selected drone
-    // Section 13: External telemetry changes update UI state silently without user-action notifications
-    if (data.droneId === selectedDroneId) {
-      const incomingArmed = typeof data.armed === "boolean" ? data.armed : (typeof data.isArmed === "boolean" ? data.isArmed : null)
-      if (incomingArmed !== null) {
-        setIsArmedState((curr) => {
-          if (curr !== incomingArmed) {
-            console.info(`[ARM] Live telemetry updated authoritative armed state: ${curr ? "ARMED" : "UNARMED"} -> ${incomingArmed ? "ARMED" : "UNARMED"}`)
-            return incomingArmed
-          }
-          return curr
-        })
-      }
-    }
-  }, [selectedDroneId])
+    // CRITICAL (Section 1, 2, Invariant 1): External telemetry connection, WebSocket packets,
+    // or vehicle-reported armed flags MUST NEVER automatically change the user's armed state!
+  }, [acceptLiveDronePosition, connectionState, selectedDroneId])
 
   // Subscribe to WebSocket client events - internal state update only (Section 15)
   useEffect(() => {
@@ -188,7 +370,13 @@ export const TelemetryProvider = ({ children }) => {
         state === ConnectionState.BACKEND_UNAVAILABLE
       ) {
         setLastTelemetryTime(null)
-        setFleetTelemetry({})
+        setLiveDroneConnected(false)
+        setValidLiveGps(false)
+        setLiveTelemetryAttached(false)
+        setDronePosition({
+          latitude: FALLBACK_DRONE_LOCATION.latitude,
+          longitude: FALLBACK_DRONE_LOCATION.longitude,
+        })
       }
     })
 
@@ -232,6 +420,13 @@ export const TelemetryProvider = ({ children }) => {
         setConnectionState((curr) =>
           curr === ConnectionState.AUTHENTICATED ? ConnectionState.STALE : curr
         )
+        setLiveDroneConnected(false)
+        setValidLiveGps(false)
+        setLiveTelemetryAttached(false)
+        setDronePosition({
+          latitude: FALLBACK_DRONE_LOCATION.latitude,
+          longitude: FALLBACK_DRONE_LOCATION.longitude,
+        })
       }
     }, 2000)
 
@@ -319,10 +514,13 @@ export const TelemetryProvider = ({ children }) => {
     }
 
     const handleDisarm = () => {
-      setIsArmedState(false)
-      if (import.meta.env?.DEV) {
-        console.log("[ARM STATE] previous: ARMED -> next: UNARMED | source: EMERGENCY_OVERRIDE")
-      }
+      updateArmedState(false, {
+        source: "EMERGENCY_OVERRIDE",
+        commandId: `EMERGENCY-DISARM-${Date.now()}`,
+        userAction: "EMERGENCY_DISARM",
+        backendResponse: { success: true },
+        isConfirmed: true,
+      })
     }
 
     window.addEventListener("aeronexus:toast", handleToastEvent)
@@ -338,7 +536,7 @@ export const TelemetryProvider = ({ children }) => {
       window.removeEventListener("aeronexus:emergency-abort", handleAbort)
       window.removeEventListener("aeronexus:emergency-disarm", handleDisarm)
     }
-  }, [showToast, handleFlightModeChange, selectedDroneId])
+  }, [showToast, handleFlightModeChange, selectedDroneId, updateArmedState])
 
   /**
    * Execute real ARM or DISARM flight command through backend and wait for authoritative state
@@ -346,6 +544,8 @@ export const TelemetryProvider = ({ children }) => {
   const executeArmCommand = useCallback(async ({ arm = true, droneId, isOverride = false } = {}) => {
     const targetDroneId = droneId || selectedDroneId || "DRONE-001"
     const actionLabel = arm ? "ARM" : "DISARM"
+    const userAction = arm ? "USER_ARM_CONFIRMED" : "USER_DISARM_CONFIRMED"
+    const commandId = `CMD-${actionLabel}-${Date.now()}`
 
     console.info(`[ARM] User requested ${actionLabel}`)
     console.info(`[ARM] Confirmation accepted`)
@@ -423,18 +623,24 @@ export const TelemetryProvider = ({ children }) => {
 
     // Wait for Authoritative State Confirmation
     console.info(`[ARM] Telemetry armed state: awaiting authoritative confirmation...`)
-    const confirmed = await flightControlService.waitForAuthoritativeArmedState({
-      droneId: targetDroneId,
-      expectedArmed: arm,
-      timeoutMs: 4000,
-      commandResponse: responseData,
-    })
+    let confirmed = false
+    try {
+      confirmed = await flightControlService.waitForAuthoritativeArmedState({
+        droneId: targetDroneId,
+        expectedArmed: arm,
+        timeoutMs: 4000,
+        commandResponse: responseData,
+      })
+    } catch (waitErr) {
+      console.warn(`[ARM] Wait confirmation error:`, waitErr)
+      confirmed = false
+    }
 
     if (!confirmed) {
       console.warn(`[ARM] Telemetry armed state: confirmation timed out`)
       showAlert({
         type: AlertTypes.ERROR,
-        title: arm ? "ARM FAILED" : "DISARM FAILED",
+        title: arm ? "ARM COMMAND TIMEOUT" : "DISARM COMMAND TIMEOUT",
         message: `No authoritative confirmation received for ${targetDroneId}.`,
         key: "ARM_RESULT",
         category: AlertCategories.FLIGHT,
@@ -442,9 +648,16 @@ export const TelemetryProvider = ({ children }) => {
       throw new Error(`Timeout waiting for drone to confirm ${actionLabel} state.`)
     }
 
-    // Final Authoritative State Update (Section 17: only after authoritative response)
+    // Final Authoritative State Update (Section 5, 6, 17: only after confirmed response)
     console.info(`[ARM] Final state: ${arm ? "ARMED" : "UNARMED"} confirmed`)
-    setIsArmedState(arm)
+    updateArmedState(arm, {
+      source: "CONFIRMED_USER_COMMAND",
+      commandId,
+      userAction,
+      backendResponse: { success: true, ...responseData },
+      isConfirmed: true,
+    })
+
     setFleetTelemetry((prev) => ({
       ...prev,
       [targetDroneId]: {
@@ -464,13 +677,13 @@ export const TelemetryProvider = ({ children }) => {
     showAlert({
       type: AlertTypes.SUCCESS,
       title: arm ? "ARM SUCCESS" : "DISARM SUCCESS",
-      message: `${targetDroneId} is now ${arm ? "armed" : "disarmed"}.`,
+      message: `${targetDroneId} ${arm ? "armed" : "disarmed"} successfully.`,
       key: "ARM_RESULT",
       category: AlertCategories.FLIGHT,
     })
 
     return true
-  }, [selectedDroneId, isAuthenticated, connectionState, isLive, lastTelemetryTime, isArmed])
+  }, [selectedDroneId, isAuthenticated, isArmed, updateArmedState])
 
   const toggleArmed = useCallback(async (source = "USER") => {
     try {
@@ -481,19 +694,15 @@ export const TelemetryProvider = ({ children }) => {
   }, [executeArmCommand, isArmed])
 
   const setArmed = useCallback((val, source = "USER") => {
-    setIsArmedState((prev) => {
-      const next = Boolean(val)
-      if (prev !== next) {
-        if (import.meta.env?.DEV) {
-          console.log(`[ARM STATE] previous: ${prev ? "ARMED" : "UNARMED"} -> next: ${next ? "ARMED" : "UNARMED"} | source: ${source}`)
-        }
-      }
-      return next
+    updateArmedState(val, {
+      source,
+      userAction: "UNCONFIRMED_DIRECT_CALL",
+      isConfirmed: false,
     })
-  }, [])
+  }, [updateArmedState])
 
   const setIsArmed = useCallback((val) => {
-    setArmed(val, "USER")
+    setArmed(val, "UNCONFIRMED_SET_IS_ARMED")
   }, [setArmed])
 
   // Centralized Camera Gimbal State (Independent from Drone Attitude)
@@ -608,18 +817,61 @@ export const TelemetryProvider = ({ children }) => {
     }
   }, [])
 
-  // Extract selected drone's latest telemetry with safe fallback
+  // Extract selected drone's latest telemetry with safe fallback and authoritative position
+  const resolvedDisplayPosition = useMemo(() => {
+    const liveConnected = Boolean(liveDroneConnected && selectedDroneId)
+    const hasValidGps = Boolean(validLiveGps && isValidGpsCoordinate(dronePosition.latitude, dronePosition.longitude))
+
+    return resolveDroneDisplayPosition({
+      liveDroneConnected: liveConnected,
+      validLiveGps: hasValidGps,
+      activeDroneId: selectedDroneId,
+      latitude: dronePosition.latitude,
+      longitude: dronePosition.longitude,
+    })
+  }, [liveDroneConnected, selectedDroneId, validLiveGps, dronePosition.latitude, dronePosition.longitude])
+
+  useEffect(() => {
+    setDronePosition((prev) => {
+      const next = {
+        latitude: resolvedDisplayPosition.latitude,
+        longitude: resolvedDisplayPosition.longitude,
+      }
+      return prev.latitude === next.latitude && prev.longitude === next.longitude ? prev : next
+    })
+
+    const source = resolvedDisplayPosition.source
+    const connection = source === PositionSource.LIVE ? "LIVE" : "NO LIVE DRONE"
+    const gps = source === PositionSource.LIVE ? "VALID" : "INVALID"
+    console.info(
+      `[DRONE LOCATION SOURCE]\nconnection: ${connection}\ngps: ${gps}\nsource: ${source}\ndisplayPosition: ${resolvedDisplayPosition.latitude.toFixed(6)}, ${resolvedDisplayPosition.longitude.toFixed(6)}`
+    )
+  }, [resolvedDisplayPosition])
+
   const rawTelemetry = useMemo(() => {
-    if (isConnected || isStale) {
-      const activeData = fleetTelemetry[selectedDroneId]
-      if (activeData) return activeData
+    const activeData = fleetTelemetry[selectedDroneId]
+    const defaultData = createDefaultTelemetry(selectedDroneId)
+    const source = resolvedDisplayPosition.source
+    if (activeData) {
+      return {
+        ...defaultData,
+        ...activeData,
+        latitude: resolvedDisplayPosition.latitude,
+        longitude: resolvedDisplayPosition.longitude,
+        positionSource: source,
+      }
     }
-    return createDefaultTelemetry(selectedDroneId)
-  }, [fleetTelemetry, selectedDroneId, isConnected, isStale])
+    return {
+      ...defaultData,
+      latitude: resolvedDisplayPosition.latitude,
+      longitude: resolvedDisplayPosition.longitude,
+      positionSource: source,
+    }
+  }, [fleetTelemetry, selectedDroneId, resolvedDisplayPosition])
 
   const droneGPSValid = useMemo(() => {
-    return isValidGpsCoordinate(rawTelemetry.latitude, rawTelemetry.longitude)
-  }, [rawTelemetry.latitude, rawTelemetry.longitude])
+    return isValidGpsCoordinate(dronePosition.latitude, dronePosition.longitude)
+  }, [dronePosition.latitude, dronePosition.longitude])
 
   // Monitor drone connection transitions (Offline <-> Online) - state only (Section 15)
   useEffect(() => {
@@ -657,46 +909,40 @@ export const TelemetryProvider = ({ children }) => {
 
   // Centralized telemetry object with authoritative isArmed, flightMode, and gimbal state
   const telemetry = useMemo(() => {
-    // If the drone has a validated LIVE position, preserve it even when connection transitions to STALE
-    const hasLiveOrStaleGps = Boolean(
-      (isConnected || isStale) &&
-      droneGPSValid &&
-      rawTelemetry.positionSource === PositionSource.LIVE
-    )
-    const positionSource = hasLiveOrStaleGps
+    const positionSource = liveTelemetryAttached
       ? PositionSource.LIVE
       : PositionSource.HYDERABAD_FALLBACK
-
-    const lat = hasLiveOrStaleGps
-      ? rawTelemetry.latitude
-      : FALLBACK_DRONE_LOCATION.latitude
-    const lng = hasLiveOrStaleGps
-      ? rawTelemetry.longitude
-      : FALLBACK_DRONE_LOCATION.longitude
+    const hasAuthoritativeLiveTelemetry = positionSource === PositionSource.LIVE
 
     return {
       ...rawTelemetry,
-      latitude: lat,
-      longitude: lng,
+      latitude: dronePosition.latitude,
+      longitude: dronePosition.longitude,
       positionSource,
       droneConnected: isConnected,
-      droneGPSValid: hasLiveOrStaleGps,
+      droneGPSValid: liveTelemetryAttached || Boolean(isConnected && !isStale && droneGPSValid),
       isLive,
       isStale,
       status: !isConnected ? "DISCONNECTED" : isStale ? "STALE" : rawTelemetry.status || "OK",
-      flightMode: flightMode || DEFAULT_FLIGHT_MODE,
+      flightMode: hasAuthoritativeLiveTelemetry
+        ? rawTelemetry.flightMode || flightMode || DEFAULT_FLIGHT_MODE
+        : flightMode || DEFAULT_FLIGHT_MODE,
       armed: isArmed,
       isArmed,
-      speed: isArmed ? (rawTelemetry.speed || 0) : 0,
-      groundSpeed: isArmed ? (rawTelemetry.groundSpeed || 0) : 0,
-      verticalSpeed: isArmed ? (rawTelemetry.verticalSpeed || 0) : 0,
-      climbRate: isArmed ? (rawTelemetry.climbRate || 0) : 0,
+      speed: rawTelemetry.speed ?? 0,
+      groundSpeed: rawTelemetry.groundSpeed ?? rawTelemetry.speed ?? 0,
+      verticalSpeed: rawTelemetry.verticalSpeed ?? rawTelemetry.climbRate ?? 0,
+      climbRate: rawTelemetry.climbRate ?? rawTelemetry.verticalSpeed ?? 0,
       gimbal: gimbalState,
     }
-  }, [rawTelemetry, flightMode, isArmed, gimbalState, isConnected, isStale, droneGPSValid, isLive])
+  }, [rawTelemetry, dronePosition, liveTelemetryAttached, flightMode, isArmed, gimbalState, isConnected, isStale, droneGPSValid, isLive])
 
   const value = {
     telemetry,
+    dronePosition,
+    liveTelemetryAttached,
+    acceptLiveDronePosition,
+    updateArmedState,
     positionSource: telemetry.positionSource,
     flightMode,
     setFlightMode,

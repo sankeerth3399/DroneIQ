@@ -12,6 +12,7 @@ import {
   CheckCircle2,
   AlertTriangle,
   Info,
+  ChevronLeft,
 } from "lucide-react"
 import { formatLogDate, formatLogTime } from "@/services/api/logService.js"
 
@@ -38,354 +39,176 @@ export const MissionLogTable = ({
     if (ev.includes("COMPLETED")) {
       return {
         icon: CheckCircle2,
-        color: "text-[#2FE089] bg-[#2FE0891F] border-[#2FE08940]",
+        color: "text-[#15803D] bg-[#F0FDF4] border-[#BBF7D0]",
       }
     }
     if (ev.includes("ABORTED") || ev.includes("FAILED") || ev.includes("FAILSAFE")) {
       return {
         icon: AlertTriangle,
-        color: "text-[#FF4141] bg-[#FF41411F] border-[#FF414140]",
+        color: "text-[#DC2626] bg-[#FEF2F2] border-[#FECACA]",
       }
     }
     if (ev.includes("STARTED") || ev.includes("RUNNING")) {
       return {
         icon: Play,
-        color: "text-[#38BDF8] bg-[#38BDF81F] border-[#38BDF840]",
+        color: "text-[#1E64D4] bg-[#EFF6FF] border-[#BFDBFE]",
       }
     }
     if (ev.includes("WAYPOINT")) {
       return {
         icon: MapPin,
-        color: "text-[#35E0FF] bg-[#35E0FF1F] border-[#35E0FF40]",
+        color: "text-[#0284C7] bg-[#F0F9FF] border-[#BAE6FD]",
       }
     }
     if (ev.includes("GEOFENCE")) {
       return {
         icon: Shield,
-        color: "text-[#F59E0B] bg-[#F59E0B1F] border-[#F59E0B40]",
+        color: "text-[#B45309] bg-[#FFFBEB] border-[#FDE68A]",
       }
     }
     if (ev.includes("UPLOADED")) {
       return {
         icon: Upload,
-        color: "text-[#A855F7] bg-[#A855F71F] border-[#A855F740]",
+        color: "text-[#7C3AED] bg-[#FAF5FF] border-[#E9D5FF]",
       }
     }
     return {
       icon: Info,
-      color: "text-[#94A3B8] bg-[#94A3B81F] border-[#94A3B840]",
+      color: "text-[#475569] bg-[#F1F5F9] border-[#E2E8F0]",
     }
   }
 
   const getStatusBadge = (status = "") => {
-    const s = status.toLowerCase()
-    switch (s) {
-      case "completed":
-        return "text-[#2FE089] bg-[#2FE0891F] border-[#2FE08940]"
-      case "running":
-        return "text-[#38BDF8] bg-[#38BDF81F] border-[#38BDF840] animate-pulse"
-      case "ready":
-        return "text-[#35E0FF] bg-[#35E0FF1F] border-[#35E0FF40]"
-      case "failed":
-      case "aborted":
-        return "text-[#FF4141] bg-[#FF41411F] border-[#FF414140]"
-      case "cancelled":
-        return "text-[#94A3B8] bg-[#94A3B81F] border-[#94A3B840]"
-      case "draft":
+    switch (status.toUpperCase()) {
+      case "COMPLETED":
+        return "text-[#15803D] bg-[#F0FDF4] border-[#BBF7D0]"
+      case "RUNNING":
+        return "text-[#0284C7] bg-[#F0F9FF] border-[#BAE6FD]"
+      case "READY":
+        return "text-[#1E64D4] bg-[#EFF6FF] border-[#BFDBFE]"
+      case "FAILED":
+        return "text-[#DC2626] bg-[#FEF2F2] border-[#FECACA]"
+      case "CANCELLED":
+        return "text-[#64748B] bg-[#F1F5F9] border-[#E2E8F0]"
+      case "DRAFT":
       default:
-        return "text-[#E2E8F0] bg-[#33415533] border-[#47556940]"
-    }
-  }
-
-  const getModeBadge = (mode = "") => {
-    switch (mode) {
-      case "AUTO":
-        return "text-[#A855F7] bg-[#A855F71A] border-[#A855F733]"
-      case "GUIDED":
-        return "text-[#35E0FF] bg-[#35E0FF1A] border-[#35E0FF33]"
-      case "RTL":
-        return "text-[#F59E0B] bg-[#F59E0B1A] border-[#F59E0B33]"
-      default:
-        return "text-[#94A3B8] bg-[#1E293B] border-[#334155]"
+        return "text-[#475569] bg-[#F8FAFC] border-[#CAD8E6]"
     }
   }
 
   if (logs.length === 0) {
     return (
-      <div className="rounded-xl bg-[#0A0E16] border border-[#1A2633] p-12 text-center font-mono">
-        <Target className="w-10 h-10 text-[#64748B] mx-auto mb-3 opacity-60" />
-        <h3 className="text-white font-semibold text-sm">No Mission Logs Match Criteria</h3>
-        <p className="text-xs text-[#8E9EAA] mt-1 max-w-sm mx-auto">
-          Try adjusting your search query, status filters, or date range to view logged mission milestones.
+      <div className="rounded-2xl bg-white border border-[#D5E1ED] p-12 text-center font-sans shadow-xs">
+        <Target className="w-10 h-10 text-[#94A3B8] mx-auto mb-3 opacity-80" />
+        <h3 className="text-[#0D233A] font-bold text-sm sm:text-base">No Mission Logs Recorded</h3>
+        <p className="text-xs text-[#64748B] mt-1 max-w-sm mx-auto">
+          No waypoint or geofence lifecycle events match your active filters.
         </p>
       </div>
     )
   }
 
   return (
-    <div className="rounded-xl bg-[#0A0E16] border border-[#1A2633] overflow-hidden shadow-xl select-none font-mono">
-      {/* Mobile View: Expandable Cards (< lg) */}
-      <div className="lg:hidden divide-y divide-[#16212E]">
-        {paginatedLogs.map((log) => {
-          const isExpanded = expandedRowId === log.id
-          const evBadge = getEventBadge(log.event)
-          const EvIcon = evBadge.icon
-
-          return (
-            <div
-              key={log.id}
-              onClick={() => onSelectLog?.(log)}
-              className="p-3.5 space-y-2.5 hover:bg-[#111A26] transition cursor-pointer"
-            >
-              {/* Row 1: Mission + Status + Event */}
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-1.5 min-w-0">
-                  <span className="text-xs font-bold text-white truncate">
-                    {log.missionName || log.projectName}
-                  </span>
-                  <span className="text-[10px] text-[#35E0FF] bg-[#35E0FF14] px-1.5 py-0.5 rounded border border-[#35E0FF33] shrink-0">
-                    {log.missionId}
-                  </span>
-                </div>
-                <span
-                  className={`text-[10px] px-2 py-0.5 rounded-full font-bold border uppercase shrink-0 ${getStatusBadge(
-                    log.status
-                  )}`}
-                >
-                  {log.status}
-                </span>
-              </div>
-
-              {/* Row 2: Event Badge + Flight Mode */}
-              <div className="flex items-center justify-between gap-2 text-xs">
-                <span
-                  className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md border text-[11px] font-semibold ${evBadge.color}`}
-                >
-                  <EvIcon className="w-3 h-3" />
-                  <span>{log.event}</span>
-                </span>
-                <span
-                  className={`text-[10px] px-1.5 py-0.5 rounded border font-bold ${getModeBadge(
-                    log.flightMode
-                  )}`}
-                >
-                  {log.flightMode}
-                </span>
-              </div>
-
-              {/* Row 3: Drone, Operator, Time */}
-              <div className="grid grid-cols-3 gap-1.5 text-[10px] text-[#94A3B8] bg-[#070B11] p-2 rounded-lg border border-[#141E2B]">
-                <div>
-                  <span className="text-[#64748B] block text-[9px]">DRONE</span>
-                  <span className="text-white font-bold">{log.droneId}</span>
-                </div>
-                <div>
-                  <span className="text-[#64748B] block text-[9px]">OPERATOR</span>
-                  <span className="text-[#CBD5E1] truncate block">{log.operator}</span>
-                </div>
-                <div>
-                  <span className="text-[#64748B] block text-[9px]">TIMESTAMP</span>
-                  <span className="text-[#94A3B8]">
-                    {formatLogTime(log.timestamp)}
-                  </span>
-                </div>
-              </div>
-
-              {/* Row 4: Short Details */}
-              <p className="text-[11px] text-[#8E9EAA] line-clamp-2 leading-relaxed">
-                {log.details}
-              </p>
-
-              {/* Expand Toggle */}
-              <div className="flex items-center justify-between pt-1 text-[11px] text-[#35E0FF]">
-                <button
-                  type="button"
-                  onClick={(e) => toggleExpand(log.id, e)}
-                  className="inline-flex items-center gap-1 hover:underline cursor-pointer"
-                >
-                  {isExpanded ? (
-                    <>
-                      <span>Hide Extra</span>
-                      <ChevronUp className="w-3 h-3" />
-                    </>
-                  ) : (
-                    <>
-                      <span>Inspect Details</span>
-                      <ChevronDown className="w-3 h-3" />
-                    </>
-                  )}
-                </button>
-
-                {log.flightId && (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      onViewFlight?.(log.flightId)
-                    }}
-                    className="inline-flex items-center gap-1 text-[10px] text-[#2FE089] hover:underline"
-                  >
-                    <span>Flight Log</span>
-                    <ExternalLink className="w-2.5 h-2.5" />
-                  </button>
-                )}
-              </div>
-
-              {/* Expanded details */}
-              {isExpanded && (
-                <div className="mt-2 p-2.5 rounded bg-[#05080E] border border-[#1A2633] space-y-1.5 text-[10px]">
-                  <div className="flex justify-between">
-                    <span className="text-[#64748B]">Date:</span>
-                    <span className="text-white">{formatLogDate(log.timestamp)}</span>
-                  </div>
-                  {log.waypointCount !== undefined && (
-                    <div className="flex justify-between">
-                      <span className="text-[#64748B]">Waypoints Progress:</span>
-                      <span className="text-[#35E0FF]">
-                        {log.completedWaypoints ?? 0} / {log.waypointCount} Completed
-                      </span>
-                    </div>
-                  )}
-                  {log.duration && log.duration !== "--" && (
-                    <div className="flex justify-between">
-                      <span className="text-[#64748B]">Sortie Duration:</span>
-                      <span className="text-[#2FE089]">{log.duration}</span>
-                    </div>
-                  )}
-                  {log.distance && log.distance !== "--" && (
-                    <div className="flex justify-between">
-                      <span className="text-[#64748B]">Flight Distance:</span>
-                      <span className="text-white">{log.distance}</span>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )
-        })}
-      </div>
-
-      {/* Desktop / Tablet View: Full Table (lg+) */}
-      <div className="hidden lg:block overflow-x-auto">
-        <table className="w-full text-left text-xs font-mono">
-          <thead className="bg-[#0D1420] text-[#8E9EAA] border-b border-[#1A2633] uppercase text-[10px] tracking-wider">
+    <div className="rounded-2xl bg-white border border-[#D5E1ED] overflow-hidden shadow-xs select-none font-sans flex flex-col">
+      {/* Desktop View: Full Table (lg+) */}
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-xs font-sans border-collapse">
+          <thead className="bg-[#F8FAFC] text-[#64748B] border-b border-[#E2E8F0] uppercase text-[11px] font-bold tracking-wider">
             <tr>
-              <th className="px-3.5 py-3">Timestamp</th>
-              <th className="px-3.5 py-3">Mission / Project</th>
-              <th className="px-3 py-3">ID</th>
-              <th className="px-3 py-3">Drone</th>
-              <th className="px-3.5 py-3">Operator</th>
-              <th className="px-3.5 py-3">Event</th>
-              <th className="px-2.5 py-3">Mode</th>
-              <th className="px-2.5 py-3">Status</th>
-              <th className="px-4 py-3">Milestone Details</th>
-              <th className="px-3 py-3 text-right">Actions</th>
+              <th className="px-4 py-3.5 w-[140px]">Timestamp</th>
+              <th className="px-4 py-3.5 w-[160px]">Mission / Project</th>
+              <th className="px-4 py-3.5 w-[200px]">Event / Milestone</th>
+              <th className="px-3.5 py-3.5 w-[130px]">Target / Drone</th>
+              <th className="px-3.5 py-3.5 w-[130px]">Operator</th>
+              <th className="px-3.5 py-3.5 w-[130px]">Status</th>
+              <th className="px-4 py-3.5">Mission Details & Context</th>
+              <th className="px-4 py-3.5 text-right w-[110px]">Action</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-[#16212E] text-[#EEF4F8]">
+          <tbody className="divide-y divide-[#F1F5F9] text-xs">
             {paginatedLogs.map((log) => {
               const evBadge = getEventBadge(log.event)
               const EvIcon = evBadge.icon
+              const isExpanded = expandedRowId === log.id
 
               return (
-                <tr
-                  key={log.id}
-                  onClick={() => onSelectLog?.(log)}
-                  className="hover:bg-[#111A26] transition cursor-pointer group"
-                >
+                <tr key={log.id} className="hover:bg-[#F8FAFC] transition">
                   {/* Timestamp */}
-                  <td className="px-3.5 py-3 whitespace-nowrap">
-                    <div className="font-semibold text-white text-[11px]">
+                  <td className="px-4 py-3.5 align-middle whitespace-nowrap">
+                    <div className="font-mono font-bold text-[#0D233A] text-xs">
                       {formatLogTime(log.timestamp)}
                     </div>
-                    <div className="text-[10px] text-[#64748B]">
+                    <div className="text-[10px] text-[#64748B] font-mono mt-0.5">
                       {formatLogDate(log.timestamp)}
                     </div>
                   </td>
 
-                  {/* Mission Name */}
-                  <td className="px-3.5 py-3 whitespace-nowrap">
-                    <div className="font-bold text-white group-hover:text-[#35E0FF] transition max-w-[160px] truncate">
-                      {log.missionName || log.projectName}
+                  {/* Mission / Project */}
+                  <td className="px-4 py-3.5 align-middle">
+                    <div className="font-bold text-[#0D233A] text-xs truncate max-w-[150px]">
+                      {log.missionName || log.missionId}
                     </div>
-                    <div className="text-[10px] text-[#64748B]">
-                      {log.waypointCount ? `${log.waypointCount} Waypoints` : "General Plan"}
-                    </div>
-                  </td>
-
-                  {/* Mission ID */}
-                  <td className="px-3 py-3 whitespace-nowrap">
-                    <span className="text-[10px] font-mono font-semibold text-[#35E0FF] bg-[#35E0FF14] px-1.5 py-0.5 rounded border border-[#35E0FF33]">
+                    <div className="text-[11px] font-mono text-[#64748B] truncate mt-0.5">
                       {log.missionId}
-                    </span>
+                    </div>
                   </td>
 
-                  {/* Drone ID */}
-                  <td className="px-3 py-3 whitespace-nowrap font-bold text-white">
-                    {log.droneId}
-                  </td>
-
-                  {/* Operator */}
-                  <td className="px-3.5 py-3 whitespace-nowrap text-[#CBD5E1]">
-                    {log.operator}
-                  </td>
-
-                  {/* Event Badge */}
-                  <td className="px-3.5 py-3 whitespace-nowrap">
+                  {/* Event / Milestone */}
+                  <td className="px-4 py-3.5 align-middle">
                     <span
-                      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md border text-[10px] font-semibold ${evBadge.color}`}
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-[11px] font-bold ${evBadge.color}`}
                     >
-                      <EvIcon className="w-3 h-3 shrink-0" />
+                      <EvIcon className="w-3.5 h-3.5" />
                       <span>{log.event}</span>
                     </span>
                   </td>
 
-                  {/* Flight Mode */}
-                  <td className="px-2.5 py-3 whitespace-nowrap">
-                    <span
-                      className={`text-[10px] px-1.5 py-0.5 rounded border font-bold ${getModeBadge(
-                        log.flightMode
-                      )}`}
-                    >
-                      {log.flightMode}
-                    </span>
+                  {/* Drone */}
+                  <td className="px-3.5 py-3.5 align-middle font-mono font-semibold text-[#0E2646]">
+                    {log.droneId || "DRONE-001"}
                   </td>
 
-                  {/* Status Badge */}
-                  <td className="px-2.5 py-3 whitespace-nowrap">
+                  {/* Operator */}
+                  <td className="px-3.5 py-3.5 align-middle text-[#475569] font-medium">
+                    {log.operator || "Operator"}
+                  </td>
+
+                  {/* Status */}
+                  <td className="px-3.5 py-3.5 align-middle">
                     <span
-                      className={`text-[10px] px-2 py-0.5 rounded-full font-bold border uppercase ${getStatusBadge(
+                      className={`inline-block px-2.5 py-0.5 rounded-md border text-[11px] font-bold ${getStatusBadge(
                         log.status
                       )}`}
                     >
-                      {log.status}
+                      {log.status || "Ready"}
                     </span>
                   </td>
 
-                  {/* Milestone Details */}
-                  <td className="px-4 py-3 max-w-[280px]">
-                    <div className="text-[11px] text-[#94A3B8] truncate leading-tight">
-                      {log.details}
+                  {/* Details */}
+                  <td className="px-4 py-3.5 align-middle text-[#334155] leading-relaxed max-w-md">
+                    <div className={isExpanded ? "" : "line-clamp-2"}>
+                      {log.details || "--"}
                     </div>
-                    {log.completedWaypoints !== undefined && log.waypointCount > 0 && (
-                      <div className="text-[9px] text-[#64748B] mt-0.5">
-                        WP: {log.completedWaypoints}/{log.waypointCount}
-                      </div>
+                    {log.flightId && (
+                      <button
+                        type="button"
+                        onClick={() => onViewFlight?.(log.flightId)}
+                        className="inline-flex items-center gap-1 text-[11px] font-bold text-[#15803D] hover:underline mt-1 cursor-pointer"
+                      >
+                        <span>Flight Sortie {log.flightId}</span>
+                        <ExternalLink className="w-2.5 h-2.5" />
+                      </button>
                     )}
                   </td>
 
-                  {/* Actions */}
-                  <td className="px-3 py-3 text-right whitespace-nowrap">
+                  {/* Action */}
+                  <td className="px-4 py-3.5 align-middle text-right whitespace-nowrap">
                     <button
                       type="button"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        onSelectLog?.(log)
-                      }}
-                      className="inline-flex items-center gap-1 px-2 py-1 rounded bg-[#172230] border border-[#23354A] hover:border-[#35E0FF] hover:text-[#35E0FF] text-[#B7F3FF] text-[11px] transition cursor-pointer"
+                      onClick={() => onSelectLog?.(log)}
+                      className="inline-flex items-center gap-1 text-xs font-bold text-[#1E64D4] hover:underline cursor-pointer"
                     >
-                      <span>Inspect</span>
-                      <ChevronRight className="w-3 h-3" />
+                      <span>Inspect &gt;</span>
                     </button>
                   </td>
                 </tr>
@@ -395,72 +218,58 @@ export const MissionLogTable = ({
         </table>
       </div>
 
-      {/* Pagination Bar */}
-      <div className="px-4 py-3 bg-[#0B1017] border-t border-[#1A2633] flex flex-wrap items-center justify-between gap-2.5 text-xs">
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="text-[#8E9EAA] text-[11px]">
-            Page <span className="text-white font-bold">{currentPage}</span> of{" "}
-            <span className="text-white font-bold">{totalPages}</span> ({logs.length} Total Logs)
+      {/* Pagination Footer */}
+      <div className="px-4 py-3 bg-white border-t border-[#E2E8F0] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-[#64748B]">
+        <div className="flex items-center gap-3">
+          <span>
+            Showing <strong className="text-[#0D233A]">{(currentPage - 1) * actualPageSize + 1}</strong> to{" "}
+            <strong className="text-[#0D233A]">
+              {Math.min(currentPage * actualPageSize, logs.length)}
+            </strong>{" "}
+            of <strong className="text-[#0D233A]">{logs.length}</strong> records
           </span>
 
-          <div className="flex items-center gap-1.5 text-[11px] text-[#8E9EAA]">
-            <span>Rows:</span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px]">Rows:</span>
             <select
               value={pageSize}
               onChange={(e) => {
-                const val = e.target.value === "ALL" ? "ALL" : Number(e.target.value)
-                setPageSize(val)
+                setPageSize(e.target.value === "ALL" ? "ALL" : Number(e.target.value))
                 setCurrentPage(1)
               }}
-              className="bg-[#16212E] text-white border border-[#23354A] rounded px-1.5 py-0.5 text-xs focus:outline-none focus:border-[#35E0FF] cursor-pointer"
+              className="h-7 px-1.5 rounded-lg bg-[#F8FAFC] border border-[#CAD8E6] text-xs font-semibold text-[#0E2646] focus:border-[#1E64D4] outline-none"
             >
-              <option value={15}>15</option>
+              <option value={10}>10</option>
               <option value={25}>25</option>
               <option value={50}>50</option>
-              <option value={100}>100</option>
               <option value="ALL">All</option>
             </select>
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            disabled={currentPage <= 1}
-            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-            className="px-2.5 py-1 rounded bg-[#16212E] text-[#CBD5E1] hover:bg-[#202F42] hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition text-xs"
-          >
-            Prev
-          </button>
-          {Array.from({ length: totalPages }, (_, i) => i + 1)
-            .filter((p) => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
-            .map((p, idx, arr) => (
-              <span key={p} className="flex items-center">
-                {idx > 0 && arr[idx - 1] !== p - 1 && (
-                  <span className="px-1 text-[#64748B]">...</span>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setCurrentPage(p)}
-                  className={`w-7 h-7 rounded text-xs transition cursor-pointer ${
-                    p === currentPage
-                      ? "bg-[#35E0FF] text-[#0A0E16] font-bold"
-                      : "bg-[#16212E] text-[#CBD5E1] hover:bg-[#202F42]"
-                  }`}
-                >
-                  {p}
-                </button>
-              </span>
-            ))}
-          <button
-            type="button"
-            disabled={currentPage >= totalPages}
-            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-            className="px-2.5 py-1 rounded bg-[#16212E] text-[#CBD5E1] hover:bg-[#202F42] hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition text-xs"
-          >
-            Next
-          </button>
-        </div>
+        {pageSize !== "ALL" && totalPages > 1 && (
+          <div className="flex items-center gap-1 self-end sm:self-auto">
+            <button
+              type="button"
+              disabled={currentPage === 1}
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              className="p-1.5 rounded-lg border border-[#CAD8E6] text-[#475569] hover:bg-[#F8FAFC] disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <span className="px-2 font-bold text-[#0D233A]">
+              {currentPage} / {totalPages}
+            </span>
+            <button
+              type="button"
+              disabled={currentPage === totalPages}
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              className="p-1.5 rounded-lg border border-[#CAD8E6] text-[#475569] hover:bg-[#F8FAFC] disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )

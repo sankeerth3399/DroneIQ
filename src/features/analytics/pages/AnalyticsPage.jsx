@@ -1,5 +1,5 @@
 import { useAnalytics } from "../hooks/useAnalytics.js"
-import AnalyticsLanding from "../components/AnalyticsLanding.jsx"
+import AnalyticsOverview from "../components/AnalyticsOverview.jsx"
 import DashboardDetailHeader from "../components/DashboardDetailHeader.jsx"
 import DataContextBar from "../components/DataContextBar.jsx"
 import AnalyticsFilters from "../components/AnalyticsFilters.jsx"
@@ -55,8 +55,10 @@ export const AnalyticsPage = () => {
   const totalMissions = missions.length || (fleetData?.kpis?.missionsCompleted ?? 0)
 
   return (
-    <div className="relative h-full min-h-0 w-full overflow-y-auto bg-[#06090E] p-4 sm:p-6 lg:p-8 select-none font-mono text-white space-y-6">
-      {error ? (
+    <div className="command-page relative h-full min-h-0 w-full overflow-y-auto p-3 sm:p-5 lg:p-6 select-none font-sans text-white space-y-5">
+      {!activeDashboard ? (
+        <AnalyticsOverview onOpenDashboard={setActiveDashboard} />
+      ) : error ? (
         /* Error State with Retry Button */
         <div className="p-8 rounded-2xl bg-[#1F1315] border border-[#5E2222] text-center font-mono text-xs text-[#FF8585] space-y-3 shadow-xl">
           <div className="flex items-center justify-center gap-2 text-sm font-bold">
@@ -83,25 +85,6 @@ export const AnalyticsPage = () => {
             Synchronizing flight sorties, GNSS satellite fixes, battery profiles, and MAVLink event logs
           </p>
         </div>
-      ) : !activeDashboard ? (
-        /* ============================================================ */
-        /* 1. ANALYTICS DASHBOARD LANDING PAGE                          */
-        /* ============================================================ */
-        <AnalyticsLanding
-          isLive={isLive}
-          fleetData={fleetData}
-          drones={drones}
-          missions={missions}
-          flightHistory={flightHistory}
-          onOpenDashboard={(dashboardId) => setActiveDashboard(dashboardId)}
-          onSelectDrone={(droneId) => {
-            handleFilterChange("droneId", droneId)
-            setActiveDashboard("drones")
-          }}
-          onRefresh={refresh}
-          isRefreshing={isRefreshing}
-          onExport={handleExport}
-        />
       ) : (
         /* ============================================================ */
         /* 2. DETAILED DRILL-DOWN DASHBOARD PAGE                        */

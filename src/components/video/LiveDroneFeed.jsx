@@ -22,7 +22,7 @@ import { videoService, getStreamIdFromDroneId } from "@/services/videoService.js
  * @param {string} [props.cameraType="main"] - Camera stream mode ("main" or "fpv")
  * @param {string} [props.className=""] - Optional wrapper container CSS classes
  */
-export function LiveDroneFeed({ droneId = "DRONE-001", cameraType = "main", className = "" }) {
+export function LiveDroneFeed({ droneId = "DRONE-001", cameraType = "main", className = "", onStatusChange }) {
   const containerRef = useRef(null)
   const isUnmountedRef = useRef(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
@@ -232,6 +232,10 @@ export function LiveDroneFeed({ droneId = "DRONE-001", cameraType = "main", clas
   }
 
   const status = getStatusBadge()
+
+  useEffect(() => {
+    onStatusChange?.({ isPlaying, isLoading, error: effectiveError, connectionState })
+  }, [connectionState, effectiveError, isLoading, isPlaying, onStatusChange])
 
   return (
     <div

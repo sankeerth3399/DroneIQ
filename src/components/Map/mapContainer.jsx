@@ -5,9 +5,15 @@ import {
   FALLBACK_DRONE_LOCATION,
   PositionSource,
   isValidGpsCoordinate,
+  TELEMETRY_STALE_THRESHOLD_MS,
 } from "@/services/telemetry/telemetryTypes.js";
 import { resolveInitialMapState } from "@/config/mapConfig.js";
-import { ensureSatelliteLayer, applyMapStyle, getUnderlyingMap } from "./satelliteLayerHelper.js";
+import {
+  ensureSatelliteLayer,
+  applyMapStyle,
+  getUnderlyingMap,
+  enforceMapLayerOrder,
+} from "./satelliteLayerHelper.js";
 import { buildDroneMarkerHtml } from "./droneMarkerHelper.js";
 import { buildWaypointMarkerHtml } from "./waypointMarkerHelper.js";
 import {
@@ -24,6 +30,7 @@ import {
   removeRouteLayers,
 } from "./routeLayerHelper.js";
 import { useMission } from "@/hooks/useMission.js";
+import { isPointInsideGeofence } from "@/utils/geofence.js";
 
 const normalizeLongitude = (lng) => {
   if (typeof lng !== "number" || isNaN(lng)) return FALLBACK_DRONE_LOCATION.longitude;
@@ -53,17 +60,21 @@ const MapContainer = ({
   onGeofenceVertexDrag,
   onGeofenceVertexDragEnd,
   onGeofenceEditHover,
+  onGeofenceClick,
   routeViolations = [],
   invalidClickPoint = null,
   followDrone = false,
   pageType = "fly",
   initialCenter: propInitialCenter = null,
   initialZoom: propInitialZoom = null,
+  onDroneSelect,
 }) => {
   const { currentProjectId, currentProject } = useMission();
   const mapRef = useRef(null);
   const containerRef = useRef(null);
   const markerRef = useRef(null);
+  const fleetMarkersRef = useRef(new Map());
+  const onDroneSelectRef = useRef(onDroneSelect);
   const markerRotatorRef = useRef(null);
   const invalidMarkerRef = useRef(null);
   const geofenceInsertionMarkerRef = useRef(null);
@@ -72,6 +83,7 @@ const MapContainer = ({
   const markerScalerRef = useRef(null);
   const polylineRef = useRef(null);
   const [sdkAvailable, setSdkAvailable] = useState(() => typeof window !== "undefined" && Boolean(window.mappls));
+  const [mapReady, setMapReady] = useState(false);
 
   const effectivePageType = useMemo(() => {
     if (pageType) return String(pageType).toLowerCase().trim();
@@ -83,6 +95,9 @@ const MapContainer = ({
   const {
     telemetry: contextTelemetry,
     selectedDroneId,
+    fleetTelemetry,
+    selectDrone,
+    connectionState: telemetryConnectionState,
     connectionState: contextConnectionState,
     isLive: contextIsLive,
     isStale: contextIsStale,
@@ -112,6 +127,29 @@ const MapContainer = ({
     hasValidGps &&
     telemetry?.positionSource === PositionSource.LIVE
   );
+
+  useEffect(() => {
+    onDroneSelectRef.current = onDroneSelect;
+  }, [onDroneSelect]);
+
+  const bindDashboardDroneSelect = useCallback((marker, droneId) => {
+    if (!marker || effectivePageType !== "dashboard") return;
+    const handleSelect = (event) => {
+      event?.stopPropagation?.();
+      if (onDroneSelectRef.current) {
+        onDroneSelectRef.current(droneId);
+      } else {
+        selectDrone(droneId);
+      }
+    };
+    if (typeof marker.addListener === "function") {
+      marker.addListener("click", handleSelect);
+    } else if (typeof marker.on === "function") {
+      marker.on("click", handleSelect);
+    } else {
+      setTimeout(() => marker.getElement?.()?.addEventListener("click", handleSelect), 60);
+    }
+  }, [effectivePageType, selectDrone]);
 
   // Position source resolution: prioritize LIVE real drone GPS, fallback to Hyderabad for development
   const positionSource = hasLiveDroneLocation
@@ -186,6 +224,7 @@ const MapContainer = ({
               position: { lat: activeLat, lng: activeLng },
               html: buildDroneMarkerHtml(droneCallsign, heading),
             });
+            bindDashboardDroneSelect(markerRef.current, droneCallsign);
             attachMarkerDomRefs();
           } catch (err) {
             console.warn("[MapContainer] Marker creation error:", err.message);
@@ -228,6 +267,7 @@ const MapContainer = ({
               position: { lat: activeLat, lng: activeLng },
               html: buildDroneMarkerHtml(droneCallsign, heading),
             });
+            bindDashboardDroneSelect(markerRef.current, droneCallsign);
             attachMarkerDomRefs();
           } catch (err) {
             console.warn("[MapContainer] Marker re-creation error:", err.message);
@@ -275,6 +315,7 @@ const MapContainer = ({
             position: { lat: activeLat, lng: activeLng },
             html: buildDroneMarkerHtml(droneCallsign, heading),
           });
+          bindDashboardDroneSelect(markerRef.current, droneCallsign);
           attachMarkerDomRefs();
         } catch (err) {
           console.warn("[MapContainer] Marker creation error:", err.message);
@@ -316,8 +357,105 @@ const MapContainer = ({
     isDrawingOrEditingGeofence,
     isPlacingWaypoint,
     attachMarkerDomRefs,
+    bindDashboardDroneSelect,
     effectivePageType,
+    hasLiveDroneLocation,
   ]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    const canRenderFleet = effectivePageType === "dashboard" && map && window.mappls?.Marker && telemetryConnectionState === "AUTHENTICATED";
+    const liveDrones = new Map();
+
+    if (canRenderFleet) {
+      const now = Date.now();
+      Object.entries(fleetTelemetry || {}).forEach(([droneId, droneTelemetry]) => {
+        const receivedAt = droneTelemetry?._telemetryReceivedAt;
+        if (
+          droneId === selectedDroneId ||
+          !droneTelemetry?._isRealTelemetry ||
+          droneTelemetry?.positionSource !== PositionSource.LIVE ||
+          !isValidGpsCoordinate(droneTelemetry?.latitude, droneTelemetry?.longitude) ||
+          !Number.isFinite(receivedAt) ||
+          now - receivedAt > TELEMETRY_STALE_THRESHOLD_MS
+        ) {
+          return;
+        }
+        liveDrones.set(droneId, droneTelemetry);
+      });
+    }
+
+    for (const [droneId, markerRecord] of fleetMarkersRef.current) {
+      if (!liveDrones.has(droneId)) {
+        markerRecord.marker?.remove?.();
+        fleetMarkersRef.current.delete(droneId);
+      }
+    }
+
+    liveDrones.forEach((droneTelemetry, droneId) => {
+      const position = {
+        lat: Number(droneTelemetry.latitude),
+        lng: Number(droneTelemetry.longitude),
+      };
+      const heading = typeof droneTelemetry.heading === "number" ? droneTelemetry.heading : 0;
+      let markerRecord = fleetMarkersRef.current.get(droneId);
+
+      if (!markerRecord) {
+        try {
+          const marker = new window.mappls.Marker({
+            map,
+            position,
+            html: buildDroneMarkerHtml(droneId, heading),
+          });
+          const handleSelect = (event) => {
+            event?.stopPropagation?.();
+            if (onDroneSelectRef.current) {
+              onDroneSelectRef.current(droneId);
+            } else {
+              selectDrone(droneId);
+            }
+          };
+          if (typeof marker.addListener === "function") {
+            marker.addListener("click", handleSelect);
+          } else if (typeof marker.on === "function") {
+            marker.on("click", handleSelect);
+          }
+          markerRecord = { marker, handleSelect };
+          fleetMarkersRef.current.set(droneId, markerRecord);
+        } catch (err) {
+          console.warn("[MapContainer] Fleet marker creation error:", err.message);
+          return;
+        }
+      } else {
+        try {
+          if (typeof markerRecord.marker.setPosition === "function") {
+            markerRecord.marker.setPosition(position);
+          } else if (typeof markerRecord.marker.setLngLat === "function") {
+            markerRecord.marker.setLngLat([position.lng, position.lat]);
+          }
+          const rotator = markerRecord.marker.getElement?.().querySelector(".drone-marker-rotator");
+          if (rotator) rotator.style.transform = `rotate(${heading}deg)`;
+        } catch (err) {
+          console.debug("[MapContainer] Fleet marker update note:", err.message);
+        }
+      }
+    });
+  }, [
+    effectivePageType,
+    fleetTelemetry,
+    selectedDroneId,
+    selectDrone,
+    sdkAvailable,
+    mapReady,
+    telemetryConnectionState,
+  ]);
+
+  useEffect(() => () => {
+    for (const { marker } of fleetMarkersRef.current.values()) {
+      marker?.remove?.();
+    }
+    fleetMarkersRef.current.clear();
+  }, []);
 
   useEffect(() => {
     mapStyleRef.current = mapStyle;
@@ -336,6 +474,17 @@ const MapContainer = ({
   const waypointMarkersRef = useRef(new Map());
   const directionMarkersRef = useRef(new Map());
   const draggingWaypointIdRef = useRef(null);
+  const selectedWaypointIdRef = useRef(selectedWaypointId);
+  const waypointsRef = useRef(waypoints);
+
+  useEffect(() => {
+    selectedWaypointIdRef.current = selectedWaypointId;
+  }, [selectedWaypointId]);
+
+  useEffect(() => {
+    waypointsRef.current = waypoints;
+  }, [waypoints]);
+
   const missionRouteStateRef = useRef({
     waypoints,
     showMissionRoute,
@@ -356,6 +505,11 @@ const MapContainer = ({
   const onGeofenceVertexDragEndRef = useRef(onGeofenceVertexDragEnd);
   const onGeofenceVertexSelectRef = useRef(onGeofenceVertexSelect);
   const onGeofenceEditHoverRef = useRef(onGeofenceEditHover);
+  const onGeofenceClickRef = useRef(onGeofenceClick);
+
+  useEffect(() => {
+    onGeofenceClickRef.current = onGeofenceClick;
+  }, [onGeofenceClick]);
 
   useEffect(() => {
     missionRouteStateRef.current = {
@@ -377,10 +531,154 @@ const MapContainer = ({
     isClosedGeofence,
   ]);
 
-  const syncCurrentMissionRoute = (map) => {
+  const syncCurrentWaypointMarkers = (map, explicitWaypoints) => {
+    const targetMap = map || mapRef.current;
+    if (!targetMap || !window.mappls) return;
+
+    const currentMarkers = waypointMarkersRef.current;
+    const targetWps = explicitWaypoints || waypointsRef.current || waypoints || [];
+    const nextIds = new Set(targetWps.map((w, idx) => w.id || `wp-${idx + 1}`));
+
+    // 1. Remove deleted markers
+    for (const [id, markerObj] of currentMarkers.entries()) {
+      if (!nextIds.has(id)) {
+        try {
+          markerObj.marker?.remove?.();
+        } catch {
+          // Safe ignore
+        }
+        currentMarkers.delete(id);
+      }
+    }
+
+    // 2. Add or update active waypoint markers
+    targetWps.forEach((wp, index) => {
+      const wId = wp.id || `wp-${index + 1}`;
+      const isSelected = wId === selectedWaypointIdRef.current;
+      const existing = currentMarkers.get(wId);
+
+      const seqNum = wp.seq ?? wp.sequence ?? index + 1;
+      const markerWp = {
+        ...wp,
+        id: wId,
+        seq: seqNum,
+        sequence: seqNum,
+        label: `WP${seqNum}`,
+      };
+
+      if (existing) {
+        try {
+          if (draggingWaypointIdRef.current !== wId) {
+            if (typeof existing.marker.setPosition === "function") {
+              existing.marker.setPosition({ lat: wp.lat, lng: wp.lng });
+            } else if (typeof existing.marker.setLngLat === "function") {
+              existing.marker.setLngLat([wp.lng, wp.lat]);
+            }
+          }
+
+          const newHtml = buildWaypointMarkerHtml(markerWp, isSelected);
+          if (existing.html !== newHtml) {
+            existing.html = newHtml;
+            const el = existing.marker.getElement?.();
+            if (el) el.innerHTML = newHtml;
+          }
+        } catch (err) {
+          console.debug("[MapContainer] Waypoint marker update note:", err.message);
+        }
+      } else {
+        try {
+          const markerHtml = buildWaypointMarkerHtml(markerWp, isSelected);
+          const marker = new window.mappls.Marker({
+            map: targetMap,
+            position: { lat: wp.lat, lng: wp.lng },
+            html: markerHtml,
+            draggable: Boolean(onWaypointDragRef.current),
+          });
+
+          const el = marker.getElement?.();
+          if (el) {
+            el.style.zIndex = isSelected ? "45" : "35";
+          }
+
+          const handleDrag = () => {
+            try {
+              draggingWaypointIdRef.current = wId;
+              const pos = marker.getPosition?.() || marker.getLngLat?.();
+              if (pos) {
+                const pLat = typeof pos.lat === "function" ? pos.lat() : pos.lat;
+                const pLng = typeof pos.lng === "function" ? pos.lng() : pos.lng;
+                onWaypointDragRef.current?.(wId, {
+                  lat: Number(Number(pLat).toFixed(6)),
+                  lng: Number(Number(pLng).toFixed(6)),
+                });
+              }
+            } catch (err) {
+              console.debug("[MapContainer] Drag note:", err.message);
+            }
+          };
+
+          const handleDragEnd = () => {
+            try {
+              draggingWaypointIdRef.current = null;
+              const pos = marker.getPosition?.() || marker.getLngLat?.();
+              if (pos) {
+                const pLat = typeof pos.lat === "function" ? pos.lat() : pos.lat;
+                const pLng = typeof pos.lng === "function" ? pos.lng() : pos.lng;
+                onWaypointDragEndRef.current?.(wId, {
+                  lat: Number(Number(pLat).toFixed(6)),
+                  lng: Number(Number(pLng).toFixed(6)),
+                });
+              }
+            } catch (err) {
+              console.debug("[MapContainer] DragEnd note:", err.message);
+            }
+          };
+
+          if (typeof marker.addListener === "function") {
+            marker.addListener("drag", handleDrag);
+            marker.addListener("dragend", handleDragEnd);
+          } else if (typeof marker.on === "function") {
+            marker.on("drag", handleDrag);
+            marker.on("dragend", handleDragEnd);
+          }
+
+          setTimeout(() => {
+            const markerEl = marker.getElement?.();
+            if (markerEl) {
+              markerEl.style.zIndex = isSelected ? "45" : "35";
+              markerEl.addEventListener("click", (evt) => {
+                evt.stopPropagation();
+                onWaypointSelectRef.current?.(wId);
+              });
+            }
+          }, 60);
+
+          currentMarkers.set(wId, { marker, html: markerHtml });
+        } catch (err) {
+          console.warn("[MapContainer] Waypoint marker creation note:", err.message);
+        }
+      }
+    });
+
+    // Apply responsive zoom scaling
+    if (typeof targetMap.getZoom === "function") {
+      const z = targetMap.getZoom();
+      const wpScale = z < 12 ? 0.82 : z > 16 ? 1.05 : z >= 14 ? 1.0 : 0.92;
+      const container = document.getElementById(mapId);
+      if (container) {
+        const shells = container.querySelectorAll(".waypoint-marker-shell");
+        shells.forEach((shell) => {
+          shell.style.transform = `scale(${wpScale})`;
+        });
+      }
+    }
+  };
+
+  const syncCurrentMissionRoute = (map, explicitWaypoints) => {
     const routeState = missionRouteStateRef.current;
-    syncMissionRoute(map, routeState.waypoints, routeState.showMissionRoute, routeState.isSatellite);
-    syncDirectionMarkers(map, routeState.waypoints, routeState.showMissionRoute, directionMarkersRef);
+    const targetWps = explicitWaypoints || routeState.waypoints;
+    syncMissionRoute(map, targetWps, routeState.showMissionRoute, routeState.isSatellite);
+    syncDirectionMarkers(map, targetWps, routeState.showMissionRoute, directionMarkersRef);
   };
 
   const syncCurrentGeofenceLayers = (map) => {
@@ -549,7 +847,7 @@ const MapContainer = ({
     const showMarkers =
       isEditingGeofence ||
       isDrawingGeofence ||
-      (effectivePageType === "geofence" && geofenceCoords.length > 0);
+      geofenceCoords.length > 0;
 
     if (!showMarkers) {
       for (const [, obj] of currentMarkers.entries()) {
@@ -733,124 +1031,16 @@ const MapContainer = ({
         }
       }
     });
-  }, [geofenceCoords, isEditingGeofence, isDrawingGeofence, selectedGeofenceVertexId, effectivePageType]);
+  }, [geofenceCoords, isEditingGeofence, isDrawingGeofence, selectedGeofenceVertexId, effectivePageType, mapReady]);
 
   // Synchronize Waypoint Markers & Mission Route on Map
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !window.mappls) return;
+    if (!map || !mapReady) return;
 
-    const currentMarkers = waypointMarkersRef.current;
-    const nextIds = new Set(waypoints.map((w) => w.id));
-
-    // 1. Remove deleted markers
-    for (const [id, markerObj] of currentMarkers.entries()) {
-      if (!nextIds.has(id)) {
-        try {
-          markerObj.marker?.remove?.();
-        } catch {
-          // Safe ignore
-        }
-        currentMarkers.delete(id);
-      }
-    }
-
-    // 2. Add or update active waypoint markers
-    waypoints.forEach((wp) => {
-      const isSelected = wp.id === selectedWaypointId;
-      const existing = currentMarkers.get(wp.id);
-
-      if (existing) {
-        try {
-          if (draggingWaypointIdRef.current !== wp.id) {
-            if (typeof existing.marker.setPosition === "function") {
-              existing.marker.setPosition({ lat: wp.lat, lng: wp.lng });
-            } else if (typeof existing.marker.setLngLat === "function") {
-              existing.marker.setLngLat([wp.lng, wp.lat]);
-            }
-          }
-
-          const newHtml = buildWaypointMarkerHtml(wp, isSelected);
-          if (existing.html !== newHtml) {
-            existing.html = newHtml;
-            const el = existing.marker.getElement?.();
-            if (el) el.innerHTML = newHtml;
-          }
-        } catch (err) {
-          console.debug("[MapContainer] Waypoint marker update note:", err.message);
-        }
-      } else {
-        try {
-          const markerHtml = buildWaypointMarkerHtml(wp, isSelected);
-          const marker = new window.mappls.Marker({
-            map,
-            position: { lat: wp.lat, lng: wp.lng },
-            html: markerHtml,
-            draggable: true,
-          });
-
-          const handleDrag = () => {
-            try {
-              draggingWaypointIdRef.current = wp.id;
-              const pos = marker.getPosition?.() || marker.getLngLat?.();
-              if (pos) {
-                const pLat = typeof pos.lat === "function" ? pos.lat() : pos.lat;
-                const pLng = typeof pos.lng === "function" ? pos.lng() : pos.lng;
-                onWaypointDragRef.current?.(wp.id, {
-                  lat: Number(Number(pLat).toFixed(6)),
-                  lng: Number(Number(pLng).toFixed(6)),
-                });
-              }
-            } catch (err) {
-              console.debug("[MapContainer] Drag note:", err.message);
-            }
-          };
-
-          const handleDragEnd = () => {
-            try {
-              draggingWaypointIdRef.current = null;
-              const pos = marker.getPosition?.() || marker.getLngLat?.();
-              if (pos) {
-                const pLat = typeof pos.lat === "function" ? pos.lat() : pos.lat;
-                const pLng = typeof pos.lng === "function" ? pos.lng() : pos.lng;
-                onWaypointDragEndRef.current?.(wp.id, {
-                  lat: Number(Number(pLat).toFixed(6)),
-                  lng: Number(Number(pLng).toFixed(6)),
-                });
-              }
-            } catch (err) {
-              console.debug("[MapContainer] DragEnd note:", err.message);
-            }
-          };
-
-          if (typeof marker.addListener === "function") {
-            marker.addListener("drag", handleDrag);
-            marker.addListener("dragend", handleDragEnd);
-          } else if (typeof marker.on === "function") {
-            marker.on("drag", handleDrag);
-            marker.on("dragend", handleDragEnd);
-          }
-
-          setTimeout(() => {
-            const el = marker.getElement?.();
-            if (el) {
-              el.addEventListener("click", (evt) => {
-                evt.stopPropagation();
-                onWaypointSelectRef.current?.(wp.id);
-              });
-            }
-          }, 60);
-
-          currentMarkers.set(wp.id, { marker, html: markerHtml });
-        } catch (err) {
-          console.warn("[MapContainer] Waypoint marker creation note:", err.message);
-        }
-      }
-    });
-
-    // 3. Synchronize Straight Mission Route Layers & Direction Chevrons
-    syncCurrentMissionRoute(map);
-  }, [waypoints, selectedWaypointId, showMissionRoute, mapStyle]);
+    syncCurrentWaypointMarkers(map, waypoints);
+    syncCurrentMissionRoute(map, waypoints);
+  }, [waypoints, selectedWaypointId, showMissionRoute, mapStyle, mapReady]);
 
   // Initialize Mappls Map with async SDK readiness polling & unique element ID
   useEffect(() => {
@@ -952,7 +1142,7 @@ const MapContainer = ({
 
         mapRef.current = map;
 
-        // Map Click Listener for Waypoint Placement Mode & Geofence Drawing
+        // Map Click Listener for Waypoint Placement Mode, Geofence Drawing & Selection
         map.on("click", (e) => {
           if (!e || !e.lngLat) return;
           const origTarget = e.originalEvent?.target;
@@ -963,10 +1153,24 @@ const MapContainer = ({
           ) {
             return;
           }
-          onMapClickRef.current?.({
+
+          const clickPt = {
             lat: Number(Number(e.lngLat.lat).toFixed(6)),
             lng: Number(Number(e.lngLat.lng).toFixed(6)),
-          });
+          };
+
+          // If clicking inside geofence polygon and onGeofenceClick is provided
+          const currentGeofence = missionRouteStateRef.current.geofenceCoords;
+          if (
+            onGeofenceClickRef.current &&
+            currentGeofence.length >= 3 &&
+            isPointInsideGeofence(clickPt, currentGeofence)
+          ) {
+            onGeofenceClickRef.current(clickPt);
+            return;
+          }
+
+          onMapClickRef.current?.(clickPt);
         });
         map.on("mousemove", (e) => {
           if (!isEditingGeofence || !e?.lngLat) return;
@@ -980,6 +1184,7 @@ const MapContainer = ({
         const onMapReady = () => {
           if (cancelled) return;
           setSdkAvailable(true);
+          setMapReady(true);
           map.resize?.();
 
           // Initialize satellite layer and apply style
@@ -987,6 +1192,8 @@ const MapContainer = ({
           applyMapStyle(map, mapStyleRef.current, polylineRef);
           syncCurrentGeofenceLayers(map);
           syncCurrentMissionRoute(map);
+          syncCurrentWaypointMarkers(map);
+          enforceMapLayerOrder(map);
 
           // Track user map pan/drag to decouple camera centering from live marker updates
           map.on("dragstart", () => {
@@ -995,10 +1202,20 @@ const MapContainer = ({
 
           // Responsive zoom scaling listener
           const handleZoom = () => {
-            if (markerScalerRef.current && typeof map.getZoom === "function") {
+            if (typeof map.getZoom === "function") {
               const z = map.getZoom();
-              const scale = z < 12 ? 0.82 : z > 16 ? 1.15 : 1.0;
-              markerScalerRef.current.style.transform = `scale(${scale})`;
+              const scale = z < 12 ? 0.78 : z > 16 ? 1.15 : z >= 14 ? 1.0 : 0.88;
+              if (markerScalerRef.current) {
+                markerScalerRef.current.style.transform = `scale(${scale})`;
+              }
+              const wpScale = z < 12 ? 0.82 : z > 16 ? 1.05 : z >= 14 ? 1.0 : 0.92;
+              const mapEl = document.getElementById(mapId);
+              if (mapEl) {
+                const shells = mapEl.querySelectorAll(".waypoint-marker-shell");
+                shells.forEach((shell) => {
+                  shell.style.transform = `scale(${wpScale})`;
+                });
+              }
             }
           };
           map.on("zoom", handleZoom);
@@ -1007,7 +1224,10 @@ const MapContainer = ({
           });
 
           // Initialize custom top-down drone marker (Live GPS or Hyderabad Fallback)
-          if (typeof window.mappls.Marker === "function" && !markerRef.current) {
+          if (
+            typeof window.mappls.Marker === "function" &&
+            !markerRef.current
+          ) {
             if (hasLiveDroneLocation) {
               hasHadFirstFixRef.current = true;
             }
@@ -1017,6 +1237,7 @@ const MapContainer = ({
                 position: { lat: activeLat, lng: activeLng },
                 html: buildDroneMarkerHtml(droneCallsign, heading),
               });
+              bindDashboardDroneSelect(markerRef.current, droneCallsign);
               attachMarkerDomRefs();
             } catch (markerErr) {
               console.warn("[MapContainer] Marker creation note:", markerErr.message);
@@ -1030,6 +1251,8 @@ const MapContainer = ({
           applyMapStyle(map, mapStyleRef.current, polylineRef);
           syncCurrentGeofenceLayers(map);
           syncCurrentMissionRoute(map);
+          syncCurrentWaypointMarkers(map);
+          enforceMapLayerOrder(map);
         };
 
         if (map.loaded?.()) {
@@ -1192,6 +1415,58 @@ const MapContainer = ({
       if (ro) ro.disconnect();
     };
   }, [mapId]);
+
+  // Smooth project change camera transition
+  const lastCenterProjectRef = useRef(null);
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady || !currentProjectId) return;
+
+    if (lastCenterProjectRef.current !== currentProjectId) {
+      lastCenterProjectRef.current = currentProjectId;
+      const { center, zoom } = resolveInitialMapState({
+        pageType: effectivePageType,
+        hasLiveDroneLocation,
+        activeLat,
+        activeLng,
+        geofenceCoords,
+        waypoints,
+        customCenter: propInitialCenter,
+        customZoom: propInitialZoom,
+      });
+
+      const centerObj = {
+        lat: Number(center[0] ?? center.lat ?? FALLBACK_DRONE_LOCATION.latitude),
+        lng: Number(center[1] ?? center.lng ?? FALLBACK_DRONE_LOCATION.longitude),
+      };
+
+      try {
+        if (typeof map.flyTo === "function") {
+          map.flyTo({
+            center: centerObj,
+            zoom: zoom || OPERATIONAL_MAP_ZOOM,
+            duration: 800,
+          });
+        } else if (typeof map.setCenter === "function") {
+          map.setCenter(centerObj);
+          if (zoom) map.setZoom(zoom);
+        }
+      } catch (err) {
+        console.debug("[MapContainer] Project center fly error:", err.message);
+      }
+    }
+  }, [
+    currentProjectId,
+    mapReady,
+    effectivePageType,
+    hasLiveDroneLocation,
+    activeLat,
+    activeLng,
+    geofenceCoords,
+    waypoints,
+    propInitialCenter,
+    propInitialZoom,
+  ]);
 
 
   // Shortest-path angle interpolation for smooth heading rotation (359° -> 0° safe)
@@ -1503,10 +1778,6 @@ const MapContainer = ({
                         const x2 = 180 + dLngM2 * 0.8;
                         const y2 = 180 - dLatM2 * 0.8;
 
-                        const midX = (x1 + x2) / 2;
-                        const midY = (y1 + y2) / 2;
-                        const angleDeg = (Math.atan2(y2 - y1, x2 - x1) * 180) / Math.PI;
-
                         return (
                           <g key={`radar-seg-${p1.id || idx}-${p2.id || idx + 1}`}>
                             {/* Straight route line between consecutive waypoints */}
@@ -1518,16 +1789,6 @@ const MapContainer = ({
                               stroke="#35E0FF"
                               strokeWidth="2.5"
                               strokeLinecap="round"
-                            />
-                            {/* Directional Chevron at midpoint pointing towards next waypoint */}
-                            <path
-                              d="M-3,-3.5 L3,0 L-3,3.5"
-                              stroke="#35E0FF"
-                              strokeWidth="1.8"
-                              fill="none"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              transform={`translate(${midX}, ${midY}) rotate(${angleDeg})`}
                             />
                           </g>
                         );
@@ -1562,27 +1823,55 @@ const MapContainer = ({
                       );
                     })}
 
-                  {/* Waypoints Dots */}
+                  {/* Waypoints Dots & Numbered Badges */}
                   {waypoints.map((pt, i) => {
                     const dLatM = (pt.lat - radarRefLat) * 111139;
                     const dLngM = (pt.lng - radarRefLng) * (111139 * Math.cos((radarRefLat * Math.PI) / 180));
                     const x = 180 + dLngM * 0.8;
                     const y = 180 - dLatM * 0.8;
+                    const isSel = pt.id === selectedWaypointId;
+                    const wpNum = pt.seq ?? i + 1;
                     return (
-                      <circle
-                        key={pt.id || i}
-                        cx={x}
-                        cy={y}
-                        r="4.5"
-                        fill="#35E0FF"
-                        stroke="#030712"
-                        strokeWidth="1.5"
-                      />
+                      <g key={pt.id || i} className="cursor-pointer" onClick={(e) => { e.stopPropagation(); onWaypointSelectRef.current?.(pt.id); }}>
+                        {isSel && (
+                          <circle cx={x} cy={y} r="8.5" fill="none" stroke="#35E0FF" strokeWidth="1.5" className="animate-ping" opacity="0.75" />
+                        )}
+                        <circle
+                          cx={x}
+                          cy={y}
+                          r={isSel ? "5.5" : "4.5"}
+                          fill="#080F18"
+                          stroke={isSel ? "#54E4F1" : "#35E0FF"}
+                          strokeWidth="1.6"
+                        />
+                        <text
+                          x={x}
+                          y={y + 2}
+                          textAnchor="middle"
+                          fill={isSel ? "#54E4F1" : "#35E0FF"}
+                          fontSize="5.2"
+                          fontWeight="bold"
+                          fontFamily="monospace"
+                        >
+                          {wpNum}
+                        </text>
+                        <text
+                          x={x}
+                          y={y + 9}
+                          textAnchor="middle"
+                          fill="#EEF4F8"
+                          fontSize="4.5"
+                          fontFamily="monospace"
+                          fontWeight="600"
+                        >
+                          {pt.alt || 50}m
+                        </text>
+                      </g>
                     );
                   })}
 
                   {/* Geofence Vertices */}
-                  {(isDrawingGeofence || isEditingGeofence) &&
+                  {geofenceCoords.length > 0 &&
                     geofenceCoords.map((pt, i) => {
                       const dLatM = (pt.lat - radarRefLat) * 111139;
                       const dLngM = (pt.lng - radarRefLng) * (111139 * Math.cos((radarRefLat * Math.PI) / 180));

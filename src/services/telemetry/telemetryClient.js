@@ -42,6 +42,16 @@ export class DroneIqClient {
     return () => this.backendEventListeners.delete(callback)
   }
 
+  notifyBackendEvent(payload, receivedAt = Date.now()) {
+    this.backendEventListeners.forEach((listener) => {
+      try {
+        listener(payload, receivedAt)
+      } catch (err) {
+        console.error("[DroneIqClient] Backend event listener error:", err)
+      }
+    })
+  }
+
   /**
    * Register listener for connection state transitions
    */
@@ -109,70 +119,135 @@ export class DroneIqClient {
       this.pingIntervalId = setInterval(() => {
         this.send({ type: "PING" })
       }, 30000)
+
+      this.backendEventListeners.forEach((listener) => {
+        try {
+          listener({
+            type: "WEBSOCKET_CONNECTED",
+            level: "INFO",
+            message: `WebSocket telemetry channel established to ${this.url}`,
+            timestamp: Date.now(),
+          }, Date.now())
+        } catch (err) {
+          console.error("[DroneIqClient] Backend event listener error:", err)
+        }
+      })
     }
 
     this.ws.onmessage = (event) => {
+      let rawData = event.data
+      let message
+
       try {
-        const message = JSON.parse(event.data)
+        message = typeof rawData === "string" ? JSON.parse(rawData) : rawData
+      } catch {
+        // Plain text / raw string pushed directly by backend
+        message = {
+          type: "INFO",
+          message: String(rawData),
+          raw: rawData,
+        }
+      }
 
-        switch (message.type) {
-          case "AUTH_SUCCESS":
-            console.info("[DroneIqClient] Authenticated successfully as", message.username)
-            this.setConnectionState(ConnectionState.AUTHENTICATED)
+      if (!message || typeof message !== "object") {
+        message = {
+          type: "INFO",
+          message: String(message),
+          raw: message,
+        }
+      }
 
-            // Re-apply any specific drone subscriptions
-            if (this.subscribeAllMode) {
-              this.subscribeAll()
-            } else {
-              this.subscribedDrones.forEach((droneId) => {
-                this.subscribeDrone(droneId)
-              })
+      switch (message.type) {
+        case "AUTH_SUCCESS":
+          console.info("[DroneIqClient] Authenticated successfully as", message.username)
+          this.setConnectionState(ConnectionState.AUTHENTICATED)
+
+          // Re-apply any specific drone subscriptions
+          if (this.subscribeAllMode) {
+            this.subscribeAll()
+          } else {
+            this.subscribedDrones.forEach((droneId) => {
+              this.subscribeDrone(droneId)
+            })
+          }
+
+          this.notifyBackendEvent({
+            type: "AUTH_SUCCESS",
+            level: "SUCCESS",
+            message: `JWT session authenticated with DroneIQ backend for '${message.username || "operator"}'`,
+            username: message.username,
+            data: message,
+            timestamp: message.timestamp || Date.now(),
+          }, Date.now())
+          break
+
+        case "TELEMETRY":
+          if (message.data) {
+            const telemetryPayload = {
+              ...message.data,
+              droneId: message.droneId || message.data.droneId,
+              liveDroneConnected: message.liveDroneConnected ?? message.data.liveDroneConnected,
             }
-            break
-
-          case "TELEMETRY":
-            if (message.data) {
-              const telemetryPayload = {
-                ...message.data,
-                droneId: message.droneId || message.data.droneId,
-              }
-              this.telemetryListeners.forEach((listener) => {
-                try {
-                  listener(telemetryPayload)
-                } catch (err) {
-                  console.error("[DroneIqClient] Telemetry listener error:", err)
-                }
-              })
-            }
-            break
-
-          case "PONG":
-            // Keepalive acknowledged
-            break
-
-          case "AUTH_FAILURE":
-            console.error("[DroneIqClient] Authentication failure:", message.message)
-            this.setConnectionState(ConnectionState.AUTH_FAILURE)
-            break
-
-          default:
-            this.backendEventListeners.forEach((listener) => {
+            this.telemetryListeners.forEach((listener) => {
               try {
-                listener(message, Date.now())
+                listener(telemetryPayload)
               } catch (err) {
-                console.error("[DroneIqClient] Backend event listener error:", err)
+                console.error("[DroneIqClient] Telemetry listener error:", err)
               }
             })
-            break
-        }
-      } catch (err) {
-        console.error("[DroneIqClient] Error parsing message:", err)
+
+            // If telemetry message also includes a discrete event, alert, status change, or message
+            if (message.event || message.data.event || message.data.alert || message.data.message || message.data.statusChange) {
+              this.notifyBackendEvent({
+                type: message.event ? String(message.event) : "TELEMETRY_EVENT",
+                ...message,
+              }, Date.now())
+            }
+          }
+          break
+
+        case "PONG":
+          // Keepalive acknowledged
+          break
+
+        case "AUTH_FAILURE":
+          console.error("[DroneIqClient] Authentication failure:", message.message)
+          this.setConnectionState(ConnectionState.AUTH_FAILURE)
+          this.notifyBackendEvent({
+            type: "AUTH_FAILURE",
+            level: "ERROR",
+            message: message.message || "Authentication rejected by DroneIQ backend",
+            data: message,
+            timestamp: message.timestamp || Date.now(),
+          }, Date.now())
+          break
+
+        default:
+          // ANY OTHER BACKEND MESSAGE:
+          // INFO, LOG, EVENT, COMMAND, MISSION, SYSTEM, ALERT, STATUS, ERROR,
+          // TELEMETRY_EVENT, COMMAND_RESULT, MISSION_EVENT, or any unknown/future valid message type.
+          // NEVER drop valid backend messages!
+          this.notifyBackendEvent(message, Date.now())
+          break
       }
     }
 
     this.ws.onclose = (event) => {
       console.warn("[DroneIqClient] WebSocket closed. Code:", event.code, "Reason:", event.reason)
       this.clearTimers()
+
+      this.backendEventListeners.forEach((listener) => {
+        try {
+          listener({
+            type: "WEBSOCKET_DISCONNECTED",
+            level: "WARNING",
+            message: `WebSocket channel closed (code ${event.code}${event.reason ? `: ${event.reason}` : ""})`,
+            timestamp: Date.now(),
+          }, Date.now())
+        } catch (err) {
+          console.error("[DroneIqClient] Backend event listener error:", err)
+        }
+      })
 
       if (!this.intentionalClose) {
         if (event.code === 1008) {

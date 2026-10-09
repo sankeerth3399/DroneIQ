@@ -130,3 +130,48 @@ a[alt="Zoom Out"] {
     margin: 0 !important;
     padding: 0 !important;
 }
+
+/* ==================== AERONEXUS WAYPOINT MARKER STYLING ==================== */
+.maplibregl-marker:has(.waypoint-marker-shell),
+.mapboxgl-marker:has(.waypoint-marker-shell) {
+    z-index: 35 !important;
+    overflow: visible !important;
+    pointer-events: auto !important;
+}
+
+.maplibregl-marker:has(.waypoint-marker-shell[style*="z-index: 45"]),
+.mapboxgl-marker:has(.waypoint-marker-shell[style*="z-index: 45"]) {
+    z-index: 45 !important;
+}
+
+.waypoint-marker-shell {
+    position: relative;
+    width: 28px;
+    height: 28px;
+    cursor: pointer;
+    user-select: none;
+    pointer-events: auto !important;
+    overflow: visible !important;
+    transition: transform 0.15s cubic-bezier(0.2, 0, 0, 1);
+    transform-origin: 50% 50%;
+    will-change: transform;
+}
+
+.waypoint-marker-shell:hover .waypoint-circle {
+    transform: scale(1.08);
+    box-shadow: 0 0 12px rgba(53, 224, 255, 0.75), 0 3px 10px rgba(0, 0, 0, 0.95) !important;
+}
+
+.waypoint-marker-shell:hover .waypoint-alt-pill {
+    transform: translateX(-50%) translateY(1px);
+}
+
+/* Suppress route directional arrow/chevron markers per design specification */
+.route-direction-chevron,
+.maplibregl-marker:has(.route-direction-chevron),
+.mapboxgl-marker:has(.route-direction-chevron) {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+}

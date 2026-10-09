@@ -12,6 +12,7 @@
 import { authService } from "@/services/api/authService.js"
 import { apiClient } from "@/services/api/apiClient.js"
 import { telemetryClient } from "@/services/telemetry/telemetryClient.js"
+import { backendInfoService } from "@/services/telemetry/backendInfoService.js"
 import { Permissions } from "@/auth/permissions.js"
 import { getRolePermissions } from "@/auth/roleConfig.js"
 
@@ -78,8 +79,21 @@ class FlightControlService {
       })
       console.info(`[ARM] Command response:`, responseData)
     } catch (err) {
-      console.error(`[ARM] Command rejected:`, err)
-      throw err
+      if (import.meta.env?.DEV && (err.isNetworkError || err.status === 0)) {
+        console.warn("[FlightControlService] Backend unreachable in DEV mode. Simulating vehicle command response.")
+        responseData = {
+          success: true,
+          data: {
+            status: "EXECUTED",
+            command: commandType,
+            droneId,
+            timestamp: payload.timestamp,
+          },
+        }
+      } else {
+        console.error(`[ARM] Command rejected:`, err)
+        throw err
+      }
     }
 
     // 2. Also forward via WebSocket if connected
@@ -93,6 +107,20 @@ class FlightControlService {
       })
     } catch (wsErr) {
       console.debug("[FlightControlService] WS command forward note:", wsErr.message)
+    }
+
+    try {
+      backendInfoService.addEvent({
+        type: "COMMAND_RESULT",
+        command: commandType,
+        droneId,
+        status: responseData?.data?.status || (responseData?.success ? "EXECUTED" : "FAILED"),
+        message: responseData?.data?.message || responseData?.message || `Command ${commandType} returned: ${responseData?.data?.status || (responseData?.success ? "SUCCESS" : "REJECTED")}`,
+        data: responseData?.data || responseData,
+        timestamp: payload.timestamp,
+      })
+    } catch {
+      // Safe ignore
     }
 
     return responseData
@@ -129,6 +157,20 @@ class FlightControlService {
       method: "POST",
       body: JSON.stringify(payload),
     })
+
+    try {
+      backendInfoService.addEvent({
+        type: "COMMAND_RESULT",
+        command: commandType,
+        droneId,
+        status: response?.data?.status || (response?.success ? "EXECUTED" : "COMPLETED"),
+        message: response?.data?.message || response?.message || `Command ${commandType} acknowledged by backend for ${droneId}`,
+        data: response?.data || response,
+        timestamp: payload.timestamp,
+      })
+    } catch {
+      // Safe ignore
+    }
 
     try {
       telemetryClient.send({

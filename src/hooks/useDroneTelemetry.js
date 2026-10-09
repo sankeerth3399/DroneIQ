@@ -137,8 +137,8 @@ export function useDroneTelemetry() {
     roll: 0,
   });
 
-  // Authoritative development simulation switch (Enabled for interactive manual flight)
-  const [simulationEnabled, setSimulationEnabled] = useState(true);
+  // Authoritative development simulation switch (Section 23: Default strictly false — explicit simulation mode required)
+  const [simulationEnabled, setSimulationEnabled] = useState(false);
   const [simMode, setSimMode] = useState("interactive");
 
   const movementFrameRef = useRef(null);
@@ -162,6 +162,39 @@ export function useDroneTelemetry() {
     isLiveRef.current = isLive;
     liveTelemetryRef.current = liveTelemetry;
   }, [isLive, liveTelemetry]);
+
+  // Synchronize simState coordinates with authoritative telemetry coordinates whenever not in active simulation.
+  // If there is no explicit live-drone GPS signal, the state must remain at the Hyderabad fallback.
+  useEffect(() => {
+    const isExplicitLiveState = Boolean(
+      liveTelemetry &&
+      liveTelemetry.positionSource === PositionSource.LIVE &&
+      liveTelemetry.droneConnected === true &&
+      isValidGpsCoordinate(liveTelemetry.latitude, liveTelemetry.longitude)
+    )
+
+    if (!simulationEnabled || !isArmed) {
+      if (isExplicitLiveState) {
+        simStateRef.current.latitude = liveTelemetry.latitude;
+        simStateRef.current.longitude = liveTelemetry.longitude;
+        setSimTelemetry((prev) => ({
+          ...prev,
+          latitude: liveTelemetry.latitude,
+          longitude: liveTelemetry.longitude,
+          positionSource: PositionSource.LIVE,
+        }));
+      } else {
+        simStateRef.current.latitude = FALLBACK_DRONE_LOCATION.latitude;
+        simStateRef.current.longitude = FALLBACK_DRONE_LOCATION.longitude;
+        setSimTelemetry((prev) => ({
+          ...prev,
+          latitude: FALLBACK_DRONE_LOCATION.latitude,
+          longitude: FALLBACK_DRONE_LOCATION.longitude,
+          positionSource: PositionSource.HYDERABAD_FALLBACK,
+        }));
+      }
+    }
+  }, [liveTelemetry?.latitude, liveTelemetry?.longitude, liveTelemetry?.positionSource, liveTelemetry?.droneConnected, simulationEnabled, isArmed]);
 
   // Clean stop of the movement animation loop
   const stopMovementLoop = useCallback(() => {
@@ -284,7 +317,7 @@ export function useDroneTelemetry() {
         latitude: Number(safeLat.toFixed(6)),
         longitude: Number(safeLng.toFixed(6)),
         speed: 0,
-        isArmed: true,
+        isArmed: Boolean(isArmedRef.current),
       };
       debugFlightInfoRef.current = settledDebug;
 
@@ -298,7 +331,7 @@ export function useDroneTelemetry() {
           roll: 0,
           pitch: 0,
           yaw: 0,
-          armed: true,
+          armed: Boolean(isArmedRef.current),
           arrowDirection: getCardinalDirection(safeHeading),
           calculatedMovementHeading: Number(safeHeading.toFixed(1)),
           calculatedMovementDirection: getCardinalDirection(safeHeading),
@@ -321,8 +354,8 @@ export function useDroneTelemetry() {
         voltage: 24.2,
         satellites: 18,
         gpsFix: "3D Fix",
-        armed: true,
-        isArmed: true,
+        armed: Boolean(isArmedRef.current),
+        isArmed: Boolean(isArmedRef.current),
         flightMode: state.flightMode || canonicalFlightModeRef.current || "GUIDED",
         status: "OK",
         flightMovementDebug: settledDebug,
@@ -461,8 +494,8 @@ export function useDroneTelemetry() {
         voltage: 24.2,
         satellites: 18,
         gpsFix: "3D Fix",
-        armed: true,
-        isArmed: true,
+        armed: Boolean(isArmedRef.current),
+        isArmed: Boolean(isArmedRef.current),
         flightMode: state.flightMode || canonicalFlightModeRef.current || "GUIDED",
         status: "OK",
         flightMovementDebug: debugInfo,
@@ -591,44 +624,40 @@ export function useDroneTelemetry() {
   const activeTelemetry = hasLiveGps
     ? {
         ...liveTelemetry,
-        pitch: isArmed ? (typeof liveTelemetry.pitch === "number" ? liveTelemetry.pitch : 0) : 0,
-        roll: isArmed ? (typeof liveTelemetry.roll === "number" ? liveTelemetry.roll : 0) : 0,
+          pitch: typeof liveTelemetry.pitch === "number" ? liveTelemetry.pitch : 0,
+          roll: typeof liveTelemetry.roll === "number" ? liveTelemetry.roll : 0,
         heading:
           typeof liveTelemetry.heading === "number"
             ? liveTelemetry.heading
             : liveTelemetry.yaw || 0,
         altitude:
           typeof liveTelemetry.altitude === "number" ? liveTelemetry.altitude : 0,
-        verticalSpeed: isArmed
-          ? (typeof liveTelemetry.verticalSpeed === "number"
-              ? liveTelemetry.verticalSpeed
-              : liveTelemetry.climbRate || 0)
-          : 0,
-        climbRate: isArmed
-          ? (typeof liveTelemetry.climbRate === "number"
-              ? liveTelemetry.climbRate
-              : liveTelemetry.verticalSpeed || 0)
-          : 0,
-        speed: isArmed
-          ? (typeof liveTelemetry.speed === "number"
-              ? liveTelemetry.speed
-              : liveTelemetry.groundSpeed || 0)
-          : 0,
-        groundSpeed: isArmed
-          ? (typeof liveTelemetry.groundSpeed === "number"
-              ? liveTelemetry.groundSpeed
-              : liveTelemetry.speed || 0)
-          : 0,
+        verticalSpeed:
+          typeof liveTelemetry.verticalSpeed === "number"
+            ? liveTelemetry.verticalSpeed
+            : liveTelemetry.climbRate || 0,
+        climbRate:
+          typeof liveTelemetry.climbRate === "number"
+            ? liveTelemetry.climbRate
+            : liveTelemetry.verticalSpeed || 0,
+        speed:
+          typeof liveTelemetry.speed === "number"
+            ? liveTelemetry.speed
+            : liveTelemetry.groundSpeed || 0,
+        groundSpeed:
+          typeof liveTelemetry.groundSpeed === "number"
+            ? liveTelemetry.groundSpeed
+            : liveTelemetry.speed || 0,
         battery:
           typeof liveTelemetry.batteryPercentage === "number"
             ? liveTelemetry.batteryPercentage
-            : 84,
-        flightMode: canonicalFlightMode || DEFAULT_FLIGHT_MODE,
+            : liveTelemetry.battery ?? 84,
+        flightMode: liveTelemetry.flightMode || canonicalFlightMode || DEFAULT_FLIGHT_MODE,
         armed: isArmed,
         isArmed: isArmed,
         status: liveTelemetry.status || "OK",
-        satellites: liveTelemetry.gpsSatellites || 18,
-        gpsSatellites: liveTelemetry.gpsSatellites || 18,
+        satellites: liveTelemetry.gpsSatellites ?? 18,
+        gpsSatellites: liveTelemetry.gpsSatellites ?? 18,
         gpsFix: "3D Fix",
         latitude: liveTelemetry.latitude,
         longitude: liveTelemetry.longitude,

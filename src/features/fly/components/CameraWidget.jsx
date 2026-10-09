@@ -9,7 +9,7 @@ const cameraOptions = [
 ];
 
 const toggleBtn = (active) =>
-  `text-[8px] sm:text-[8.5px] font-mono font-semibold rounded-[4px] px-2 sm:px-2.5 py-0.5 transition ${
+  `text-[8px] sm:text-[8.5px] font-mono font-semibold rounded-[3px] px-2 sm:px-2.5 py-0.5 transition ${
     active
       ? "bg-[#35E0FF2E] border border-[#1A5A68] text-[#35E0FF] shadow-[0_0_8px_rgba(53,224,255,0.2)]"
       : "text-[#5D707C] hover:text-[#94A3B8]"
@@ -97,7 +97,7 @@ export const CameraPreview = ({
 };
 
 const getPipClass = (isFpv) =>
-  `absolute right-2 top-2 sm:right-4 sm:top-4 z-20 flex cursor-pointer flex-col overflow-hidden rounded-xl border border-[#223240] bg-[#171F27B2] shadow-2xl backdrop-blur-md transition-all duration-300 ${
+  `absolute right-2 top-2 sm:right-4 sm:top-4 z-20 flex cursor-pointer flex-col overflow-hidden rounded-[5px] border border-[#D2DCE7] bg-white shadow-[0_8px_26px_rgba(18,42,72,0.22)] backdrop-blur-md transition-all duration-300 ${
     isFpv
       ? "h-[250px] w-[250px] sm:h-[305px] sm:w-[320px] md:h-[355px] md:w-[380px]"
       : "h-[190px] w-[185px] sm:h-[225px] sm:w-[220px] md:h-[255px] md:w-[250px]"

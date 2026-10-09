@@ -9,6 +9,7 @@ import { logService } from "@/services/api/logService.js"
 import { useFlyConfirmation } from "@/hooks/useFlyConfirmation.js"
 import { useMission } from "@/hooks/useMission.js"
 import { showAlert, AlertTypes, AlertCategories } from "@/services/notification/alertService.js"
+import { backendInfoService } from "@/services/telemetry/backendInfoService.js"
 
 /**
  * Emergency Override Deck for Super Admin, Fleet Manager, and Flight Operator
@@ -93,7 +94,7 @@ export const EmergencyOverrideDeck = () => {
       currentState: telemetry?.flightMode || "GUIDED",
       onConfirm: async () => {
         try {
-          await apiClient("/api/commands/override", {
+          const response = await apiClient("/api/commands/override", {
             method: "POST",
             body: JSON.stringify({
               commandType: "TAKEOFF",
@@ -102,6 +103,20 @@ export const EmergencyOverrideDeck = () => {
               timestamp: new Date().toISOString(),
             }),
           })
+
+          try {
+            backendInfoService.addEvent({
+              type: "COMMAND_RESULT",
+              command: "TAKEOFF",
+              droneId,
+              status: response?.status || "EXECUTED",
+              message: response?.message || `Takeoff initiated for ${droneId}`,
+              data: response,
+              timestamp: Date.now(),
+            })
+          } catch {
+            // Safe ignore
+          }
 
           // Section 4 & 18: ONE final SUCCESS notification
           showAlert({
@@ -205,7 +220,7 @@ export const EmergencyOverrideDeck = () => {
         const backendCommand = cmdMap[actionKey] || actionKey
 
         try {
-          await apiClient("/api/commands/override", {
+          const response = await apiClient("/api/commands/override", {
             method: "POST",
             body: JSON.stringify({
               commandType: backendCommand,
@@ -214,8 +229,36 @@ export const EmergencyOverrideDeck = () => {
               timestamp: new Date().toISOString(),
             }),
           })
+
+          try {
+            backendInfoService.addEvent({
+              type: "COMMAND_RESULT",
+              command: backendCommand,
+              droneId,
+              status: response?.status || "EXECUTED",
+              message: response?.message || `Emergency override ${backendCommand} executed for ${droneId}`,
+              data: response,
+              timestamp: Date.now(),
+            })
+          } catch {
+            // Safe ignore
+          }
         } catch (err) {
           const failMsg = err?.data?.message || err?.message || "Command rejected by vehicle."
+          try {
+            backendInfoService.addEvent({
+              type: "COMMAND_ERROR",
+              level: "ERROR",
+              command: backendCommand,
+              droneId,
+              status: "REJECTED",
+              message: `Override ${backendCommand} failed for ${droneId}: ${failMsg}`,
+              data: err?.data || { error: failMsg },
+              timestamp: Date.now(),
+            })
+          } catch {
+            // Safe ignore
+          }
           if (isRtl) {
             showAlert({
               type: AlertTypes.ERROR,

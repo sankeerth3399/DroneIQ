@@ -32,25 +32,37 @@ export const INITIAL_DEMO_PROJECTS = [
       type: "polygon",
       enabled: true,
       vertices: [
-        { id: "vertex-1", lat: 17.388500, lng: 78.483000, latitude: 17.388500, longitude: 78.483000 },
-        { id: "vertex-2", lat: 17.388500, lng: 78.490500, latitude: 17.388500, longitude: 78.490500 },
-        { id: "vertex-3", lat: 17.381500, lng: 78.490500, latitude: 17.381500, longitude: 78.490500 },
-        { id: "vertex-4", lat: 17.381500, lng: 78.483000, latitude: 17.381500, longitude: 78.483000 },
+        { id: "vertex-1", lat: 17.389200, lng: 78.486000, latitude: 17.389200, longitude: 78.486000 },
+        { id: "vertex-2", lat: 17.388200, lng: 78.490500, latitude: 17.388200, longitude: 78.490500 },
+        { id: "vertex-3", lat: 17.385000, lng: 78.492000, latitude: 17.385000, longitude: 78.492000 },
+        { id: "vertex-4", lat: 17.382000, lng: 78.490000, latitude: 17.382000, longitude: 78.490000 },
+        { id: "vertex-5", lat: 17.381000, lng: 78.485500, latitude: 17.381000, longitude: 78.485500 },
+        { id: "vertex-6", lat: 17.382800, lng: 78.482000, latitude: 17.382800, longitude: 78.482000 },
+        { id: "vertex-7", lat: 17.386000, lng: 78.481800, latitude: 17.386000, longitude: 78.481800 },
+        { id: "vertex-8", lat: 17.388800, lng: 78.483200, latitude: 17.388800, longitude: 78.483200 },
       ],
       polygon: [
-        { id: "vertex-1", lat: 17.388500, lng: 78.483000, latitude: 17.388500, longitude: 78.483000 },
-        { id: "vertex-2", lat: 17.388500, lng: 78.490500, latitude: 17.388500, longitude: 78.490500 },
-        { id: "vertex-3", lat: 17.381500, lng: 78.490500, latitude: 17.381500, longitude: 78.490500 },
-        { id: "vertex-4", lat: 17.381500, lng: 78.483000, latitude: 17.381500, longitude: 78.483000 },
+        { id: "vertex-1", lat: 17.389200, lng: 78.486000, latitude: 17.389200, longitude: 78.486000 },
+        { id: "vertex-2", lat: 17.388200, lng: 78.490500, latitude: 17.388200, longitude: 78.490500 },
+        { id: "vertex-3", lat: 17.385000, lng: 78.492000, latitude: 17.385000, longitude: 78.492000 },
+        { id: "vertex-4", lat: 17.382000, lng: 78.490000, latitude: 17.382000, longitude: 78.490000 },
+        { id: "vertex-5", lat: 17.381000, lng: 78.485500, latitude: 17.381000, longitude: 78.485500 },
+        { id: "vertex-6", lat: 17.382800, lng: 78.482000, latitude: 17.382800, longitude: 78.482000 },
+        { id: "vertex-7", lat: 17.386000, lng: 78.481800, latitude: 17.386000, longitude: 78.481800 },
+        { id: "vertex-8", lat: 17.388800, lng: 78.483200, latitude: 17.388800, longitude: 78.483200 },
       ],
       coordinates: [
-        { id: "vertex-1", lat: 17.388500, lng: 78.483000, latitude: 17.388500, longitude: 78.483000 },
-        { id: "vertex-2", lat: 17.388500, lng: 78.490500, latitude: 17.388500, longitude: 78.490500 },
-        { id: "vertex-3", lat: 17.381500, lng: 78.490500, latitude: 17.381500, longitude: 78.490500 },
-        { id: "vertex-4", lat: 17.381500, lng: 78.483000, latitude: 17.381500, longitude: 78.483000 },
+        { id: "vertex-1", lat: 17.389200, lng: 78.486000, latitude: 17.389200, longitude: 78.486000 },
+        { id: "vertex-2", lat: 17.388200, lng: 78.490500, latitude: 17.388200, longitude: 78.490500 },
+        { id: "vertex-3", lat: 17.385000, lng: 78.492000, latitude: 17.385000, longitude: 78.492000 },
+        { id: "vertex-4", lat: 17.382000, lng: 78.490000, latitude: 17.382000, longitude: 78.490000 },
+        { id: "vertex-5", lat: 17.381000, lng: 78.485500, latitude: 17.381000, longitude: 78.485500 },
+        { id: "vertex-6", lat: 17.382800, lng: 78.482000, latitude: 17.382800, longitude: 78.482000 },
+        { id: "vertex-7", lat: 17.386000, lng: 78.481800, latitude: 17.386000, longitude: 78.481800 },
+        { id: "vertex-8", lat: 17.388800, lng: 78.483200, latitude: 17.388800, longitude: 78.483200 },
       ],
-      areaM2: 579000,
-      perimeterM: 3100,
+      areaM2: 685000,
+      perimeterM: 3350,
       createdAt: "2026-09-12T08:35:00.000Z",
       updatedAt: "2026-09-15T09:45:00.000Z",
     },
@@ -60,45 +72,97 @@ export const INITIAL_DEMO_PROJECTS = [
           id: "wp-demo-1",
           seq: 1,
           type: "WAYPOINT",
-          lat: 17.386000,
-          lng: 78.485000,
+          lat: 17.387600,
+          lng: 78.484500,
           alt: 50,
           speed: 8.5,
           holdTime: 0,
           heading: "Auto",
+          label: "WP1",
         },
         {
           id: "wp-demo-2",
           seq: 2,
           type: "WAYPOINT",
-          lat: 17.386000,
-          lng: 78.488500,
+          lat: 17.388200,
+          lng: 78.486200,
           alt: 50,
           speed: 8.5,
           holdTime: 2,
           heading: "Auto",
+          label: "WP2",
         },
         {
           id: "wp-demo-3",
           seq: 3,
           type: "WAYPOINT",
-          lat: 17.383500,
-          lng: 78.488500,
+          lat: 17.387200,
+          lng: 78.489500,
           alt: 50,
           speed: 8.5,
           holdTime: 0,
           heading: "Auto",
+          label: "WP3",
         },
         {
           id: "wp-demo-4",
           seq: 4,
           type: "WAYPOINT",
-          lat: 17.383500,
+          lat: 17.384200,
+          lng: 78.490500,
+          alt: 50,
+          speed: 8.5,
+          holdTime: 0,
+          heading: "Auto",
+          label: "WP4",
+        },
+        {
+          id: "wp-demo-5",
+          seq: 5,
+          type: "WAYPOINT",
+          lat: 17.382500,
+          lng: 78.488500,
+          alt: 50,
+          speed: 8.5,
+          holdTime: 0,
+          heading: "Auto",
+          label: "WP5",
+        },
+        {
+          id: "wp-demo-6",
+          seq: 6,
+          type: "WAYPOINT",
+          lat: 17.382000,
           lng: 78.485000,
           alt: 50,
           speed: 8.5,
           holdTime: 0,
           heading: "Auto",
+          label: "WP6",
+        },
+        {
+          id: "wp-demo-7",
+          seq: 7,
+          type: "WAYPOINT",
+          lat: 17.384000,
+          lng: 78.483200,
+          alt: 50,
+          speed: 8.5,
+          holdTime: 2,
+          heading: "Auto",
+          label: "WP7",
+        },
+        {
+          id: "wp-demo-8",
+          seq: 8,
+          type: "WAYPOINT",
+          lat: 17.386800,
+          lng: 78.483200,
+          alt: 50,
+          speed: 8.5,
+          holdTime: 0,
+          heading: "Auto",
+          label: "WP8",
         },
       ],
       items: [
@@ -106,45 +170,97 @@ export const INITIAL_DEMO_PROJECTS = [
           id: "wp-demo-1",
           seq: 1,
           type: "WAYPOINT",
-          lat: 17.386000,
-          lng: 78.485000,
+          lat: 17.387600,
+          lng: 78.484500,
           alt: 50,
           speed: 8.5,
           holdTime: 0,
           heading: "Auto",
+          label: "WP1",
         },
         {
           id: "wp-demo-2",
           seq: 2,
           type: "WAYPOINT",
-          lat: 17.386000,
-          lng: 78.488500,
+          lat: 17.388200,
+          lng: 78.486200,
           alt: 50,
           speed: 8.5,
           holdTime: 2,
           heading: "Auto",
+          label: "WP2",
         },
         {
           id: "wp-demo-3",
           seq: 3,
           type: "WAYPOINT",
-          lat: 17.383500,
-          lng: 78.488500,
+          lat: 17.387200,
+          lng: 78.489500,
           alt: 50,
           speed: 8.5,
           holdTime: 0,
           heading: "Auto",
+          label: "WP3",
         },
         {
           id: "wp-demo-4",
           seq: 4,
           type: "WAYPOINT",
-          lat: 17.383500,
+          lat: 17.384200,
+          lng: 78.490500,
+          alt: 50,
+          speed: 8.5,
+          holdTime: 0,
+          heading: "Auto",
+          label: "WP4",
+        },
+        {
+          id: "wp-demo-5",
+          seq: 5,
+          type: "WAYPOINT",
+          lat: 17.382500,
+          lng: 78.488500,
+          alt: 50,
+          speed: 8.5,
+          holdTime: 0,
+          heading: "Auto",
+          label: "WP5",
+        },
+        {
+          id: "wp-demo-6",
+          seq: 6,
+          type: "WAYPOINT",
+          lat: 17.382000,
           lng: 78.485000,
           alt: 50,
           speed: 8.5,
           holdTime: 0,
           heading: "Auto",
+          label: "WP6",
+        },
+        {
+          id: "wp-demo-7",
+          seq: 7,
+          type: "WAYPOINT",
+          lat: 17.384000,
+          lng: 78.483200,
+          alt: 50,
+          speed: 8.5,
+          holdTime: 2,
+          heading: "Auto",
+          label: "WP7",
+        },
+        {
+          id: "wp-demo-8",
+          seq: 8,
+          type: "WAYPOINT",
+          lat: 17.386800,
+          lng: 78.483200,
+          alt: 50,
+          speed: 8.5,
+          holdTime: 0,
+          heading: "Auto",
+          label: "WP8",
         },
       ],
       settings: {
@@ -362,6 +478,20 @@ export function getProjects() {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
+        // Upgrade legacy/demo mission to canonical 8-point reference mission if needed
+        const siteA = parsed.find((p) => p.id === "AERO-MSN-0001");
+        if (
+          siteA &&
+          (siteA.mission?.waypoints?.length === 4 ||
+            (siteA.mission?.waypoints?.length === 8 &&
+              siteA.mission.waypoints[0]?.id?.startsWith("wp-demo") &&
+              siteA.mission.waypoints[0]?.lat !== 17.387600))
+        ) {
+          siteA.geofence = INITIAL_DEMO_PROJECTS[0].geofence;
+          siteA.mission.waypoints = INITIAL_DEMO_PROJECTS[0].mission.waypoints;
+          siteA.mission.items = INITIAL_DEMO_PROJECTS[0].mission.items;
+          localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(parsed));
+        }
         return parsed.map(normalizeProject).filter(Boolean);
       }
     }
@@ -403,6 +533,9 @@ export function saveProjects(projects) {
 
   try {
     localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(normalized));
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("aeronexus_projects_updated", { detail: normalized }));
+    }
   } catch (err) {
     console.error("[projectService] Failed saving projects to storage:", err);
   }
@@ -431,6 +564,9 @@ export function setActiveProjectId(id) {
   if (typeof window === "undefined" || !id) return;
   try {
     localStorage.setItem(STORAGE_KEY_ACTIVE_PROJECT_ID, id);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("aeronexus_projects_updated"));
+    }
   } catch (err) {
     console.error("[projectService] Failed saving active project ID:", err);
   }

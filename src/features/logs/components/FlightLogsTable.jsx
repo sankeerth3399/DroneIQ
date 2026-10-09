@@ -1,4 +1,4 @@
-import { HardDrive, Download, ExternalLink, Plane } from "lucide-react"
+import { HardDrive, Download, ExternalLink, Plane, Clock, ShieldCheck } from "lucide-react"
 
 export const FlightLogsTable = ({
   flightLogs = [],
@@ -6,138 +6,97 @@ export const FlightLogsTable = ({
   onViewMission,
 }) => {
   return (
-    <div className="rounded-xl bg-[#0A0E16] border border-[#1A2633] overflow-hidden shadow-lg select-none font-mono">
+    <div className="rounded-2xl bg-white border border-[#D5E1ED] overflow-hidden shadow-xs select-none font-sans">
       {/* Table Card Header */}
-      <div className="px-4 py-3 sm:px-5 sm:py-4 border-b border-[#1A2633] flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <HardDrive className="w-4 h-4 text-[#35E0FF]" />
-          <h2 className="text-sm sm:text-base font-semibold text-white">Recorded Flight Sorties</h2>
+      <div className="px-5 py-4 border-b border-[#E2E8F0] flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <HardDrive className="w-5 h-5 text-[#1E64D4]" />
+          <h2 className="text-base font-bold text-[#0D233A]">Recorded Flight Sorties</h2>
         </div>
-        <span className="text-[11px] font-mono text-[#8E9EAA]">
-          {flightLogs.length} Sorties on Local Disk
+        <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-[#EFF6FF] text-[#1E64D4] border border-[#BFDBFE]">
+          {flightLogs.length} Sorties on Disk
         </span>
       </div>
 
-      {/* Mobile View: Cards (< sm) */}
-      <div className="sm:hidden divide-y divide-[#16212E]">
-        {flightLogs.map((log) => (
-          <div key={log.id} className="p-3.5 space-y-2.5 hover:bg-[#111A26] transition font-mono">
-            <div className="flex items-center justify-between gap-2">
-              <span className="font-semibold text-xs text-[#35E0FF] truncate">{log.id}</span>
-              <span className="text-[10px] text-[#2FE089] bg-[#2FE0891A] px-1.5 py-0.5 rounded border border-[#2FE08933]">
-                {log.duration}
-              </span>
-            </div>
-
-            {log.missionName && (
-              <div className="flex items-center justify-between text-[11px]">
-                <span className="text-[#8E9EAA] truncate">Mission: {log.missionName}</span>
-                {log.missionId && (
-                  <button
-                    type="button"
-                    onClick={() => onViewMission?.(log.missionId)}
-                    className="inline-flex items-center gap-1 text-[#35E0FF] text-[10px] hover:underline shrink-0"
-                  >
-                    <span>View Mission</span>
-                    <ExternalLink className="w-2.5 h-2.5" />
-                  </button>
-                )}
-              </div>
-            )}
-
-            <div className="grid grid-cols-2 gap-2 text-[11px] text-[#94A3B8]">
-              <div>
-                <span className="text-[#64748B] text-[9px] block">DATE / TIME</span>
-                <span>{log.date}</span>
-              </div>
-              <div>
-                <span className="text-[#64748B] text-[9px] block">AIRCRAFT</span>
-                <span className="text-white font-bold">{log.callsign || log.droneId}</span>
-              </div>
-              <div>
-                <span className="text-[#64748B] text-[9px] block">MAX ALT / DIST</span>
-                <span>
-                  {log.maxAlt} • {log.dist}
-                </span>
-              </div>
-              <div>
-                <span className="text-[#64748B] text-[9px] block">BATTERY</span>
-                <span className="text-[#F59E0B]">{log.batteryDelta}</span>
-              </div>
-            </div>
-
-            <div className="pt-1 flex items-center justify-between">
-              <span className="text-[10px] text-[#64748B]">{log.size}</span>
-              <button
-                type="button"
-                onClick={() => onExport?.(log.id)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-[#172230] border border-[#23354A] hover:border-[#35E0FF] hover:text-[#35E0FF] text-[#B7F3FF] text-xs min-h-[36px] transition cursor-pointer"
-              >
-                <Download className="w-3.5 h-3.5" />
-                <span>Download ULog</span>
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Desktop / Tablet View: Table (sm+) */}
-      <div className="hidden sm:block overflow-x-auto">
-        <table className="w-full text-left text-xs font-mono">
-          <thead className="bg-[#0D1420] text-[#8E9EAA] border-b border-[#1A2633] uppercase text-[10px]">
+      {/* Desktop View: Full Table */}
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-xs font-sans border-collapse">
+          <thead className="bg-[#F8FAFC] text-[#64748B] border-b border-[#E2E8F0] uppercase text-[11px] font-bold tracking-wider">
             <tr>
-              <th className="px-4 py-3">Log ID</th>
-              <th className="px-4 py-3">Date</th>
-              <th className="px-4 py-3">Drone</th>
-              <th className="px-4 py-3">Mission Link</th>
-              <th className="px-4 py-3">Duration</th>
-              <th className="px-4 py-3 hidden md:table-cell">Max Alt</th>
-              <th className="px-4 py-3 hidden lg:table-cell">Distance</th>
-              <th className="px-4 py-3">Battery Usage</th>
-              <th className="px-4 py-3 text-right">Download</th>
+              <th className="px-4 py-3.5 w-[140px]">Flight Sortie</th>
+              <th className="px-4 py-3.5 w-[150px]">Date / Time</th>
+              <th className="px-3.5 py-3.5 w-[130px]">Aircraft</th>
+              <th className="px-3.5 py-3.5 w-[120px]">Duration</th>
+              <th className="px-3.5 py-3.5 w-[140px]">Max Alt / Dist</th>
+              <th className="px-3.5 py-3.5 w-[130px]">Status</th>
+              <th className="px-4 py-3.5">Mission Association</th>
+              <th className="px-4 py-3.5 text-right w-[140px]">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-[#16212E] text-[#EEF4F8]">
+          <tbody className="divide-y divide-[#F1F5F9] text-xs">
             {flightLogs.map((log) => (
-              <tr key={log.id} className="hover:bg-[#111A26] transition">
-                <td className="px-4 py-3 font-semibold text-[#35E0FF] whitespace-nowrap">
+              <tr key={log.id} className="hover:bg-[#F8FAFC] transition">
+                {/* Flight ID */}
+                <td className="px-4 py-3.5 align-middle font-mono font-bold text-[#1E64D4]">
                   {log.id}
                 </td>
-                <td className="px-4 py-3 text-[#94A3B8] whitespace-nowrap">{log.date}</td>
-                <td className="px-4 py-3 whitespace-nowrap font-bold text-white">
-                  <span className="flex items-center gap-1">
-                    <Plane className="w-3 h-3 text-[#35E0FF]" />
-                    {log.callsign || log.droneId}
+
+                {/* Date */}
+                <td className="px-4 py-3.5 align-middle text-[#334155] font-medium">
+                  {log.date}
+                </td>
+
+                {/* Drone */}
+                <td className="px-3.5 py-3.5 align-middle font-mono font-bold text-[#0D233A]">
+                  {log.callsign || log.droneId}
+                </td>
+
+                {/* Duration */}
+                <td className="px-3.5 py-3.5 align-middle">
+                  <span className="inline-flex items-center gap-1 font-semibold text-[#15803D] bg-[#F0FDF4] px-2 py-0.5 rounded-md border border-[#BBF7D0]">
+                    <Clock className="w-3 h-3" />
+                    {log.duration}
                   </span>
                 </td>
-                <td className="px-4 py-3 whitespace-nowrap">
+
+                {/* Alt / Dist */}
+                <td className="px-3.5 py-3.5 align-middle text-[#475569] font-medium">
+                  {log.maxAlt} • {log.dist}
+                </td>
+
+                {/* Status */}
+                <td className="px-3.5 py-3.5 align-middle">
+                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-[#15803D] bg-[#F0FDF4] px-2.5 py-0.5 rounded-md border border-[#BBF7D0]">
+                    <ShieldCheck className="w-3 h-3 text-[#16A34A]" />
+                    {log.status || "Completed"}
+                  </span>
+                </td>
+
+                {/* Mission Association */}
+                <td className="px-4 py-3.5 align-middle">
                   {log.missionId ? (
                     <button
                       type="button"
                       onClick={() => onViewMission?.(log.missionId)}
-                      className="inline-flex items-center gap-1 text-[11px] text-[#38BDF8] hover:text-[#35E0FF] hover:underline cursor-pointer"
+                      className="inline-flex items-center gap-1 text-xs font-bold text-[#1E64D4] hover:underline cursor-pointer"
                     >
                       <span>{log.missionName || log.missionId}</span>
-                      <ExternalLink className="w-2.5 h-2.5" />
+                      <ExternalLink className="w-3 h-3" />
                     </button>
                   ) : (
-                    <span className="text-[#64748B] text-[11px]">Manual Flight</span>
+                    <span className="text-[#94A3B8]">Manual Flight Sortie</span>
                   )}
                 </td>
-                <td className="px-4 py-3 whitespace-nowrap text-[#2FE089]">{log.duration}</td>
-                <td className="px-4 py-3 hidden md:table-cell whitespace-nowrap">{log.maxAlt}</td>
-                <td className="px-4 py-3 hidden lg:table-cell whitespace-nowrap">{log.dist}</td>
-                <td className="px-4 py-3 whitespace-nowrap text-[#F59E0B]">
-                  {log.batteryDelta}
-                </td>
-                <td className="px-4 py-3 text-right whitespace-nowrap">
+
+                {/* Actions */}
+                <td className="px-4 py-3.5 align-middle text-right whitespace-nowrap">
                   <button
                     type="button"
                     onClick={() => onExport?.(log.id)}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#172230] border border-[#23354A] hover:border-[#35E0FF] hover:text-[#35E0FF] transition text-[#B7F3FF] text-[11px] cursor-pointer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#EFF6FF] hover:bg-[#DBEAFE] text-[#1E64D4] border border-[#BFDBFE] font-bold text-xs transition cursor-pointer"
                   >
                     <Download className="w-3.5 h-3.5" />
-                    <span>ULog</span>
+                    <span>.ULG</span>
                   </button>
                 </td>
               </tr>

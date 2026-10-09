@@ -1,4 +1,4 @@
-import { getUnderlyingMap, SATELLITE_LAYER_ID } from "./satelliteLayerHelper.js";
+import { getUnderlyingMap, SATELLITE_LAYER_ID, enforceMapLayerOrder } from "./satelliteLayerHelper.js";
 
 export const ROUTE_SOURCE_ID = "aeronexus-mission-route-source";
 export const ROUTE_LINE_LAYER_ID = "aeronexus-mission-route-line";
@@ -9,10 +9,16 @@ export const ROUTE_LINE_CASING_LAYER_ID = "aeronexus-mission-route-casing";
  */
 export function calculateBearing(start, end) {
   if (!start || !end) return 0;
-  const sLat = (start.lat * Math.PI) / 180;
-  const sLng = (start.lng * Math.PI) / 180;
-  const eLat = (end.lat * Math.PI) / 180;
-  const eLng = (end.lng * Math.PI) / 180;
+  const sLatVal = start.lat ?? start.latitude;
+  const sLngVal = start.lng ?? start.longitude;
+  const eLatVal = end.lat ?? end.latitude;
+  const eLngVal = end.lng ?? end.longitude;
+  if (typeof sLatVal !== "number" || typeof sLngVal !== "number" || typeof eLatVal !== "number" || typeof eLngVal !== "number") return 0;
+
+  const sLat = (sLatVal * Math.PI) / 180;
+  const sLng = (sLngVal * Math.PI) / 180;
+  const eLat = (eLatVal * Math.PI) / 180;
+  const eLng = (eLngVal * Math.PI) / 180;
 
   const dLng = eLng - sLng;
   const y = Math.sin(dLng) * Math.cos(eLat);
@@ -26,9 +32,14 @@ export function calculateBearing(start, end) {
  * Calculates geographic midpoint between two coordinates
  */
 export function calculateMidpoint(start, end) {
+  const sLatVal = start.lat ?? start.latitude;
+  const sLngVal = start.lng ?? start.longitude;
+  const eLatVal = end.lat ?? end.latitude;
+  const eLngVal = end.lng ?? end.longitude;
+
   return {
-    lat: (start.lat + end.lat) / 2,
-    lng: (start.lng + end.lng) / 2,
+    lat: ((sLatVal || 0) + (eLatVal || 0)) / 2,
+    lng: ((sLngVal || 0) + (eLngVal || 0)) / 2,
   };
 }
 
@@ -46,8 +57,13 @@ export function buildRouteGeoJson(waypoints = []) {
 
   // Exact consecutive coordinates: WP1 -> WP2 -> WP3 -> ...
   const coordinates = waypoints
-    .filter((wp) => typeof wp.lat === "number" && typeof wp.lng === "number")
-    .map((wp) => [Number(wp.lng), Number(wp.lat)]);
+    .map((wp) => {
+      const lat = wp?.lat ?? wp?.latitude;
+      const lng = wp?.lng ?? wp?.longitude;
+      if (typeof lat !== "number" || typeof lng !== "number" || isNaN(lat) || isNaN(lng)) return null;
+      return [Number(lng), Number(lat)];
+    })
+    .filter(Boolean);
 
   if (coordinates.length < 2) {
     return {
@@ -72,21 +88,6 @@ export function buildRouteGeoJson(waypoints = []) {
       },
     ],
   };
-}
-
-/**
- * Generates HTML string for directional chevron marker along a straight route segment
- */
-export function buildDirectionChevronHtml(bearing = 0) {
-  return `
-    <div class="route-direction-chevron" style="position: relative; width: 18px; height: 18px; pointer-events: none; user-select: none; display: flex; align-items: center; justify-content: center; transform: rotate(${Math.round(bearing)}deg); transition: transform 0.1s linear;">
-      <div style="width: 16px; height: 16px; border-radius: 50%; background: rgba(8, 12, 20, 0.75); border: 1px solid rgba(53, 224, 255, 0.4); display: flex; align-items: center; justify-content: center; box-shadow: 0 1px 4px rgba(0,0,0,0.6);">
-        <svg width="10" height="10" viewBox="0 0 16 16" fill="none" style="margin-left: 1px;">
-          <path d="M4 2.5L11 8L4 13.5" stroke="#35E0FF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-      </div>
-    </div>
-  `;
 }
 
 /**
@@ -132,8 +133,8 @@ export function syncMissionRoute(mapInstance, waypoints = [], showMissionRoute =
         },
         paint: {
           "line-color": "#030712",
-          "line-width": 5.5,
-          "line-opacity": 0.75,
+          "line-width": 6.5,
+          "line-opacity": 0.85,
         },
       });
     }
@@ -150,43 +151,35 @@ export function syncMissionRoute(mapInstance, waypoints = [], showMissionRoute =
         },
         paint: {
           "line-color": "#35E0FF",
-          "line-width": 3.5,
-          "line-opacity": 0.95,
+          "line-width": 4.2,
+          "line-opacity": 0.98,
         },
       });
     }
 
-    // 4. Ensure layers are visible above satellite raster if satellite is enabled
-    if (map.getLayer(SATELLITE_LAYER_ID) && isSatellite) {
-      if (map.getLayer(ROUTE_LINE_CASING_LAYER_ID)) {
-        try {
-          map.moveLayer(ROUTE_LINE_CASING_LAYER_ID);
-        } catch {
-          // Safe ignore
-        }
-      }
-      if (map.getLayer(ROUTE_LINE_LAYER_ID)) {
-        try {
-          map.moveLayer(ROUTE_LINE_LAYER_ID);
-        } catch {
-          // Safe ignore
-        }
-      }
-    }
+    // 4. Enforce strict layer order (satellite -> geofence -> route)
+    enforceMapLayerOrder(map);
   } catch (err) {
     console.debug("[routeLayerHelper] Route layer sync note:", err.message);
   }
 }
 
 /**
- * Synchronizes Directional Chevron Markers placed at midpoints of straight segments
+ * Generates HTML string for directional chevron marker along a straight route segment (disabled per specification)
+ */
+export function buildDirectionChevronHtml() {
+  return "";
+}
+
+/**
+ * Synchronizes Directional Chevron Markers along route segments.
+ * Per specification, directional arrows/chevrons are completely removed to keep
+ * the mission route visually clean: WP1 ───── WP2 ───── WP3 ───── WP4 ...
+ * with ONLY the numbered waypoint markers and connecting lines.
  */
 export function syncDirectionMarkers(mapInstance, waypoints = [], showMissionRoute = true, directionMarkersMapRef) {
-  if (!mapInstance || !directionMarkersMapRef) return;
-  const currentMarkers = directionMarkersMapRef.current;
-
-  // If fewer than 2 waypoints or route hidden, remove all direction markers
-  if (!showMissionRoute || !Array.isArray(waypoints) || waypoints.length < 2) {
+  if (directionMarkersMapRef?.current) {
+    const currentMarkers = directionMarkersMapRef.current;
     for (const [, obj] of currentMarkers.entries()) {
       try {
         obj.marker?.remove?.();
@@ -195,70 +188,17 @@ export function syncDirectionMarkers(mapInstance, waypoints = [], showMissionRou
       }
     }
     currentMarkers.clear();
-    return;
   }
 
-  if (!window.mappls?.Marker) return;
-
-  const segmentCount = waypoints.length - 1;
-  const activeSegmentKeys = new Set();
-
-  for (let i = 0; i < segmentCount; i++) {
-    const p1 = waypoints[i];
-    const p2 = waypoints[i + 1];
-    if (!p1 || !p2 || typeof p1.lat !== "number" || typeof p2.lat !== "number") continue;
-
-    const segmentKey = `seg-${i}`;
-    activeSegmentKeys.add(segmentKey);
-
-    const mid = calculateMidpoint(p1, p2);
-    const bearing = calculateBearing(p1, p2);
-    const chevronHtml = buildDirectionChevronHtml(bearing);
-
-    const existing = currentMarkers.get(segmentKey);
-    if (existing) {
-      try {
-        if (typeof existing.marker.setPosition === "function") {
-          existing.marker.setPosition({ lat: mid.lat, lng: mid.lng });
-        } else if (typeof existing.marker.setLngLat === "function") {
-          existing.marker.setLngLat([mid.lng, mid.lat]);
-        }
-
-        if (existing.bearing !== Math.round(bearing)) {
-          existing.bearing = Math.round(bearing);
-          const el = existing.marker.getElement?.();
-          if (el) {
-            el.innerHTML = chevronHtml;
-          }
-        }
-      } catch (err) {
-        console.debug("[routeLayerHelper] Direction marker update note:", err.message);
-      }
-    } else {
-      try {
-        const marker = new window.mappls.Marker({
-          map: mapInstance,
-          position: { lat: mid.lat, lng: mid.lng },
-          html: chevronHtml,
-          draggable: false,
-        });
-        currentMarkers.set(segmentKey, { marker, bearing: Math.round(bearing) });
-      } catch (err) {
-        console.debug("[routeLayerHelper] Direction marker creation note:", err.message);
-      }
-    }
-  }
-
-  // Remove markers for segments that no longer exist (e.g. after deletion or reorder)
-  for (const [key, obj] of currentMarkers.entries()) {
-    if (!activeSegmentKeys.has(key)) {
-      try {
-        obj.marker?.remove?.();
-      } catch {
-        // Safe ignore
-      }
-      currentMarkers.delete(key);
-    }
+  // Ensure any existing chevron DOM elements are removed immediately
+  try {
+    const leftoverChevrons = document.querySelectorAll(".route-direction-chevron");
+    leftoverChevrons.forEach((el) => {
+      const container = el.closest(".mapboxgl-marker, .maplibregl-marker") || el;
+      container.remove();
+    });
+  } catch {
+    // Safe ignore
   }
 }
 

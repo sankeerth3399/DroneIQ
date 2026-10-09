@@ -3,18 +3,26 @@
    ========================================================================== */
 
 :root {
-  --gcs-bg-main: #080B12;
-  --gcs-bg-card: #0A0E16;
-  --gcs-bg-input: #0E1422;
-  --gcs-border-subtle: #1B2436;
-  --gcs-border-input: #1E293B;
-  --gcs-accent-cyan: #22D3EE;
-  --gcs-accent-hover: #38BDF8;
-  --gcs-accent-active: #06B6D4;
-  --gcs-text-light: #F1F5F9;
-  --gcs-text-muted: #64748B;
-  --gcs-text-label: #7B8FA6;
+  --gcs-bg-main: #EEF3F8;
+  --gcs-bg-card: #FFFFFF;
+  --gcs-bg-input: #F7F9FC;
+  --gcs-border-subtle: #DCE4EE;
+  --gcs-border-input: #CBD6E3;
+  --gcs-accent-cyan: #1778C8;
+  --gcs-accent-hover: #2A8BDD;
+  --gcs-accent-active: #0F65AC;
+  --gcs-text-light: #23364D;
+  --gcs-text-muted: #64768C;
+  --gcs-text-label: #52667D;
   --gcs-text-white: #FFFFFF;
+  --command-navy: #0E2646;
+  --command-navy-deep: #081B33;
+  --command-blue: #1E64D4;
+  --command-canvas: #F0F4F9;
+  --command-surface: #FFFFFF;
+  --command-border: #D0DCEB;
+  --command-text: #0E2646;
+  --command-muted: #556980;
 
   /* Responsive Layout System Tokens */
   --header-height: 56px;
@@ -45,7 +53,219 @@
   position: relative;
   background-color: var(--gcs-bg-card);
   border: 1px solid var(--gcs-border-subtle);
-  border-radius: 4px;
+  border-radius: 5px;
+  box-shadow: 0 1px 2px rgba(20, 43, 73, 0.04), 0 5px 18px rgba(20, 43, 73, 0.04);
+}
+
+.gcs-auth-page {
+  background: rgba(4, 7, 12, 0.94);
+}
+
+.gcs-auth-panel {
+  --gcs-bg-card: #080D16;
+  --gcs-bg-input: #101722;
+  --gcs-border-subtle: #1A2636;
+  --gcs-border-input: #273348;
+  --gcs-accent-cyan: #22D3EE;
+  --gcs-accent-hover: #43E0F3;
+  --gcs-accent-active: #13BBD3;
+  --gcs-text-light: #E5EAF1;
+  --gcs-text-muted: #64748B;
+  --gcs-text-label: #91A0B5;
+  background-color: #080D16;
+  border-color: #1A2636;
+  border-radius: 3px;
+  box-shadow: 0 18px 55px rgba(0, 0, 0, 0.52);
+}
+
+.gcs-auth-panel .gcs-bracket-tl,
+.gcs-auth-panel .gcs-bracket-tr,
+.gcs-auth-panel .gcs-bracket-bl,
+.gcs-auth-panel .gcs-bracket-br {
+  border-color: #22D3EE;
+}
+
+.gcs-auth-panel .gcs-input {
+  height: 39px;
+  border-radius: 5px;
+  background-color: #101722;
+  border-color: #273348;
+  color: #F1F5F9;
+  font-size: 12px;
+}
+
+.gcs-auth-panel .gcs-input:focus {
+  border-color: #22D3EE;
+  box-shadow: 0 0 0 1px #22D3EE;
+}
+
+.gcs-auth-panel .gcs-btn-primary {
+  height: 40px;
+  margin-top: 6px;
+  border-radius: 5px;
+  background-color: #21CFE5;
+  color: #07121A;
+  font-size: 12px;
+  box-shadow: 0 0 15px rgba(34, 211, 238, 0.14);
+}
+
+.gcs-auth-panel .gcs-btn-primary:hover:not(:disabled) {
+  background-color: #43DDF0;
+}
+
+.gcs-auth-panel .gcs-btn-primary:active:not(:disabled) {
+  background-color: #13BBD3;
+}
+
+.gcs-auth-panel .gcs-link {
+  color: #22D3EE;
+}
+
+.gcs-auth-panel .gcs-link:hover {
+  color: #67E9F9;
+}
+
+.command-page {
+  color: var(--command-text);
+  background: var(--command-canvas) !important;
+}
+
+.command-panel {
+  background: var(--command-surface);
+  border: 1px solid var(--command-border);
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(16, 42, 80, 0.05), 0 4px 16px rgba(16, 42, 80, 0.05);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.command-panel:hover {
+  border-color: #BCCEE2;
+  box-shadow: 0 2px 6px rgba(16, 42, 80, 0.06), 0 6px 20px rgba(16, 42, 80, 0.07);
+}
+
+.analytics-page {
+  min-height: 100%;
+  background: #F1F5FA;
+  color: #17365F;
+}
+
+.analytics-card {
+  min-width: 0;
+  border: 1px solid #E0E7EF;
+  border-radius: 8px;
+  background: #FFFFFF;
+  box-shadow: 0 1px 2px rgba(24, 52, 84, 0.035), 0 3px 9px rgba(24, 52, 84, 0.055);
+}
+
+.analytics-page [aria-label="Analytics KPIs"] > .analytics-card {
+  min-height: 76px;
+}
+
+.analytics-card svg {
+  max-width: 100%;
+}
+
+.analytics-insight-card {
+  border: 1px solid #E9EFF5;
+  border-radius: 6px;
+  background: #F1F6FC;
+}
+
+.analytics-footer {
+  border: 1px solid #DCE5EF;
+  border-radius: 7px 7px 0 0;
+  background: #FFFFFF;
+  box-shadow: 0 1px 2px rgba(24, 52, 84, 0.03);
+}
+
+.fly-telemetry-strip {
+  scrollbar-width: none;
+}
+
+.fly-telemetry-strip::-webkit-scrollbar {
+  display: none;
+}
+
+@media (max-width: 520px) {
+  .fly-telemetry-strip {
+    height: auto;
+    min-height: 34px;
+    overflow: visible;
+    padding: 4px 7px;
+  }
+
+  .fly-telemetry-content {
+    display: grid;
+    width: 100%;
+    min-width: 0;
+    height: auto;
+    justify-items: center;
+    gap: 3px;
+  }
+
+  .fly-strip-flight-group,
+  .fly-strip-position-group,
+  .fly-strip-actions-group {
+    justify-content: center;
+  }
+
+  .fly-strip-divider {
+    display: none;
+  }
+}
+
+.command-page [class*="bg-[#06090E]"],
+.command-page [class*="bg-[#080B12]"],
+.command-page [class*="bg-[#080C14"],
+.command-page [class*="bg-[#090D14]"],
+.command-page [class*="bg-[#0A0E12"],
+.command-page [class*="bg-[#0A0E16]"],
+.command-page [class*="bg-[#0B1017]"],
+.command-page [class*="bg-[#0D1420]"],
+.command-page [class*="bg-[#0F1622]"] {
+  background-color: #FFFFFF !important;
+}
+
+.command-page [class*="text-[#EEF4F8]"],
+.command-page [class*="text-[#F1F5F9]"],
+.command-page [class~="text-white"] {
+  color: var(--command-text) !important;
+}
+
+.command-page [class*="text-[#8E9EAA]"],
+.command-page [class*="text-[#94A3B8]"],
+.command-page [class*="text-[#64748B]"] {
+  color: var(--command-muted) !important;
+}
+
+.command-page [class*="border-[#1A2633]"],
+.command-page [class*="border-[#1B2436]"],
+.command-page [class*="border-[#223240]"],
+.command-page [class*="border-[#16212E]"] {
+  border-color: var(--command-border) !important;
+}
+
+.command-page [class*="divide-[#16212E]"] > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--command-border) !important;
+}
+
+.command-page table thead {
+  background-color: #F4F7FB !important;
+}
+
+.command-page table tbody {
+  color: var(--command-text);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 /* Technical Corner HUD Brackets */

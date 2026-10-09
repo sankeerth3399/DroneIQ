@@ -1,21 +1,33 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import MainLayout from "@/layout/mainlayout.jsx";
 
-import Dashboard from "@/features/dashboard/pages/dashboard.jsx";
+import Dashboard from "@/features/dashboard/pages/CommandCenterOperational.jsx";
 import FlyPage from "@/features/fly/pages/FlyPage.jsx";
+import MissionPlanningPage from "@/features/mession/pages/MissionPlanningPage.jsx";
+import MissionsPage from "@/features/mession/pages/MissionsPage.jsx";
+import GeofencePage from "@/features/mession/pages/GeofencePage.jsx";
 import MissionDetailsPage from "@/features/mession/pages/MissionDetailsPage.jsx";
 import WaypointPlanningPage from "@/features/mession/pages/WaypointPlanningPage.jsx";
 import CreateGeofencePage from "@/features/mession/pages/CreateGeofencePage.jsx";
 import Logs from "@/features/logs/pages/Logs.jsx";
 import SettingsPage from "@/features/settings/pages/SettingsPage.jsx";
 import UsersPage from "@/features/users/pages/UsersPage.jsx";
+import AdministrationPage from "@/features/admin/pages/AdministrationPage.jsx";
 import AnalyticsPage from "@/features/analytics/pages/AnalyticsPage.jsx";
+import ReportsPage from "@/features/reports/pages/ReportsPage.jsx";
+import IncidentsPage from "@/features/incidents/pages/IncidentsPage.jsx";
 import Landing from "@/features/landing/pages/landingPage.jsx";
 import Login from "@/features/auth/pages/Login.jsx";
 
 import ProtectedRoute from "@/components/auth/ProtectedRoute.jsx";
 import { Permissions } from "@/auth/permissions.js";
 import { Roles } from "@/auth/roleConfig.js";
+
+import LiveOperationsPage from "@/features/operations/pages/LiveOperationsPage.jsx";
+import RemotePilotPage from "@/features/operations/pages/RemotePilotPage.jsx";
+import SwarmControlPage from "@/features/operations/pages/SwarmControlPage.jsx";
+import DroneFleetPage from "@/features/operations/pages/DroneFleetPage.jsx";
+import PayloadsSensorsPage from "@/features/operations/pages/PayloadsSensorsPage.jsx";
 
 const Routing = () => {
   return (
@@ -35,17 +47,45 @@ const Routing = () => {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/fly" element={<FlyPage />} />
 
-        {/* Mission Management Workflow Routes */}
-        <Route path="/missions" element={<Navigate to="/missions/details" replace />} />
-        <Route path="/missions/details" element={<MissionDetailsPage />} />
-        <Route path="/missions/waypoints" element={<WaypointPlanningPage />} />
-        <Route path="/missions/geofence" element={<CreateGeofencePage />} />
-        <Route path="/mission" element={<Navigate to="/missions/details" replace />} />
+        {/* Mission Planning Workflow Routes */}
+        <Route path="/mission-planning" element={<MissionPlanningPage />} />
+        <Route path="/missions/planning" element={<MissionPlanningPage />} />
+        <Route path="/plan" element={<Navigate to="/mission-planning" replace />} />
 
-        {/* Redirect any legacy standalone URLs to Missions workflow */}
-        <Route path="/plan" element={<Navigate to="/missions/details" replace />} />
+        {/* Dedicated Missions Management Route */}
+        <Route path="/missions" element={<MissionsPage />} />
+        <Route path="/mission" element={<Navigate to="/missions" replace />} />
+        <Route path="/missions/details" element={<MissionDetailsPage />} />
+
+        {/* Dedicated Geofence Management Routes */}
+        <Route path="/geofence" element={<GeofencePage />} />
+        <Route path="/missions/geofence" element={<GeofencePage />} />
+
+        {/* Dedicated Waypoint Planning Routes */}
+        <Route path="/waypoint-planning" element={<WaypointPlanningPage />} />
+        <Route path="/missions/waypoints" element={<WaypointPlanningPage />} />
         <Route path="/waypts" element={<Navigate to="/missions/waypoints" replace />} />
         <Route path="/waypoints" element={<Navigate to="/missions/waypoints" replace />} />
+
+        {/* Live Operations & Cockpit */}
+        <Route path="/live-operations" element={<LiveOperationsPage />} />
+        <Route path="/live" element={<Navigate to="/live-operations" replace />} />
+
+        {/* Remote Pilot Cockpit */}
+        <Route path="/remote-pilot" element={<RemotePilotPage />} />
+
+        {/* Swarm Control Workspace */}
+        <Route path="/swarm-control" element={<SwarmControlPage />} />
+        <Route path="/swarm" element={<Navigate to="/swarm-control" replace />} />
+
+        {/* Drone Fleet Asset Management */}
+        <Route path="/drone-fleet" element={<DroneFleetPage />} />
+        <Route path="/fleet" element={<Navigate to="/drone-fleet" replace />} />
+
+        {/* Payloads & Sensors Management */}
+        <Route path="/payloads-sensors" element={<PayloadsSensorsPage />} />
+        <Route path="/payloads" element={<Navigate to="/payloads-sensors" replace />} />
+        <Route path="/sensors" element={<Navigate to="/payloads-sensors" replace />} />
 
         {/* Logs Route (Protected by VIEW_LOGS) */}
         <Route
@@ -57,15 +97,30 @@ const Routing = () => {
           }
         />
 
-        {/* Settings Route (Protected by SYSTEM_CONFIG: Super Admin only) */}
+        {/* Administration Central Control Route */}
         <Route
-          path="/settings"
+          path="/admin"
           element={
-            <ProtectedRoute requiredPermission={Permissions.SYSTEM_CONFIG}>
-              <SettingsPage />
+            <ProtectedRoute>
+              <AdministrationPage />
             </ProtectedRoute>
           }
         />
+        <Route
+          path="/administration"
+          element={<Navigate to="/admin" replace />}
+        />
+
+        {/* Settings & System Config -> Administration Integrations tab */}
+        <Route
+          path="/settings"
+          element={
+            <ProtectedRoute>
+              <AdministrationPage initialTab="integrations" />
+            </ProtectedRoute>
+          }
+        />
+
         {/* Operational Analytics & Telemetry Intelligence */}
         <Route
           path="/analytics"
@@ -76,19 +131,43 @@ const Routing = () => {
           }
         />
 
-        {/* User Management Route (Protected: Super Admin + Fleet Manager) */}
+        {/* Mission, Fleet & Compliance Reports */}
         <Route
-          path="/users"
+          path="/reports"
           element={
-            <ProtectedRoute allowedRoles={[Roles.SUPER_ADMIN, Roles.FLEET_MANAGER]}>
-              <UsersPage />
+            <ProtectedRoute>
+              <ReportsPage />
             </ProtectedRoute>
           }
         />
-        {/* Redirect legacy /user-management to canonical /users */}
+
+        {/* Incidents & Alerts Route */}
+        <Route
+          path="/incidents"
+          element={
+            <ProtectedRoute requiredPermission={Permissions.VIEW_INCIDENTS}>
+              <IncidentsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/alerts"
+          element={<Navigate to="/incidents" replace />}
+        />
+
+        {/* User Management Route -> Administration Users & Roles tab */}
+        <Route
+          path="/users"
+          element={
+            <ProtectedRoute>
+              <AdministrationPage initialTab="users" />
+            </ProtectedRoute>
+          }
+        />
+        {/* Redirect legacy /user-management to canonical /admin */}
         <Route
           path="/user-management"
-          element={<Navigate to="/users" replace />}
+          element={<Navigate to="/admin?tab=users" replace />}
         />
       </Route>
     </Routes>

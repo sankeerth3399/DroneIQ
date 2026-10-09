@@ -20,6 +20,43 @@ export const getUnderlyingMap = (map) => {
   return map;
 };
 
+/**
+ * Strict Layer Ordering Enforcer:
+ * Enforces the exact required visual hierarchy on the WebGL map canvas:
+ * 1. Base satellite map (aeronexus-satellite-layer)
+ * 2. Geofence polygon fill (aeronexus-geofence-fill)
+ * 3. Geofence boundary line (aeronexus-geofence-line)
+ * 4. Geofence preview line (aeronexus-geofence-preview-line)
+ * 5. Mission route casing line (aeronexus-mission-route-casing)
+ * 6. Mission route primary line (aeronexus-mission-route-line)
+ * 7. Route violations line (aeronexus-violations-line)
+ * HTML DOM Markers (Waypoints z-index: 30, Drone z-index: 50) naturally sit on top.
+ */
+export const enforceMapLayerOrder = (mapInstance) => {
+  const map = getUnderlyingMap(mapInstance);
+  if (!map || typeof map.getLayer !== "function" || typeof map.moveLayer !== "function") return;
+
+  const layerStack = [
+    SATELLITE_LAYER_ID,
+    "aeronexus-geofence-fill",
+    "aeronexus-geofence-line",
+    "aeronexus-geofence-preview-line",
+    "aeronexus-mission-route-casing",
+    "aeronexus-mission-route-line",
+    "aeronexus-violations-line",
+  ];
+
+  for (const layerId of layerStack) {
+    if (map.getLayer(layerId)) {
+      try {
+        map.moveLayer(layerId);
+      } catch {
+        // Safe ignore
+      }
+    }
+  }
+};
+
 export const ensureSatelliteLayer = (mapInstance, isSatellite = false, onDone) => {
   const map = getUnderlyingMap(mapInstance);
   if (!map || typeof map.getSource !== "function" || typeof map.addSource !== "function") return;
@@ -55,12 +92,8 @@ export const ensureSatelliteLayer = (mapInstance, isSatellite = false, onDone) =
         });
       }
 
-      if (map.getLayer(SATELLITE_LAYER_ID) && isSatellite) {
-        try {
-          map.moveLayer(SATELLITE_LAYER_ID);
-        } catch {
-          // Safe ignore
-        }
+      if (map.getLayer(SATELLITE_LAYER_ID)) {
+        enforceMapLayerOrder(map);
       }
 
       if (onDone) onDone(map);
@@ -93,15 +126,9 @@ export const applyMapStyle = (mapInstance, mapStyle, polylineRef) => {
           isSatellite ? "visible" : "none"
         );
 
-        if (isSatellite) {
-          try {
-            targetMap.moveLayer(SATELLITE_LAYER_ID);
-          } catch {
-            // Safe ignore
-          }
-          if (polylineRef?.current && typeof polylineRef.current.setTop === "function") {
-            polylineRef.current.setTop();
-          }
+        enforceMapLayerOrder(targetMap);
+        if (isSatellite && polylineRef?.current && typeof polylineRef.current.setTop === "function") {
+          polylineRef.current.setTop();
         }
       }
     } catch (err) {

@@ -261,7 +261,7 @@ export const UsersPage = () => {
   }, [users, roleFilter, searchTerm])
 
   return (
-    <div className="relative h-full min-h-0 w-full overflow-y-auto bg-[#06090E] p-4 sm:p-6 lg:p-8 select-none font-sans text-white">
+    <div className="command-page relative h-full min-h-0 w-full overflow-y-auto p-3 sm:p-5 lg:p-6 select-none font-sans text-white">
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-[#1A2633]">
         <div className="flex items-center gap-3">

@@ -24,8 +24,8 @@ export const LogCategoryTabs = ({
   categoryCounts = {},
 }) => {
   return (
-    <div className="w-full overflow-x-auto pb-1 select-none font-mono no-scrollbar">
-      <div className="flex items-center gap-1.5 sm:gap-2 min-w-max p-1 rounded-xl bg-[#090D14] border border-[#1A2633]">
+    <div className="w-full overflow-x-auto pb-1 select-none font-sans no-scrollbar">
+      <div className="flex items-center gap-2 min-w-max p-1.5 rounded-2xl bg-white border border-[#D5E1ED] shadow-2xs">
         {CATEGORIES.map((cat) => {
           const Icon = cat.icon
           const isActive = activeCategory === cat.id
@@ -36,20 +36,20 @@ export const LogCategoryTabs = ({
               key={cat.id}
               type="button"
               onClick={() => onSelectCategory?.(cat.id)}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition cursor-pointer ${
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold transition cursor-pointer ${
                 isActive
-                  ? "bg-[#35E0FF1F] text-[#35E0FF] border border-[#35E0FF59] shadow-[0_0_12px_rgba(53,224,255,0.18)]"
-                  : "text-[#8E9EAA] hover:text-white hover:bg-[#121A26] border border-transparent"
+                  ? "bg-[#1E64D4] text-white shadow-xs border border-[#1E64D4]"
+                  : "bg-transparent text-[#475569] hover:text-[#0D233A] hover:bg-[#F8FAFC] border border-transparent"
               }`}
             >
-              <Icon className="w-3.5 h-3.5 shrink-0" />
+              <Icon className="w-4 h-4 shrink-0" />
               <span className="whitespace-nowrap">{cat.label}</span>
               {typeof count === "number" && (
                 <span
-                  className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                  className={`text-[11px] px-2 py-0.5 rounded-full font-bold transition ${
                     isActive
-                      ? "bg-[#35E0FF33] text-[#35E0FF]"
-                      : "bg-[#14202C] text-[#64748B]"
+                      ? "bg-white/20 text-white"
+                      : "bg-[#F1F5F9] text-[#64748B] border border-[#E2E8F0]"
                   }`}
                 >
                   {count}

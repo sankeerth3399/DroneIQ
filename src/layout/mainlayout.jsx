@@ -3,6 +3,7 @@ import { Outlet } from "react-router-dom"
 import Sidebar from "../layout/sidebar.jsx"
 import Header from "../components/Header/header.jsx"
 import FlightToast from "@/components/toast/FlightToast.jsx"
+import GlobalInfoPanel from "@/components/info/GlobalInfoPanel.jsx"
 
 const LAPTOP_BREAKPOINT = 1024
 
@@ -34,7 +35,7 @@ const MainLayout = () => {
   }, [])
 
   return (
-    <div className="relative flex h-[100dvh] min-h-[100dvh] w-full max-w-full overflow-hidden bg-[#06090E]">
+    <div className="command-app relative flex h-[100dvh] min-h-[100dvh] w-full max-w-full overflow-hidden bg-[#EEF3F8]">
       {/* Mobile Drawer Backdrop Overlay */}
       {mobileOpen && (
         <div
@@ -61,7 +62,7 @@ const MainLayout = () => {
         {/* Global HUD Flight Safety Notification Toast */}
         <FlightToast />
 
-        <header className="shrink-0 bg-[#0A0E12] border-b border-[#1A2633] px-2.5 sm:px-4 py-1.5 sm:py-2.5 lg:py-3 z-30 flex flex-col justify-center min-h-[52px] sm:min-h-[56px]">
+        <header className="command-topbar shrink-0 bg-[#102A50] border-b border-[#203D64] px-2.5 sm:px-4 py-1.5 sm:py-2 lg:py-2.5 z-30 flex flex-col justify-center min-h-[56px] sm:min-h-[62px]">
           <Header
             sidebarCollapsed={collapsed}
             onToggleSidebar={() => setCollapsed((prev) => !prev)}
@@ -70,10 +71,13 @@ const MainLayout = () => {
           />
         </header>
 
-        <main className="flex-1 min-h-0 w-full h-full flex flex-col overflow-hidden relative">
+        <main className="command-workspace flex-1 min-h-0 w-full h-full flex flex-col overflow-hidden relative bg-[#EEF3F8]">
           <Outlet />
         </main>
       </div>
+
+      {/* Global Floating Backend Info Console */}
+      <GlobalInfoPanel />
     </div>
   )
 }
