@@ -14,7 +14,38 @@ export const getVisualRotation = (heading = 0) => {
   return ((heading + VISUAL_MARKER_OFFSET) % 360 + 360) % 360;
 };
 
-export const buildDroneMarkerHtml = (callsign, initialHeading = 0) => {
+export const buildDroneMarkerLabelHtml = (callsign, options = {}) => {
+  const {
+    name = null,
+    selected = false,
+  } = options;
+
+  const borderColor = selected ? "#35E0FF" : "rgba(53, 224, 255, 0.45)";
+  const cleanId = callsign ? String(callsign).trim() : "DRONE";
+  const cleanName = name && String(name).trim() !== cleanId ? String(name).trim() : "";
+
+  return `
+    <div style="display: inline-flex; align-items: center; justify-content: center; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace; font-size: 11px; font-weight: 700; color: #FFFFFF; background: rgba(11, 25, 44, 0.95); border: 1.5px solid ${borderColor}; padding: 2px 7px; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.85); backdrop-filter: blur(4px); white-space: nowrap;">
+      <span style="color: #FFFFFF; letter-spacing: 0.02em;">${cleanId}</span>
+      ${cleanName ? `<span style="color: #8CC8FF; font-weight: 600; font-size: 10px; margin-left: 4px;">· ${cleanName}</span>` : ""}
+    </div>
+  `;
+};
+
+export const updateDroneMarkerDom = (markerEl, callsign, heading, options = {}) => {
+  if (!markerEl) return;
+  const rotator = markerEl.querySelector(".drone-marker-rotator");
+  if (rotator) {
+    const visualRot = getVisualRotation(heading);
+    rotator.style.transform = `rotate(${visualRot}deg)`;
+  }
+  const labelEl = markerEl.querySelector(".drone-marker-label");
+  if (labelEl) {
+    labelEl.innerHTML = buildDroneMarkerLabelHtml(callsign, options);
+  }
+};
+
+export const buildDroneMarkerHtml = (callsign, initialHeading = 0, options = {}) => {
   const visualRot = getVisualRotation(initialHeading);
   return `
     <div class="drone-marker-shell" style="position: relative; width: 68px; height: 68px; cursor: pointer; pointer-events: auto; z-index: 50;">
@@ -66,11 +97,9 @@ export const buildDroneMarkerHtml = (callsign, initialHeading = 0) => {
           </svg>
         </div>
 
-        <!-- Callsign Badge (Anchored below, non-rotating so text remains horizontal) -->
-        <div style="position: absolute; top: 70px; left: 50%; transform: translateX(-50%); white-space: nowrap; pointer-events: none;">
-          <span style="display: inline-block; font-family: monospace; font-size: 11px; font-weight: 800; color: #35E0FF; background: rgba(11, 25, 44, 0.95); border: 1.5px solid rgba(53, 224, 255, 0.65); padding: 2px 7px; border-radius: 5px; box-shadow: 0 2px 10px rgba(0,0,0,0.8); letter-spacing: 0.06em;">
-            ${callsign}
-          </span>
+        <!-- Dynamic Callsign & Telemetry Info Badge (Anchored below, non-rotating so text remains horizontal) -->
+        <div class="drone-marker-label" style="position: absolute; top: 70px; left: 50%; transform: translateX(-50%); white-space: nowrap; pointer-events: none; z-index: 60;">
+          ${buildDroneMarkerLabelHtml(callsign, options)}
         </div>
       </div>
     </div>

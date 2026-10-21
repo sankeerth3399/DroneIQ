@@ -1443,6 +1443,7 @@ const MissionPlanningPage = () => {
                   mapStyle={mapStyle}
                   telemetry={telemetry}
                   pageType="planning"
+                  showDrones={mapLayers.drones}
                   waypoints={mapLayers.waypoints ? localWaypoints : []}
                   showMissionRoute={mapLayers.flightPath}
                   geofence={mapLayers.coverageArea ? currentProject?.geofence : null}
@@ -1459,7 +1460,6 @@ const MissionPlanningPage = () => {
                     { key: "coverageArea", label: "Coverage Area", color: "bg-[#38BDF8]" },
                     { key: "flightPath", label: "Flight Path", color: "bg-[#3B82F6]" },
                     { key: "waypoints", label: "Waypoints", color: "bg-[#38BDF8]" },
-                    { key: "noFlyZones", label: "No-Fly Zones", color: "bg-[#F59E0B]" },
                     { key: "obstacles", label: "Obstacles", color: "bg-[#EF4444]" },
                     { key: "weather", label: "Weather", color: "bg-[#A855F7]" },
                     { key: "commsCoverage", label: "Comms Coverage", color: "bg-[#10B981]" },
@@ -1476,45 +1476,6 @@ const MissionPlanningPage = () => {
                       <span className="truncate">{layer.label}</span>
                     </label>
                   ))}
-                </div>
-              </div>
-
-              {/* Centered Area Floating Badge */}
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 pointer-events-none">
-                <div className="bg-[#0B131FEE] border border-[#38BDF8]/60 text-white rounded-lg px-3 py-1.5 shadow-2xl backdrop-blur-md text-center">
-                  <div className="text-xs font-bold text-[#38BDF8]">Area: {areaMetrics.areaFormatted}</div>
-                  <div className="text-[10px] text-[#CBD5E1]">
-                    Alt: {formData.flightAltitude} m | GSD: {computedGsd.split(",")[0]}
-                  </div>
-                </div>
-              </div>
-
-              {/* Drone Tag Labels on Map */}
-              {mapLayers.drones && (
-                <>
-                  <div className="absolute top-[28%] right-[32%] z-10 pointer-events-none bg-[#0B131FEE] border border-[#38BDF8] rounded px-2 py-0.5 text-[9.5px] font-mono text-white shadow-md">
-                    <span className="font-bold text-[#38BDF8]">Drone 1 - DR-001</span>
-                    <span className="block text-[8.5px] text-[#94A3B8]">Lead · Mapping</span>
-                  </div>
-                  {formData.droneCount > 1 && (
-                    <div className="absolute top-[42%] right-[14%] z-10 pointer-events-none bg-[#0B131FEE] border border-[#F59E0B] rounded px-2 py-0.5 text-[9.5px] font-mono text-white shadow-md">
-                      <span className="font-bold text-[#F59E0B]">Drone 2 - DR-002</span>
-                      <span className="block text-[8.5px] text-[#94A3B8]">Thermal</span>
-                    </div>
-                  )}
-                  {formData.droneCount > 2 && (
-                    <div className="absolute bottom-[35%] left-[45%] z-10 pointer-events-none bg-[#0B131FEE] border border-[#A855F7] rounded px-2 py-0.5 text-[9.5px] font-mono text-white shadow-md">
-                      <span className="font-bold text-[#A855F7]">Drone 3 - DR-007</span>
-                      <span className="block text-[8.5px] text-[#94A3B8]">Survey</span>
-                    </div>
-                  )}
-                </>
-              )}
-
-              {/* Home Position "H" Badge */}
-              <div className="absolute bottom-[44%] left-[22%] z-10 pointer-events-none">
-                <div className="w-6 h-6 rounded-full bg-[#10B981] border-2 border-white flex items-center justify-center font-bold text-white text-[11px] shadow-lg">
-                  H
                 </div>
               </div>
 

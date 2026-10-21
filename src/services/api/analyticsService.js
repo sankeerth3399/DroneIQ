@@ -355,16 +355,24 @@ export const analyticsService = {
       { id: "DRONE-004", name: "Sentry Eagle", status: "MAINTENANCE", model: "Hexacopter" },
     ]
 
-    const allProjects = projectService.getProjects()
+    const allProjects = projectService.getProjects() || []
     const flights = filterFlights(SEEDED_FLIGHT_HISTORY, filters)
 
     const totalDistance = flights.reduce((sum, f) => sum + (f.distanceKm || 0), 0)
     const totalDurationSeconds = flights.reduce((sum, f) => sum + (f.durationSeconds || 0), 0)
     const totalHours = (totalDurationSeconds / 3600).toFixed(1)
 
-    const completedMissions = flights.filter((f) => f.status === "Completed").length
-    const totalSorties = flights.length
-    const successRate = totalSorties > 0 ? ((completedMissions / totalSorties) * 100).toFixed(1) : 0
+    // Authoritative mission outcomes derived from actual mission records
+    const completedMissions = allProjects.filter((p) => {
+      const st = (p.status || "").toLowerCase().trim()
+      return ["completed", "successful", "success"].includes(st)
+    }).length
+    const failedMissions = allProjects.filter((p) => {
+      const st = (p.status || "").toLowerCase().trim()
+      return ["failed", "aborted", "error"].includes(st)
+    }).length
+    const totalTerminalProjects = completedMissions + failedMissions
+    const successRate = totalTerminalProjects > 0 ? ((completedMissions / totalTerminalProjects) * 100).toFixed(1) : null
 
     const totalIncidents = SEEDED_INCIDENTS.length
 
@@ -422,7 +430,7 @@ export const analyticsService = {
         totalFlightHours: `${totalHours} h`,
         totalDistanceKm: `${totalDistance.toFixed(1)} km`,
         missionsCompleted: completedMissions,
-        missionSuccessRate: `${successRate}%`,
+        missionSuccessRate: successRate !== null ? `${Math.round(Number(successRate))}%` : "N/A",
         totalIncidents,
         avgBatteryConsumption: `${avgBatteryUsed}%`,
         telemetryAvailability: "99.4%",
@@ -627,15 +635,25 @@ export const analyticsService = {
    * Fetch Mission Analytics
    */
   async getMissionAnalytics(filters = {}) {
-    const projects = projectService.getProjects()
+    const projects = projectService.getProjects() || []
     const flights = filterFlights(SEEDED_FLIGHT_HISTORY, filters)
 
     const totalMissions = projects.length
-    const completed = flights.filter((f) => f.status === "Completed").length
-    const failed = flights.filter((f) => f.status === "Aborted" || f.status === "Failed").length
-    const inProgress = totalMissions > completed ? totalMissions - completed : 0
+    const completed = projects.filter((p) => {
+      const st = (p.status || "").toLowerCase().trim()
+      return ["completed", "successful", "success"].includes(st)
+    }).length
+    const failed = projects.filter((p) => {
+      const st = (p.status || "").toLowerCase().trim()
+      return ["failed", "aborted", "error"].includes(st)
+    }).length
+    const inProgress = projects.filter((p) => {
+      const st = (p.status || "").toLowerCase().trim()
+      return ["in progress", "in_progress", "active"].includes(st)
+    }).length
 
-    const successRate = flights.length > 0 ? ((completed / flights.length) * 100).toFixed(1) : 100
+    const totalTerminal = completed + failed
+    const successRate = totalTerminal > 0 ? `${Math.round((completed / totalTerminal) * 100)}%` : "N/A"
 
     const missionStatusDistribution = [
       { name: "Completed", value: completed, color: "#2FE089" },
@@ -690,7 +708,7 @@ export const analyticsService = {
         completedMissions: completed,
         failedMissions: failed,
         activeMissions: inProgress,
-        missionSuccessRate: `${successRate}%`,
+        missionSuccessRate: successRate,
         avgMissionDuration: "24m 15s",
         avgMissionDistance: "4.8 km",
         avgWaypoints: 9,

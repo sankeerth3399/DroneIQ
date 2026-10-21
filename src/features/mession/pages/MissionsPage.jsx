@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useMission } from "@/hooks/useMission.js";
 import { useDroneTelemetry } from "@/hooks/useDroneTelemetry.js";
 import { useAuth } from "@/hooks/useAuth.js";
+import { useTelemetry } from "@/context/TelemetryContext.jsx";
 import { Permissions } from "@/auth/permissions.js";
 import { Roles } from "@/auth/roleConfig.js";
 import { formatArea } from "@/utils/geofence.js";
@@ -42,6 +43,7 @@ import {
 const MissionsPage = () => {
   const navigate = useNavigate();
   const { telemetry } = useDroneTelemetry();
+  const { registeredDrones = [] } = useTelemetry();
   const { hasPermission, role } = useAuth();
   const canCreate = hasPermission(Permissions.CREATE_MISSIONS);
   const canEdit = hasPermission(Permissions.EDIT_MISSIONS);
@@ -403,7 +405,7 @@ const MissionsPage = () => {
                         </td>
                         <td className="py-3 px-4">
                           <span className="font-mono font-semibold text-[#0F172A] bg-[#F1F5F9] px-2 py-0.5 rounded border border-[#E2E8F0]">
-                            DR-001 (Quad-H)
+                            {p.assignedDroneId || p.droneId || (registeredDrones.find((d) => d.mission === p.projectName || d.id === p.droneId)?.id) || (registeredDrones[0] ? `${registeredDrones[0].id} (${registeredDrones[0].name})` : "Unassigned")}
                           </span>
                         </td>
                         <td className="py-3 px-4">
@@ -588,6 +590,12 @@ const MissionsPage = () => {
                       <div className="flex items-center justify-between text-[#64748B]">
                         <span>Waypoints:</span>
                         <span className="font-mono font-bold text-[#2563EB]">{wpCount} WPs</span>
+                      </div>
+                      <div className="flex items-center justify-between text-[#64748B]">
+                        <span>Assigned Drone:</span>
+                        <span className="font-mono font-semibold text-[#0F172A]">
+                          {p.assignedDroneId || p.droneId || (registeredDrones.find((d) => d.mission === p.projectName || d.id === p.droneId)?.id) || (registeredDrones[0] ? `${registeredDrones[0].id}` : "Unassigned")}
+                        </span>
                       </div>
                       <div className="flex items-center justify-between text-[#64748B]">
                         <span>Geofence:</span>

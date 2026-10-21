@@ -204,6 +204,7 @@ class FlightControlService {
       const cleanup = () => {
         if (timeoutId) clearTimeout(timeoutId)
         if (unsubTelemetry) unsubTelemetry()
+        if (unsubBackend) unsubBackend()
         window.removeEventListener("aeronexus:drone-armed", handleCustomArmed)
       }
 
@@ -221,6 +222,19 @@ class FlightControlService {
         const isNowArmed = typeof telemetry.armed === "boolean" ? telemetry.armed : (typeof telemetry.isArmed === "boolean" ? telemetry.isArmed : null)
         if (isNowArmed === expectedArmed) {
           onConfirmed("live-telemetry")
+        }
+      })
+
+      // Check backend event stream (e.g. ARMED / DISARMED discrete events)
+      const unsubBackend = telemetryClient.onBackendEvent((event) => {
+        if (!event || typeof event !== "object") return
+        const evDrone = event.droneId || event.targetDrone || event.drone || event.data?.droneId
+        if (evDrone && evDrone !== droneId) return
+        const evType = String(event.type || event.event || "").toUpperCase()
+        if (expectedArmed && (evType === "ARMED" || evType === "DRONE_ARMED" || evType === "VEHICLE_ARMED")) {
+          onConfirmed("backend-armed-event")
+        } else if (!expectedArmed && (evType === "DISARMED" || evType === "DRONE_DISARMED" || evType === "VEHICLE_DISARMED")) {
+          onConfirmed("backend-disarmed-event")
         }
       })
 

@@ -43,11 +43,17 @@ const ProfileDropdown = () => {
             <button
                 type="button"
                 onClick={() => setOpen((prev) => !prev)}
-                className="flex justify-center items-center w-8 h-8 sm:w-9 sm:h-9 bg-[#171F27] border border-[#223240] rounded-[8px] hover:bg-[#202B36] transition"
+                className="flex items-center gap-2 px-1.5 py-1 rounded-full hover:bg-white/5 transition cursor-pointer select-none border border-transparent hover:border-[#1E3A5F] group"
                 aria-label="Open profile menu"
                 aria-expanded={open}
             >
-                <User className="w-4 h-4 sm:w-5 sm:h-5 text-[#8E9EAA] hover:text-[#35E0FF] transition" />
+                <div className="flex justify-center items-center w-7 h-7 sm:w-8 sm:h-8 shrink-0 rounded-full bg-[#1B68D2] text-white text-[12px] font-bold shadow-sm ring-1 ring-white/10">
+                    {initials}
+                </div>
+                <div className="hidden xl:flex flex-col text-left leading-tight min-w-0 max-w-[130px]">
+                    <span className="text-[12px] font-bold text-white truncate group-hover:text-[#38BDF8] transition">{username}</span>
+                    <span className="text-[10px] text-[#8EA3BE] truncate">{roleMeta.label || "Operations Centre"}</span>
+                </div>
             </button>
 
             {open && (

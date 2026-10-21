@@ -35,13 +35,6 @@ export function LiveDroneFeed({ droneId = "DRONE-001", cameraType = "main", clas
 
   // Fetch Stream Metadata from Backend Video API
   const fetchStreamMetadata = useCallback(() => {
-    if (!token && !isAuthenticated) {
-      setFetchError("No authentication token available")
-      setStreamInfo(null)
-      setIsFetchingMetadata(false)
-      return
-    }
-
     setIsFetchingMetadata(true)
     setFetchError(null)
 
@@ -53,23 +46,28 @@ export function LiveDroneFeed({ droneId = "DRONE-001", cameraType = "main", clas
       .getVideoStream(streamId)
       .then((data) => {
         if (!isUnmountedRef.current) {
-          setStreamInfo(data)
-          setFetchError(null)
+          if (data && (data.webrtcUrl || data.url)) {
+            setStreamInfo(data)
+            setFetchError(null)
+          } else {
+            setStreamInfo(null)
+            setFetchError("Camera Offline: No active video feed")
+          }
           setIsFetchingMetadata(false)
         }
       })
       .catch((err) => {
         if (!isUnmountedRef.current) {
           const status = err?.status
-          let friendlyMsg = "Camera stream currently offline"
+          let friendlyMsg = "Camera Offline"
           if (status === 401) {
-            friendlyMsg = "Unauthorized: Session expired"
+            friendlyMsg = "Authentication required for live stream"
           } else if (status === 403) {
             friendlyMsg = "Access Denied to camera feed"
           } else if (status === 404) {
             friendlyMsg = "Camera stream not found"
           } else if (err?.isNetworkError) {
-            friendlyMsg = "Video service unreachable"
+            friendlyMsg = "Camera Offline (Video service unreachable)"
           }
 
           if (import.meta.env?.DEV) {
@@ -80,9 +78,9 @@ export function LiveDroneFeed({ droneId = "DRONE-001", cameraType = "main", clas
           setIsFetchingMetadata(false)
         }
       })
-  }, [droneId, streamId, token, isAuthenticated])
+  }, [droneId, streamId])
 
-  // Refetch metadata asynchronously whenever droneId, streamId, or auth token changes
+  // Refetch metadata asynchronously whenever droneId or streamId changes
   useEffect(() => {
     isUnmountedRef.current = false
     const timer = setTimeout(() => {
@@ -98,7 +96,7 @@ export function LiveDroneFeed({ droneId = "DRONE-001", cameraType = "main", clas
   }, [fetchStreamMetadata])
 
   // Extract WHEP URL from backend stream metadata
-  const webrtcUrl = streamInfo?.webrtcUrl || null
+  const webrtcUrl = streamInfo?.webrtcUrl || streamInfo?.url || null
 
   // WebRTC WHEP Player Hook
   const {
@@ -110,7 +108,7 @@ export function LiveDroneFeed({ droneId = "DRONE-001", cameraType = "main", clas
     retry: retryPlayer,
   } = useWhepPlayer({
     webrtcUrl,
-    enabled: Boolean(webrtcUrl && (token || isAuthenticated)),
+    enabled: Boolean(webrtcUrl),
   })
 
   // Fullscreen support
@@ -215,19 +213,11 @@ export function LiveDroneFeed({ droneId = "DRONE-001", cameraType = "main", clas
         borderClass: "border-[#F59E0B40] bg-[#140F08CC]",
       }
     }
-    if (effectiveError || connectionState === "failed" || connectionState === "offline") {
-      return {
-        label: "OFFLINE",
-        dotClass: "bg-[#FF4D4D] shadow-[0_0_6px_#FF4D4D]",
-        textClass: "text-[#FF8585]",
-        borderClass: "border-[#5E2222] bg-[#140808CC]",
-      }
-    }
     return {
-      label: "STANDBY",
-      dotClass: "bg-[#35E0FF] shadow-[0_0_6px_#35E0FF]",
-      textClass: "text-[#35E0FF]",
-      borderClass: "border-[#1A5A68] bg-[#080E14CC]",
+      label: "CAMERA OFFLINE",
+      dotClass: "bg-[#FF4D4D] shadow-[0_0_6px_#FF4D4D]",
+      textClass: "text-[#FF8585]",
+      borderClass: "border-[#5E2222] bg-[#140808CC]",
     }
   }
 
@@ -253,7 +243,7 @@ export function LiveDroneFeed({ droneId = "DRONE-001", cameraType = "main", clas
         }`}
       />
 
-      {/* OFFLINE / STANDBY / CONNECTING HUD PLACEHOLDER (Visible when not actively playing) */}
+      {/* OFFLINE / CONNECTING HUD PLACEHOLDER (Visible when not actively playing) */}
       {!isPlaying && (
         <div className="absolute inset-0 flex flex-col items-center justify-center p-3 text-center bg-[#05080C] bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-[#0A131E] via-[#05080C] to-[#020406]">
           {/* Subtle Aerospace Reticle Background */}
@@ -267,10 +257,8 @@ export function LiveDroneFeed({ droneId = "DRONE-001", cameraType = "main", clas
           <div className="relative z-10 flex flex-col items-center gap-2 max-w-[85%]">
             {isLoading ? (
               <Radio className="w-6 h-6 text-[#F59E0B] animate-pulse" />
-            ) : effectiveError ? (
-              <VideoOff className="w-6 h-6 text-[#FF6B7A]" />
             ) : (
-              <Radio className="w-6 h-6 text-[#35E0FF]" />
+              <VideoOff className="w-6 h-6 text-[#FF6B7A]" />
             )}
 
             <div className="flex flex-col items-center">
@@ -279,9 +267,14 @@ export function LiveDroneFeed({ droneId = "DRONE-001", cameraType = "main", clas
               </span>
               <p className="font-mono text-[10px] sm:text-[11px] font-semibold text-[#CBD5E1] mt-0.5">
                 {isLoading
-                  ? "Connecting to camera..."
-                  : effectiveError || "Camera stream currently offline"}
+                  ? "Connecting to camera feed..."
+                  : effectiveError || "Camera Offline"}
               </p>
+              {!isLoading && (
+                <p className="font-mono text-[9px] text-[#64748B] mt-0.5">
+                  No active video stream available
+                </p>
+              )}
             </div>
 
             {/* Quick Action Button */}

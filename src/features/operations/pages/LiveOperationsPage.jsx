@@ -2,10 +2,10 @@ import { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import MapLoad from "@/components/Map/mapContainer.jsx";
 import { useMission } from "@/hooks/useMission.js";
-import { useDroneTelemetry } from "@/hooks/useDroneTelemetry.js";
+import { useTelemetry } from "@/hooks/useTelemetry.js";
 import { useAuth } from "@/hooks/useAuth.js";
-import sampleImg from "@/assets/images/sampleImg.png";
-import droneLandscapeImg from "@/assets/images/drone_mountain_survey.jpg";
+import LiveDroneFeed from "@/components/video/LiveDroneFeed.jsx";
+import DynamicDroneLabel from "@/components/drone/DynamicDroneLabel.jsx";
 import {
   Activity,
   Radio,
@@ -44,11 +44,16 @@ import {
 const LiveOperationsPage = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { telemetry } = useDroneTelemetry();
+  const {
+    telemetry,
+    selectedDroneId,
+    selectDrone,
+    registeredDrones,
+    fleetTelemetry: rawFleetTelemetry,
+  } = useTelemetry();
   const { projects, currentProject, currentProjectId } = useMission();
 
-  // Active inspected drone
-  const [selectedDroneId, setSelectedDroneId] = useState("DR-001");
+  const [isFeedPlaying, setIsFeedPlaying] = useState(false);
   const [isVideoMuted, setIsVideoMuted] = useState(true);
   const [isRecording, setIsRecording] = useState(true);
   const [actionToast, setActionToast] = useState(null);
@@ -84,53 +89,38 @@ const LiveOperationsPage = () => {
     ];
   }, [currentProject?.mission?.waypoints, currentProject?.mission?.items]);
 
-  // Telemetry fleet list
-  const fleetTelemetry = useMemo(
-    () => [
-      {
-        id: "DR-001",
-        label: "Drone 1",
-        role: "Lead - Mapping",
-        alt: 120,
-        speed: 8.0,
-        battery: 66,
-        link: "link strong",
-        coords: "12.9712 N, 77.5931 E",
-        sector: "Sector A - north face",
-        cameraName: "DR-001 - RGB Camera",
-      },
-      {
-        id: "DR-003",
-        label: "Drone 2",
-        role: "Thermal",
-        alt: 120,
-        speed: 7.5,
-        battery: 61,
-        link: "link strong",
-        coords: "12.9708 N, 77.5942 E",
-        sector: "Sector B - spillway",
-        cameraName: "DR-003 - Radiometric IR",
-      },
-      {
-        id: "DR-007",
-        label: "Drone 3",
-        role: "Survey",
-        alt: 120,
-        speed: 8.2,
-        battery: 58,
-        link: "link strong",
-        coords: "12.9695 N, 77.5925 E",
-        sector: "Sector C - downstream slope",
-        cameraName: "DR-007 - Photogrammetry 42MP",
-      },
-    ],
-    []
-  );
+  // Dynamic available fleet derived strictly from real registered drones + live telemetry
+  const availableDrones = useMemo(() => {
+    const list = [...(registeredDrones || [])];
+    Object.keys(rawFleetTelemetry || {}).forEach((dId) => {
+      if (!list.some((d) => d.id === dId || d.droneId === dId)) {
+        list.push({
+          id: dId,
+          droneId: dId,
+          name: `Drone ${dId}`,
+          status: "ONLINE",
+        });
+      }
+    });
+    return list;
+  }, [registeredDrones, rawFleetTelemetry]);
 
-  const activeDrone = useMemo(
-    () => fleetTelemetry.find((d) => d.id === selectedDroneId) || fleetTelemetry[0],
-    [selectedDroneId, fleetTelemetry]
-  );
+  const activeDrone = useMemo(() => {
+    return (
+      availableDrones.find((d) => d.id === selectedDroneId || d.droneId === selectedDroneId) ||
+      availableDrones[0] || { id: selectedDroneId || "DR-001", name: "Drone" }
+    );
+  }, [selectedDroneId, availableDrones]);
+
+  const activeTelemetry = useMemo(() => {
+    if (activeDrone && (rawFleetTelemetry?.[activeDrone.id] || rawFleetTelemetry?.[activeDrone.droneId])) {
+      return {
+        ...telemetry,
+        ...(rawFleetTelemetry[activeDrone.id] || rawFleetTelemetry[activeDrone.droneId]),
+      };
+    }
+    return telemetry;
+  }, [activeDrone, telemetry, rawFleetTelemetry]);
 
   return (
     <div className="w-full h-full min-h-0 overflow-y-auto overflow-x-hidden flex flex-col bg-[#060D17] text-[#EEF2F6] font-sans scroll-smooth">
@@ -239,11 +229,13 @@ const LiveOperationsPage = () => {
             <div className="relative min-h-[480px] lg:h-[520px] w-full bg-[#050B12]">
               <MapLoad
                 mapStyle="satellite"
-                telemetry={telemetry}
+                telemetry={activeTelemetry}
                 pageType="live"
+                showDrones={mapLayers.drones}
                 waypoints={mapLayers.flightPath ? waypoints : []}
                 showMissionRoute={mapLayers.flightPath}
                 geofence={mapLayers.geofence ? currentProject?.geofence : null}
+                onDroneSelect={(dId) => selectDrone(dId)}
               />
 
               {/* Floating Map Layers HUD (Matching reference) */}
@@ -272,38 +264,6 @@ const LiveOperationsPage = () => {
                   ))}
                 </div>
               </div>
-
-              {/* Live Drone HUD Labels Overlaid on Map (Illustrative reference tags) */}
-              {mapLayers.drones && (
-                <>
-                  <div className="absolute top-[26%] right-[32%] z-10 pointer-events-none bg-[#07101CF0] border border-[#38BDF8] rounded px-2.5 py-1 text-[10px] font-mono text-white shadow-lg">
-                    <span className="font-bold text-[#38BDF8] block">Drone 1 · DR-001</span>
-                    <span className="text-[9px] text-[#94A3B8]">Lead - Mapping</span>
-                  </div>
-                  <div className="absolute top-[48%] right-[42%] z-10 pointer-events-none bg-[#07101CF0] border border-[#F59E0B] rounded px-2.5 py-1 text-[10px] font-mono text-white shadow-lg">
-                    <span className="font-bold text-[#F59E0B] block">Drone 2 · DR-003</span>
-                    <span className="text-[9px] text-[#94A3B8]">Thermal</span>
-                  </div>
-                  <div className="absolute bottom-[28%] right-[22%] z-10 pointer-events-none bg-[#07101CF0] border border-[#A855F7] rounded px-2.5 py-1 text-[10px] font-mono text-white shadow-lg">
-                    <span className="font-bold text-[#A855F7] block">Drone 3 · DR-007</span>
-                    <span className="text-[9px] text-[#94A3B8]">Survey</span>
-                  </div>
-                </>
-              )}
-
-              {/* Home Base Marker */}
-              <div className="absolute bottom-[44%] left-[16%] z-10 pointer-events-none">
-                <div className="w-6 h-6 rounded-full bg-[#10B981] border-2 border-white flex items-center justify-center font-bold text-white text-[11px] shadow-lg">
-                  H
-                </div>
-              </div>
-
-              {/* Compass & Schematic label */}
-              <div className="absolute bottom-2 right-3 z-10 flex items-center gap-2 pointer-events-none">
-                <div className="bg-[#07101CCC] text-[#8E9EAA] text-[9.5px] font-mono px-2 py-1 rounded border border-[#1C2C42]">
-                  Schematic - Illustrative
-                </div>
-              </div>
             </div>
           </div>
 
@@ -316,25 +276,25 @@ const LiveOperationsPage = () => {
               <div className="flex items-center justify-between">
                 <h3 className="text-xs font-bold text-white tracking-tight uppercase">Live Drone Feed</h3>
                 {/* Drone Selector Tabs */}
-                <div className="flex items-center gap-1 bg-[#07101C] p-0.5 rounded border border-[#1C2C42]">
-                  {fleetTelemetry.map((d) => (
+                <div className="flex items-center gap-1 bg-[#07101C] p-0.5 rounded border border-[#1C2C42] overflow-x-auto max-w-[240px]">
+                  {availableDrones.map((d) => (
                     <button
                       key={d.id}
                       type="button"
-                      onClick={() => setSelectedDroneId(d.id)}
-                      className={`px-2 py-0.5 text-[10.5px] font-bold rounded transition cursor-pointer ${
+                      onClick={() => selectDrone(d.id)}
+                      className={`px-2 py-0.5 text-[10.5px] font-mono font-bold rounded transition cursor-pointer whitespace-nowrap ${
                         selectedDroneId === d.id
                           ? "bg-[#2563EB] text-white"
                           : "text-[#8E9EAA] hover:text-white"
                       }`}
                     >
-                      {d.label}
+                      {d.id}
                     </button>
                   ))}
                 </div>
               </div>
 
-              {/* "Take Control of DR-001" CTA Banner (Matching reference) */}
+              {/* "Take Control of Active Drone" CTA Banner */}
               <button
                 type="button"
                 onClick={() => navigate("/remote-pilot")}
@@ -351,55 +311,30 @@ const LiveOperationsPage = () => {
               </button>
 
               {/* Video Player Box */}
-              <div className="relative h-48 rounded-lg overflow-hidden border border-[#1C2C42] bg-[#050B12] group">
-                <img
-                  src={sampleImg || droneLandscapeImg}
-                  alt="Live Drone Feed"
-                  className="w-full h-full object-cover opacity-90 group-hover:scale-105 transition-transform duration-700"
+              <div className="relative h-48 rounded-lg overflow-hidden border border-[#1C2C42] bg-[#050B12]">
+                <LiveDroneFeed
+                  droneId={selectedDroneId}
+                  cameraType="main"
+                  className="h-full w-full"
+                  onStatusChange={({ isPlaying }) => setIsFeedPlaying(Boolean(isPlaying))}
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/30 pointer-events-none" />
 
-                {/* Top Feed Header */}
-                <div className="absolute top-2 left-2 right-2 flex items-center justify-between text-[10px]">
-                  <div className="flex items-center gap-1.5">
-                    <span className="flex items-center gap-1 bg-[#EF4444] text-white px-1.5 py-0.5 rounded font-extrabold text-[9px] uppercase tracking-wider">
-                      <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" /> LIVE
-                    </span>
-                    <span className="bg-black/60 backdrop-blur-xs text-white px-2 py-0.5 rounded font-mono font-bold text-[9.5px]">
-                      {activeDrone.cameraName}
-                    </span>
+                {/* Overlaid Telemetry HUD on Video Feed (Only displayed when real stream is actively playing) */}
+                {isFeedPlaying && (
+                  <div className="absolute bottom-2 left-2 right-2 text-[10px] text-white font-mono leading-tight space-y-0.5 pointer-events-none z-20">
+                    <div className="flex items-center justify-between">
+                      <span>
+                        ALT {typeof activeTelemetry?.altitude === "number" ? Math.round(activeTelemetry.altitude) : 0} m · SPD {typeof activeTelemetry?.speed === "number" ? activeTelemetry.speed.toFixed(1) : "0.0"} m/s · BATT {typeof activeTelemetry?.batteryPercentage === "number" ? Math.round(activeTelemetry.batteryPercentage) : (activeDrone?.battery ?? 100)}%
+                      </span>
+                      <span className="text-[#38BDF8]">
+                        {new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                      </span>
+                    </div>
+                    <div className="text-[#8E9EAA] truncate">
+                      {activeDrone.role ? `${activeDrone.role} · ` : ""}{activeDrone.model || "QuadX Pro"}
+                    </div>
                   </div>
-
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => setIsVideoMuted(!isVideoMuted)}
-                      className="p-1 rounded bg-black/60 text-white hover:bg-black/80 cursor-pointer"
-                    >
-                      {isVideoMuted ? <VolumeX className="w-3 h-3" /> : <Volume2 className="w-3 h-3" />}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => navigate("/remote-pilot")}
-                      className="p-1 rounded bg-black/60 text-white hover:bg-black/80 cursor-pointer"
-                    >
-                      <Maximize2 className="w-3 h-3" />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Overlaid Telemetry HUD on Video Feed */}
-                <div className="absolute bottom-2 left-2 right-2 text-[10px] text-white font-mono leading-tight space-y-0.5">
-                  <div className="flex items-center justify-between">
-                    <span>
-                      ALT {activeDrone.alt} m · SPD {activeDrone.speed} m/s · BATT {activeDrone.battery}%
-                    </span>
-                    <span className="text-[#38BDF8]">08:42:17 AM</span>
-                  </div>
-                  <div className="text-[9px] text-[#CBD5E1]">
-                    {activeDrone.coords} · {activeDrone.sector}
-                  </div>
-                </div>
+                )}
               </div>
             </div>
 
@@ -407,41 +342,52 @@ const LiveOperationsPage = () => {
             <div className="bg-[#0C1624] border border-[#1C2C42] rounded-xl p-3.5 space-y-2.5 shadow-sm flex-1 flex flex-col justify-between">
               <h3 className="text-xs font-bold text-white tracking-tight uppercase">Telemetry</h3>
               <div className="space-y-2 text-xs">
-                {fleetTelemetry.map((d) => (
-                  <div
-                    key={d.id}
-                    onClick={() => setSelectedDroneId(d.id)}
-                    className={`p-2 rounded-lg border transition cursor-pointer flex items-center justify-between ${
-                      selectedDroneId === d.id
-                        ? "bg-[#102A50] border-[#2563EB]"
-                        : "bg-[#07101C] border-[#1C2C42] hover:bg-[#0A1422]"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <Plane className={`w-4 h-4 ${selectedDroneId === d.id ? "text-[#38BDF8]" : "text-[#8E9EAA]"}`} />
-                      <div>
-                        <div className="font-bold text-white text-[11.5px]">
-                          {d.label} · {d.id}
-                        </div>
-                        <div className="text-[10px] text-[#8E9EAA]">
-                          {d.role} · {d.alt} m · {d.link}
+                {availableDrones.map((d) => {
+                  const dTel = d.id === selectedDroneId ? activeTelemetry : (rawFleetTelemetry?.[d.id] || null);
+                  const dAlt = typeof dTel?.altitude === "number" ? Math.round(dTel.altitude) : (typeof d.hours === "number" ? d.hours : 0);
+                  const dBatt = typeof dTel?.batteryPercentage === "number" ? Math.round(dTel.batteryPercentage) : (typeof d.battery === "number" ? d.battery : 100);
+                  const dStatus = dTel?.flightMode || d.status || "STANDBY";
+                  const isCurSelected = selectedDroneId === d.id;
+
+                  return (
+                    <div
+                      key={d.id}
+                      onClick={() => selectDrone(d.id)}
+                      className={`p-2 rounded-lg border transition cursor-pointer flex items-center justify-between ${
+                        isCurSelected
+                          ? "bg-[#102A50] border-[#2563EB]"
+                          : "bg-[#07101C] border-[#1C2C42] hover:bg-[#0A1422]"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <Plane className={`w-4 h-4 shrink-0 ${isCurSelected ? "text-[#38BDF8]" : "text-[#8E9EAA]"}`} />
+                        <div className="min-w-0">
+                          <div className="font-bold text-white text-[11.5px] truncate flex items-center gap-1.5 font-mono">
+                            <span>{d.id}</span>
+                            {d.name && d.name !== d.id && (
+                              <span className="text-[10px] text-[#8CC8FF] font-sans font-normal truncate">({d.name})</span>
+                            )}
+                          </div>
+                          <div className="text-[10px] text-[#8E9EAA] truncate font-mono">
+                            {d.role ? `${d.role} · ` : ""}{dStatus} · {dAlt}m
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    {/* Battery Bar */}
-                    <div className="flex items-center gap-1.5 font-mono text-[11px] font-bold text-white">
-                      <div className="w-12 h-2 rounded-full bg-[#1C2C42] overflow-hidden">
-                        <div
-                          className={`h-full ${
-                            d.battery > 50 ? "bg-[#10B981]" : d.battery > 25 ? "bg-[#F59E0B]" : "bg-[#EF4444]"
-                          }`}
-                          style={{ width: `${d.battery}%` }}
-                        />
+                      {/* Battery Bar */}
+                      <div className="flex items-center gap-1.5 font-mono text-[11px] font-bold text-white shrink-0">
+                        <div className="w-12 h-2 rounded-full bg-[#1C2C42] overflow-hidden">
+                          <div
+                            className={`h-full ${
+                              dBatt > 50 ? "bg-[#10B981]" : dBatt > 25 ? "bg-[#F59E0B]" : "bg-[#EF4444]"
+                            }`}
+                            style={{ width: `${dBatt}%` }}
+                          />
+                        </div>
+                        <span>{dBatt}%</span>
                       </div>
-                      <span>{d.battery}%</span>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               <div className="pt-2 border-t border-[#1C2C42] text-[10px] text-[#8E9EAA] flex items-center justify-between">
@@ -600,7 +546,7 @@ const LiveOperationsPage = () => {
                   <div className="font-extrabold text-[#F87171]">Thermal Anomaly</div>
                   <div className="text-[10px] text-[#C1D0E4]">North Ridge Dam · downstream toe, chainage 140 m</div>
                   <p className="text-[10px] text-[#8E9EAA] mt-1 leading-snug">
-                    A cold band 6 m long on the downstream slope: the pattern of seepage. Swarm re-tasked DR-007 for a second pass.
+                    A cold band 6 m long on the downstream slope: the pattern of seepage. Autonomous re-tasking confirmed for second pass.
                   </p>
                 </div>
               </div>

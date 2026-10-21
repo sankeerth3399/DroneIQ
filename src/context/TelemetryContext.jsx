@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from "react"
+import { useState, useEffect, useCallback, useMemo, useRef, useContext } from "react"
 import { TelemetryContext } from "./telemetryContextCore.js"
 import { useAuth } from "@/hooks/useAuth.js"
 import { telemetryClient } from "@/services/telemetry/telemetryClient.js"
@@ -19,11 +19,55 @@ import {
   PositionSource,
   resolveDroneDisplayPosition,
 } from "@/services/telemetry/telemetryTypes.js"
+import { droneService, DRONES_UPDATED_EVENT } from "@/services/api/droneService.js"
 
 export const TelemetryProvider = ({ children }) => {
   const { token, isAuthenticated } = useAuth()
 
-  const [selectedDroneId, setSelectedDroneId] = useState("DRONE-001")
+  const [registeredDrones, setRegisteredDrones] = useState(() => droneService.getStoredDrones())
+  const [selectedDroneId, setSelectedDroneId] = useState(() => {
+    const stored = droneService.getStoredDrones()
+    return stored[0]?.id || "DR-001"
+  })
+
+  // Synchronize registered drones across tabs and pages in real-time
+  useEffect(() => {
+    const handleSync = () => {
+      setRegisteredDrones(droneService.getStoredDrones())
+    }
+    window.addEventListener("storage", handleSync)
+    window.addEventListener(DRONES_UPDATED_EVENT, handleSync)
+
+    // Background verification with backend if reachable
+    droneService.getDrones().then((drones) => {
+      if (Array.isArray(drones) && drones.length > 0) {
+        setRegisteredDrones(drones)
+      }
+    }).catch(() => {})
+
+    return () => {
+      window.removeEventListener("storage", handleSync)
+      window.removeEventListener(DRONES_UPDATED_EVENT, handleSync)
+    }
+  }, [])
+
+  const registerDrone = useCallback(async (data) => {
+    const created = await droneService.registerDrone(data)
+    setRegisteredDrones(droneService.getStoredDrones())
+    return created
+  }, [])
+
+  const updateDrone = useCallback(async (id, data) => {
+    const updated = await droneService.updateDrone(id, data)
+    setRegisteredDrones(droneService.getStoredDrones())
+    return updated
+  }, [])
+
+  const deleteDrone = useCallback(async (id) => {
+    const res = await droneService.deleteDrone(id)
+    setRegisteredDrones(droneService.getStoredDrones())
+    return res
+  }, [])
   const [fleetTelemetry, setFleetTelemetry] = useState({})
   const [connectionState, setConnectionState] = useState(ConnectionState.DISCONNECTED)
   const [lastTelemetryTime, setLastTelemetryTime] = useState(null)
@@ -46,6 +90,8 @@ export const TelemetryProvider = ({ children }) => {
     latitude: FALLBACK_DRONE_LOCATION.latitude,
     longitude: FALLBACK_DRONE_LOCATION.longitude,
   })
+  const dronePositionRef = useRef(dronePosition)
+  dronePositionRef.current = dronePosition
 
   // Live-drone state is separate from telemetry connectivity.
   const [liveDroneConnected, setLiveDroneConnected] = useState(false)
@@ -54,6 +100,29 @@ export const TelemetryProvider = ({ children }) => {
   // Live Telemetry Attachment Flag (false = fixed fallback, true = following live valid GPS)
   const [liveTelemetryAttached, setLiveTelemetryAttached] = useState(false)
   const lastAcceptedTelemetryTimestampRef = useRef({})
+  const lastAcceptedArmedTimestampRef = useRef({})
+
+  /**
+   * Authoritative helper to extract boolean armed state from any packet structure
+   */
+  const extractArmedState = useCallback((packet) => {
+    if (!packet || typeof packet !== "object") return undefined
+    if (typeof packet.armed === "boolean") return packet.armed
+    if (typeof packet.isArmed === "boolean") return packet.isArmed
+    if (packet.telemetry && typeof packet.telemetry === "object") {
+      if (typeof packet.telemetry.armed === "boolean") return packet.telemetry.armed
+      if (typeof packet.telemetry.isArmed === "boolean") return packet.telemetry.isArmed
+    }
+    if (packet.state && typeof packet.state === "object") {
+      if (typeof packet.state.armed === "boolean") return packet.state.armed
+      if (typeof packet.state.isArmed === "boolean") return packet.state.isArmed
+    }
+    if (packet.status && typeof packet.status === "object") {
+      if (typeof packet.status.armed === "boolean") return packet.status.armed
+      if (typeof packet.status.isArmed === "boolean") return packet.status.isArmed
+    }
+    return undefined
+  }, [])
 
   // Centralized Canonical Flight Mode State (Mandatory Default: "GUIDED")
   const [flightMode, setFlightModeState] = useState(DEFAULT_FLIGHT_MODE)
@@ -102,9 +171,9 @@ export const TelemetryProvider = ({ children }) => {
   }, [])
 
   /**
-   * Section 1, 5, 6, 37, 38: The ONE authoritative function for changing drone ARM/DISARM state.
-   * INVARIANT 1: No user ARM confirmation = ARMED state cannot change from UNARMED.
-   * INVARIANT 2: No user DISARM confirmation = UNARMED state cannot change from ARMED.
+   * The ONE authoritative function for changing drone ARM/DISARM state.
+   * Handles both frontend-initiated user commands (with required confirmation)
+   * and external vehicle-reported authoritative state transitions (from WebSocket/telemetry).
    */
   const updateArmedState = useCallback((newArmed, {
     source = "USER_COMMAND",
@@ -112,45 +181,123 @@ export const TelemetryProvider = ({ children }) => {
     userAction = null,
     backendResponse = null,
     isConfirmed = false,
+    droneId = null,
+    timestamp = null,
   } = {}) => {
-    setIsArmedState((prev) => {
-      const next = Boolean(newArmed)
-      if (prev === next) return prev
+    if (newArmed === undefined || newArmed === null) return false
+    const targetDroneId = droneId || selectedDroneId || "DRONE-001"
+    const next = Boolean(newArmed)
+    const incomingTime = timestamp
+      ? (typeof timestamp === "number" ? timestamp : new Date(timestamp).getTime())
+      : Date.now()
 
-      // Invariant 1: UNARMED -> ARMED requires user ARM confirmation & successful backend response
-      if (!prev && next) {
-        if (!isConfirmed || userAction !== "USER_ARM_CONFIRMED" || !backendResponse?.success) {
-          if (import.meta.env?.DEV) {
-            console.warn(
-              `[UNEXPECTED ARM STATE CHANGE] Attempted transition UNARMED -> ARMED without confirmed user command and successful backend response.\nprevious: UNARMED\nnew: ARMED\nsource: ${source}\ncommandId: ${commandId}\nuserAction: ${userAction}\nbackendResponse: ${JSON.stringify(backendResponse)}`
-            )
-          }
-          return prev
-        }
-      }
+    const isExternalVehicleChange =
+      source === "VEHICLE_TELEMETRY" ||
+      source === "BACKEND_STATE_EVENT" ||
+      source === "LIVE_TELEMETRY" ||
+      source === "AUTHORITATIVE_TELEMETRY"
+    const isEmergency = source === "EMERGENCY_OVERRIDE"
 
-      // Invariant 2: ARMED -> UNARMED requires user DISARM confirmation & successful response (or emergency disarm override)
-      if (prev && !next) {
-        const isEmergency = source === "EMERGENCY_OVERRIDE"
-        if (!isEmergency && (!isConfirmed || userAction !== "USER_DISARM_CONFIRMED" || !backendResponse?.success)) {
-          if (import.meta.env?.DEV) {
-            console.warn(
-              `[UNEXPECTED ARM STATE CHANGE] Attempted transition ARMED -> UNARMED without confirmed user command and successful backend response.\nprevious: ARMED\nnew: UNARMED\nsource: ${source}\ncommandId: ${commandId}\nuserAction: ${userAction}\nbackendResponse: ${JSON.stringify(backendResponse)}`
-            )
-          }
-          return prev
-        }
-      }
-
+    // Guard against out-of-order stale telemetry packets overwriting newer state
+    const lastArmedTime = lastAcceptedArmedTimestampRef.current[targetDroneId] || 0
+    if (isExternalVehicleChange && timestamp && incomingTime < lastArmedTime && lastArmedTime !== 0) {
       if (import.meta.env?.DEV) {
-        console.log(
-          `[ARM STATE CHANGE]\nprevious: ${prev ? "ARMED" : "UNARMED"}\nnew: ${next ? "ARMED" : "UNARMED"}\nsource: ${source}\ncommandId: ${commandId || "CMD-" + Date.now()}\nuserAction: ${userAction || "UNKNOWN"}\nbackendResponse: ${JSON.stringify(backendResponse || {})}`
-        )
+        console.warn("[ARM STATE REJECTED]", {
+          timestamp: incomingTime,
+          droneId: targetDroneId,
+          incomingValue: next,
+          source,
+          accepted: false,
+          reason: "STALE_OUT_OF_ORDER_PACKET",
+          origin: "EXTERNAL_VEHICLE_STATE_CHANGE",
+        })
       }
+      return false
+    }
 
-      return next
-    })
-  }, [])
+    // Command Safety Rules:
+    // When ARM/DISARM is initiated by a user from the frontend, verify confirmation & backend acknowledgment.
+    // When reported by the physical vehicle or authoritative backend telemetry, accept immediately without blocking.
+    if (!isExternalVehicleChange && !isEmergency) {
+      if (next && (!isConfirmed || userAction !== "USER_ARM_CONFIRMED" || !backendResponse?.success)) {
+        if (import.meta.env?.DEV) {
+          console.warn("[ARM STATE REJECTED]", {
+            timestamp: incomingTime,
+            droneId: targetDroneId,
+            incomingValue: next,
+            source,
+            accepted: false,
+            reason: "UNCONFIRMED_USER_ARM_COMMAND",
+            origin: "USER_COMMAND_RESULT",
+          })
+        }
+        return false
+      }
+      if (!next && (!isConfirmed || userAction !== "USER_DISARM_CONFIRMED" || !backendResponse?.success)) {
+        if (import.meta.env?.DEV) {
+          console.warn("[ARM STATE REJECTED]", {
+            timestamp: incomingTime,
+            droneId: targetDroneId,
+            incomingValue: next,
+            source,
+            accepted: false,
+            reason: "UNCONFIRMED_USER_DISARM_COMMAND",
+            origin: "USER_COMMAND_RESULT",
+          })
+        }
+        return false
+      }
+    }
+
+    lastAcceptedArmedTimestampRef.current[targetDroneId] = incomingTime
+
+    // Update primary isArmed state when the update is for the selected drone
+    if (targetDroneId === selectedDroneId) {
+      setIsArmedState((prev) => {
+        if (prev === next) return prev
+
+        if (import.meta.env?.DEV) {
+          console.log("[ARM STATE SYNC]", {
+            timestamp: incomingTime,
+            droneId: targetDroneId,
+            incomingValue: next,
+            source,
+            previousState: prev ? "ARMED" : "UNARMED",
+            newState: next ? "ARMED" : "UNARMED",
+            accepted: true,
+            reason: null,
+            origin: isExternalVehicleChange ? "EXTERNAL_VEHICLE_STATE_CHANGE" : "USER_COMMAND_RESULT",
+          })
+        }
+
+        window.dispatchEvent(
+          new CustomEvent("aeronexus:drone-armed", {
+            detail: {
+              droneId: targetDroneId,
+              armed: next,
+              isArmed: next,
+              source,
+              timestamp: new Date(incomingTime).toISOString(),
+            },
+          })
+        )
+
+        return next
+      })
+    }
+
+    // Always update fleetTelemetry store for multi-drone tracking and state preservation
+    setFleetTelemetry((prev) => ({
+      ...prev,
+      [targetDroneId]: {
+        ...(prev[targetDroneId] || {}),
+        armed: next,
+        isArmed: next,
+      },
+    }))
+
+    return true
+  }, [selectedDroneId])
 
   /**
    * Section 11, 17, 18, 25: The ONE authoritative function for changing drone position.
@@ -206,7 +353,7 @@ export const TelemetryProvider = ({ children }) => {
 
     if (source !== "LIVE_TELEMETRY" && source !== "SIMULATION") {
       if (import.meta.env?.DEV) {
-        console.warn(`[UNEXPECTED POSITION CHANGE]\nprevious: ${dronePosition.latitude.toFixed(6)}, ${dronePosition.longitude.toFixed(6)}\nnew: ${numLat.toFixed(6)}, ${numLng.toFixed(6)}\nsource: ${source}\ntelemetryTimestamp: ${incomingTime}`)
+        console.warn(`[UNEXPECTED POSITION CHANGE]\nprevious: ${dronePositionRef.current.latitude.toFixed(6)}, ${dronePositionRef.current.longitude.toFixed(6)}\nnew: ${numLat.toFixed(6)}, ${numLng.toFixed(6)}\nsource: ${source}\ntelemetryTimestamp: ${incomingTime}`)
       }
       return false
     }
@@ -235,7 +382,7 @@ export const TelemetryProvider = ({ children }) => {
     setLiveTelemetryAttached(true)
 
     return true
-  }, [selectedDroneId, dronePosition])
+  }, [selectedDroneId])
 
   // Handle incoming live telemetry event (OBSERVED METRICS ONLY - never mutate user command state)
   const handleTelemetryUpdate = useCallback((data) => {
@@ -315,6 +462,26 @@ export const TelemetryProvider = ({ children }) => {
       prevBatteryPercentRef.current = batt
     }
 
+    // Section 1, 2, 5: Authoritative two-way ARM/DISARM state synchronization
+    const incomingArmed = extractArmedState(data)
+    if (typeof incomingArmed === "boolean") {
+      updateArmedState(incomingArmed, {
+        source: isRealTelemetry ? "VEHICLE_TELEMETRY" : "LIVE_TELEMETRY",
+        droneId: data.droneId,
+        timestamp: timestampMs,
+      })
+    }
+
+    // Authoritative flight mode synchronization from vehicle
+    const incomingMode = data.flightMode || data.mode || data.telemetry?.flightMode
+    if (incomingMode && typeof incomingMode === "string" && data.droneId === selectedDroneId) {
+      const normalizedMode = String(incomingMode).toUpperCase().replace(/\s+/g, "_")
+      const validModes = ["STABILIZE", "ALT_HOLD", "POS_HOLD", "LOITER", "GUIDED", "RTL", "LAND", "AUTO", "BRAKE", "MANUAL"]
+      if (validModes.includes(normalizedMode)) {
+        setFlightModeState((curr) => (curr !== normalizedMode ? normalizedMode : curr))
+      }
+    }
+
     // Update fleet telemetry store with incoming observed metrics (battery, altitude, heading, etc.)
     setFleetTelemetry((prev) => {
       const prevData = prev[data.droneId] || {}
@@ -326,6 +493,9 @@ export const TelemetryProvider = ({ children }) => {
         [data.droneId]: {
           ...prevData,
           ...data,
+          armed: typeof incomingArmed === "boolean" ? incomingArmed : (prevData.armed ?? DEFAULT_ARMED_STATE),
+          isArmed: typeof incomingArmed === "boolean" ? incomingArmed : (prevData.isArmed ?? DEFAULT_ARMED_STATE),
+          flightMode: incomingMode ? String(incomingMode).toUpperCase().replace(/\s+/g, "_") : prevData.flightMode,
           latitude: validatedGps.latitude !== undefined
             ? validatedGps.latitude
             : isRealTelemetry && hasValidGps
@@ -345,14 +515,41 @@ export const TelemetryProvider = ({ children }) => {
         },
       }
     })
+  }, [acceptLiveDronePosition, connectionState, extractArmedState, selectedDroneId, updateArmedState])
 
-    // CRITICAL (Section 1, 2, Invariant 1): External telemetry connection, WebSocket packets,
-    // or vehicle-reported armed flags MUST NEVER automatically change the user's armed state!
-  }, [acceptLiveDronePosition, connectionState, selectedDroneId])
-
-  // Subscribe to WebSocket client events - internal state update only (Section 15)
+  // Subscribe to WebSocket client events and backend events
   useEffect(() => {
     const unsubTelemetry = telemetryClient.onTelemetry(handleTelemetryUpdate)
+
+    // Listen to discrete backend state events (e.g. ARM_STATE, DRONE_DISARMED, STATUS_CHANGE)
+    const unsubBackendEvent = telemetryClient.onBackendEvent((event) => {
+      if (!event || typeof event !== "object") return
+      const targetDroneId = event.droneId || event.targetDrone || event.drone || event.data?.droneId
+      if (!targetDroneId) return
+
+      const eventType = String(event.type || event.event || "").toUpperCase()
+      let eventArmed = extractArmedState(event)
+      if (eventArmed === undefined && event.data) {
+        eventArmed = extractArmedState(event.data)
+      }
+
+      if (eventArmed === undefined) {
+        if (eventType === "ARMED" || eventType === "DRONE_ARMED" || eventType === "VEHICLE_ARMED") {
+          eventArmed = true
+        } else if (eventType === "DISARMED" || eventType === "DRONE_DISARMED" || eventType === "VEHICLE_DISARMED") {
+          eventArmed = false
+        }
+      }
+
+      if (typeof eventArmed === "boolean") {
+        updateArmedState(eventArmed, {
+          source: "BACKEND_STATE_EVENT",
+          droneId: targetDroneId,
+          timestamp: event.timestamp ? new Date(event.timestamp).getTime() : Date.now(),
+        })
+      }
+    })
+
     const unsubState = telemetryClient.onStateChange((state) => {
       const prevState = prevConnectionStateRef.current
       prevConnectionStateRef.current = state
@@ -373,18 +570,27 @@ export const TelemetryProvider = ({ children }) => {
         setLiveDroneConnected(false)
         setValidLiveGps(false)
         setLiveTelemetryAttached(false)
-        setDronePosition({
-          latitude: FALLBACK_DRONE_LOCATION.latitude,
-          longitude: FALLBACK_DRONE_LOCATION.longitude,
+        setDronePosition((prev) => {
+          if (
+            prev.latitude === FALLBACK_DRONE_LOCATION.latitude &&
+            prev.longitude === FALLBACK_DRONE_LOCATION.longitude
+          ) {
+            return prev
+          }
+          return {
+            latitude: FALLBACK_DRONE_LOCATION.latitude,
+            longitude: FALLBACK_DRONE_LOCATION.longitude,
+          }
         })
       }
     })
 
     return () => {
       unsubTelemetry()
+      unsubBackendEvent()
       unsubState()
     }
-  }, [handleTelemetryUpdate])
+  }, [extractArmedState, handleTelemetryUpdate, updateArmedState])
 
   // Connect WebSocket when authenticated, disconnect on logout
   useEffect(() => {
@@ -404,7 +610,23 @@ export const TelemetryProvider = ({ children }) => {
     if (!droneId) return
     setSelectedDroneId(droneId)
     telemetryClient.subscribeDrone(droneId)
-  }, [])
+    const droneData = fleetTelemetry[droneId]
+    if (droneData && (typeof droneData.armed === "boolean" || typeof droneData.isArmed === "boolean")) {
+      const droneArmed = typeof droneData.armed === "boolean" ? droneData.armed : droneData.isArmed
+      setIsArmedState(droneArmed)
+    } else {
+      setIsArmedState(DEFAULT_ARMED_STATE)
+    }
+  }, [fleetTelemetry])
+
+  // Synchronize armed state when switching selected drone
+  useEffect(() => {
+    const droneData = fleetTelemetry[selectedDroneId]
+    if (droneData && (typeof droneData.armed === "boolean" || typeof droneData.isArmed === "boolean")) {
+      const droneArmed = typeof droneData.armed === "boolean" ? droneData.armed : droneData.isArmed
+      setIsArmedState(droneArmed)
+    }
+  }, [selectedDroneId, fleetTelemetry])
 
   // Subscribe to all drones (Fleet Overview)
   const subscribeAll = useCallback(() => {
@@ -927,8 +1149,8 @@ export const TelemetryProvider = ({ children }) => {
       flightMode: hasAuthoritativeLiveTelemetry
         ? rawTelemetry.flightMode || flightMode || DEFAULT_FLIGHT_MODE
         : flightMode || DEFAULT_FLIGHT_MODE,
-      armed: isArmed,
-      isArmed,
+      armed: typeof isArmed === "boolean" ? isArmed : (typeof rawTelemetry.armed === "boolean" ? rawTelemetry.armed : DEFAULT_ARMED_STATE),
+      isArmed: typeof isArmed === "boolean" ? isArmed : (typeof rawTelemetry.isArmed === "boolean" ? rawTelemetry.isArmed : DEFAULT_ARMED_STATE),
       speed: rawTelemetry.speed ?? 0,
       groundSpeed: rawTelemetry.groundSpeed ?? rawTelemetry.speed ?? 0,
       verticalSpeed: rawTelemetry.verticalSpeed ?? rawTelemetry.climbRate ?? 0,
@@ -936,6 +1158,13 @@ export const TelemetryProvider = ({ children }) => {
       gimbal: gimbalState,
     }
   }, [rawTelemetry, dronePosition, liveTelemetryAttached, flightMode, isArmed, gimbalState, isConnected, isStale, droneGPSValid, isLive])
+
+  const activeDrone = useMemo(() => {
+    const reg = (registeredDrones || []).find(
+      (d) => d.id === selectedDroneId || d.droneId === selectedDroneId || (selectedDroneId === "DRONE-001" && d.id === "DR-001")
+    ) || registeredDrones?.[0] || null
+    return reg
+  }, [registeredDrones, selectedDroneId])
 
   const value = {
     telemetry,
@@ -967,8 +1196,13 @@ export const TelemetryProvider = ({ children }) => {
       yaw: normalizeYaw,
     },
     fleetTelemetry,
+    registeredDrones,
+    activeDrone,
     selectedDroneId,
     selectDrone,
+    registerDrone,
+    updateDrone,
+    deleteDrone,
     subscribeAll,
     connectionState,
     droneConnected: isConnected,
@@ -979,6 +1213,14 @@ export const TelemetryProvider = ({ children }) => {
   }
 
   return <TelemetryContext.Provider value={value}>{children}</TelemetryContext.Provider>
+}
+
+export const useTelemetry = () => {
+  const context = useContext(TelemetryContext)
+  if (!context) {
+    throw new Error("useTelemetry must be used within a TelemetryProvider")
+  }
+  return context
 }
 
 export default TelemetryProvider

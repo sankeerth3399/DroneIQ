@@ -181,30 +181,31 @@ export class DroneIqClient {
           }, Date.now())
           break
 
-        case "TELEMETRY":
-          if (message.data) {
-            const telemetryPayload = {
-              ...message.data,
-              droneId: message.droneId || message.data.droneId,
-              liveDroneConnected: message.liveDroneConnected ?? message.data.liveDroneConnected,
+        case "TELEMETRY": {
+          const dataPayload = (message.data && typeof message.data === "object") ? message.data : message
+          const targetDroneId = message.droneId || dataPayload.droneId
+          const telemetryPayload = {
+            ...dataPayload,
+            droneId: targetDroneId,
+            liveDroneConnected: message.liveDroneConnected ?? dataPayload.liveDroneConnected,
+          }
+          this.telemetryListeners.forEach((listener) => {
+            try {
+              listener(telemetryPayload)
+            } catch (err) {
+              console.error("[DroneIqClient] Telemetry listener error:", err)
             }
-            this.telemetryListeners.forEach((listener) => {
-              try {
-                listener(telemetryPayload)
-              } catch (err) {
-                console.error("[DroneIqClient] Telemetry listener error:", err)
-              }
-            })
+          })
 
-            // If telemetry message also includes a discrete event, alert, status change, or message
-            if (message.event || message.data.event || message.data.alert || message.data.message || message.data.statusChange) {
-              this.notifyBackendEvent({
-                type: message.event ? String(message.event) : "TELEMETRY_EVENT",
-                ...message,
-              }, Date.now())
-            }
+          // If telemetry message also includes a discrete event, alert, status change, or message
+          if (message.event || dataPayload.event || dataPayload.alert || dataPayload.message || dataPayload.statusChange) {
+            this.notifyBackendEvent({
+              type: message.event ? String(message.event) : "TELEMETRY_EVENT",
+              ...message,
+            }, Date.now())
           }
           break
+        }
 
         case "PONG":
           // Keepalive acknowledged
@@ -222,13 +223,39 @@ export class DroneIqClient {
           }, Date.now())
           break
 
-        default:
+        default: {
+          // If the message contains drone telemetry or state fields, notify telemetry listeners
+          const payload = (message.data && typeof message.data === "object") ? message.data : message
+          const droneId = message.droneId || payload?.droneId
+          const hasStateFields = payload && typeof payload === "object" && (
+            payload.armed !== undefined ||
+            payload.isArmed !== undefined ||
+            payload.latitude !== undefined ||
+            payload.flightMode !== undefined
+          )
+
+          if (droneId && hasStateFields) {
+            const telemetryPayload = {
+              ...payload,
+              droneId,
+              liveDroneConnected: message.liveDroneConnected ?? payload.liveDroneConnected,
+            }
+            this.telemetryListeners.forEach((listener) => {
+              try {
+                listener(telemetryPayload)
+              } catch (err) {
+                console.error("[DroneIqClient] Telemetry listener error:", err)
+              }
+            })
+          }
+
           // ANY OTHER BACKEND MESSAGE:
           // INFO, LOG, EVENT, COMMAND, MISSION, SYSTEM, ALERT, STATUS, ERROR,
           // TELEMETRY_EVENT, COMMAND_RESULT, MISSION_EVENT, or any unknown/future valid message type.
           // NEVER drop valid backend messages!
           this.notifyBackendEvent(message, Date.now())
           break
+        }
       }
     }
 

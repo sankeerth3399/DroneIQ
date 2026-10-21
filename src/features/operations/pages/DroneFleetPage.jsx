@@ -1,6 +1,7 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import droneLandscapeImg from "@/assets/images/drone_mountain_survey.jpg";
+import { useTelemetry } from "@/context/TelemetryContext.jsx";
 import {
   Plane,
   Plus,
@@ -29,176 +30,108 @@ import {
 /**
  * DroneFleetPage
  * Dedicated enterprise fleet asset management page.
- * Features fleet composition donut chart, airframe health bars, searchable fleet inventory,
- * deep-dive drone inspector with telemetry and quick actions.
- * Faithfully matches media_1791545054650.png reference.
+ * Fully synchronized with dynamic registered drones and live telemetry.
  */
 const DroneFleetPage = () => {
   const navigate = useNavigate();
+  const {
+    registeredDrones = [],
+    registerDrone,
+    deleteDrone,
+    fleetTelemetry = {},
+    selectedDroneId: activeDroneIdFromContext,
+    selectDrone,
+  } = useTelemetry();
 
   // Filter tab: "all" | "in_mission" | "standby" | "charging" | "maintenance"
   const [statusFilter, setStatusFilter] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedDroneId, setSelectedDroneId] = useState("DR-001");
-  const [activeDetailTab, setActiveDetailTab] = useState("overview"); // "overview" | "sensors" | "maintenance" | "history" | "compliance" | "docs"
+  const [selectedDroneId, setSelectedDroneId] = useState(
+    () => activeDroneIdFromContext || registeredDrones?.[0]?.id || "DR-001"
+  );
+  const [activeDetailTab, setActiveDetailTab] = useState("overview");
   const [showAddDroneModal, setShowAddDroneModal] = useState(false);
   const [actionFeedback, setActionFeedback] = useState(null);
+
+  // New Drone form state
+  const [newDroneForm, setNewDroneForm] = useState({
+    id: "",
+    name: "",
+    model: "DJI Matrice 350 RTK",
+    type: "Multirotor",
+    location: "Base - HQ",
+    role: "Survey",
+    mission: "Area Survey",
+  });
 
   const showToast = (msg) => {
     setActionFeedback(msg);
     setTimeout(() => setActionFeedback(null), 3000);
   };
 
-  // Fleet database matching screenshot
-  const fleetData = useMemo(
-    () => [
-      {
-        id: "DR-001",
-        name: "Falcon-1",
-        model: "DJI Matrice 350",
-        type: "Multirotor",
-        status: "In Mission",
-        battery: 78,
-        location: "North Ridge",
-        lastFlight: "Today, 07:12",
-        hours: 412,
-        serial: "1581F8Q00014",
-        firmware: "v7.02",
-        purchaseDate: "12 Jan 2025",
-        team: "Team Alpha",
-        gpsStatus: "12 satellites · RTK fix",
-        signal: "-88 dBm · strong",
-        storage: "62% used · 124 GB free",
-      },
-      {
-        id: "DR-002",
-        name: "Spectre-2",
-        model: "Autel EVO Max",
-        type: "Multirotor",
-        status: "In Mission",
-        battery: 69,
-        location: "NH-44 Km 81",
-        lastFlight: "Today, 07:45",
-        hours: 258,
-        serial: "8824EVOMAX01",
-        firmware: "v4.18",
-        purchaseDate: "04 Mar 2025",
-        team: "Highway Ops",
-        gpsStatus: "14 satellites · RTK fix",
-        signal: "-91 dBm · strong",
-        storage: "48% used · 180 GB free",
-      },
-      {
-        id: "DR-003",
-        name: "Therma-3",
-        model: "Autel EVO Max",
-        type: "Multirotor",
-        status: "In Mission",
-        battery: 64,
-        location: "North Ridge",
-        lastFlight: "Today, 08:15",
-        hours: 198,
-        serial: "8824EVOMAX02",
-        firmware: "v4.18",
-        purchaseDate: "18 Mar 2025",
-        team: "Team Alpha",
-        gpsStatus: "11 satellites · 3D fix",
-        signal: "-86 dBm · strong",
-        storage: "72% used · 95 GB free",
-      },
-      {
-        id: "DR-004",
-        name: "AeroWing-4",
-        model: "WingtraOne",
-        type: "Fixed Wing",
-        status: "Charging",
-        battery: 45,
-        location: "Base - HQ",
-        lastFlight: "Today, 05:30",
-        hours: 620,
-        serial: "WGTR992014",
-        firmware: "v3.85",
-        purchaseDate: "20 Nov 2024",
-        team: "Survey Group",
-        gpsStatus: "Ground charging",
-        signal: "Docked LAN",
-        storage: "15% used · 420 GB free",
-      },
-      {
-        id: "DR-005",
-        name: "GeoBee-5",
-        model: "eBee X",
-        type: "Fixed Wing",
-        status: "Standby",
-        battery: 96,
-        location: "Base - HQ",
-        lastFlight: "Yesterday, 16:22",
-        hours: 510,
-        serial: "EBX8847190",
-        firmware: "v5.12",
-        purchaseDate: "02 Feb 2025",
-        team: "Survey Group",
-        gpsStatus: "Standby standby",
-        signal: "-82 dBm · strong",
-        storage: "30% used · 350 GB free",
-      },
-      {
-        id: "DR-006",
-        name: "Scout-6",
-        model: "DJI Mavic 3T",
-        type: "Multirotor",
-        status: "In Mission",
-        battery: 82,
-        location: "Refinery PU3",
-        lastFlight: "Today, 08:30",
-        hours: 302,
-        serial: "MVC3T90124",
-        firmware: "v2.09",
-        purchaseDate: "15 Apr 2025",
-        team: "Industrial Safety",
-        gpsStatus: "16 satellites · RTK fix",
-        signal: "-84 dBm · strong",
-        storage: "54% used · 140 GB free",
-      },
-      {
-        id: "DR-007",
-        name: "Patrol-7",
-        model: "DJI Mavic 3T",
-        type: "Multirotor",
-        status: "In Mission",
-        battery: 71,
-        location: "North Ridge",
-        lastFlight: "Today, 07:55",
-        hours: 188,
-        serial: "MVC3T90125",
-        firmware: "v2.09",
-        purchaseDate: "20 Apr 2025",
-        team: "Team Alpha",
-        gpsStatus: "13 satellites · RTK fix",
-        signal: "-87 dBm · strong",
-        storage: "65% used · 110 GB free",
-      },
-      {
-        id: "DR-008",
-        name: "CargoVTOL-8",
-        model: "Volansi VOLY",
-        type: "VTOL",
-        status: "In Maintenance",
-        battery: 0,
-        location: "Service Center",
-        lastFlight: "—",
-        hours: 376,
-        serial: "VLNSY77401",
-        firmware: "v1.94",
-        purchaseDate: "10 Oct 2024",
-        team: "Logistics Flight",
-        gpsStatus: "In hanger",
-        signal: "Offline",
-        storage: "Maintenance mode",
-      },
-    ],
-    []
-  );
+  // Keep selected drone aligned with context or available drones
+  useEffect(() => {
+    if (activeDroneIdFromContext && registeredDrones.some((d) => d.id === activeDroneIdFromContext)) {
+      setSelectedDroneId(activeDroneIdFromContext);
+    } else if (!registeredDrones.some((d) => d.id === selectedDroneId) && registeredDrones.length > 0) {
+      setSelectedDroneId(registeredDrones[0].id);
+    }
+  }, [activeDroneIdFromContext, registeredDrones, selectedDroneId]);
+
+  // Dynamic Fleet Data merging registered inventory with live telemetry
+  const fleetData = useMemo(() => {
+    return registeredDrones.map((d) => {
+      const id = d.id || d.droneId;
+      const live = fleetTelemetry?.[id] || {};
+      const isLive = live && (live.connectionStatus === "connected" || Boolean(live.armed));
+
+      let battery = 100;
+      if (typeof live.battery?.level === "number") battery = live.battery.level;
+      else if (typeof live.battery === "number") battery = live.battery;
+      else if (typeof d.battery === "number") battery = d.battery;
+
+      let status = d.status || "Standby";
+      if (live.armed) {
+        status = "In Mission";
+      } else if (isLive) {
+        status = "Standby";
+      } else if (d.status === "ONLINE") {
+        status = "In Mission";
+      }
+
+      const gpsStatus = isLive
+        ? `${live.gps?.satellitesVisible || 14} satellites · ${live.gps?.fixType || "RTK fix"}`
+        : (d.gpsStatus || (status === "Charging" ? "Ground charging" : "Standby standby"));
+
+      const signal = isLive
+        ? `${live.linkQuality || -84} dBm · strong`
+        : (d.signal || "Offline");
+
+      const storage = d.storage || "48% used · 180 GB free";
+
+      return {
+        ...d,
+        id,
+        name: d.name || `Drone ${id}`,
+        model: d.model || "QuadX Pro",
+        type: d.type || "Multirotor",
+        status,
+        battery,
+        location: d.location || "Base - HQ",
+        lastFlight: d.lastFlight || "Today, 08:00",
+        hours: typeof d.hours === "number" ? d.hours : 120,
+        serial: d.serial || `SN-${id}`,
+        firmware: d.firmware || "v2.10",
+        purchaseDate: d.purchaseDate || "15 Jan 2025",
+        team: d.team || "Team Alpha",
+        gpsStatus,
+        signal,
+        storage,
+        role: d.role || null,
+        mission: d.mission || null,
+      };
+    });
+  }, [registeredDrones, fleetTelemetry]);
 
   // Filtered drones
   const filteredDrones = useMemo(() => {
@@ -214,7 +147,9 @@ const DroneFleetPage = () => {
           d.id.toLowerCase().includes(q) ||
           d.name.toLowerCase().includes(q) ||
           d.model.toLowerCase().includes(q) ||
-          d.location.toLowerCase().includes(q)
+          d.location.toLowerCase().includes(q) ||
+          (d.role && d.role.toLowerCase().includes(q)) ||
+          (d.mission && d.mission.toLowerCase().includes(q))
         );
       }
       return true;
@@ -223,8 +158,104 @@ const DroneFleetPage = () => {
 
   // Selected drone object
   const activeDrone = useMemo(() => {
-    return fleetData.find((d) => d.id === selectedDroneId) || fleetData[0];
+    return fleetData.find((d) => d.id === selectedDroneId) || fleetData[0] || {
+      id: "DR-001",
+      name: "Drone 1",
+      model: "QuadX Pro",
+      type: "Multirotor",
+      status: "Standby",
+      battery: 100,
+      location: "Base - HQ",
+      hours: 0,
+      serial: "SN-DR-001",
+      firmware: "v1.00",
+      purchaseDate: "2025",
+      team: "Team Alpha",
+      gpsStatus: "Standby",
+      signal: "Offline",
+      storage: "100 GB free",
+    };
   }, [fleetData, selectedDroneId]);
+
+  // Dynamic Fleet KPIs
+  const totalCount = fleetData.length;
+  const inMissionCount = fleetData.filter((d) => d.status === "In Mission").length;
+  const standbyCount = fleetData.filter((d) => d.status === "Standby").length;
+  const chargingCount = fleetData.filter((d) => d.status === "Charging").length;
+  const maintCount = fleetData.filter((d) => d.status === "In Maintenance").length;
+  const availPct = totalCount > 0 ? Math.round(((totalCount - maintCount) / totalCount) * 100) : 100;
+  const avgBattery = totalCount > 0 ? Math.round(fleetData.reduce((acc, d) => acc + (d.battery || 0), 0) / totalCount) : 0;
+  const totalHours = fleetData.reduce((acc, d) => acc + (d.hours || 0), 0);
+
+  // Dynamic composition breakdown
+  const multiCount = fleetData.filter((d) => (d.type || "").toLowerCase().includes("multi")).length;
+  const fixedCount = fleetData.filter((d) => (d.type || "").toLowerCase().includes("fixed")).length;
+  const vtolCount = fleetData.filter((d) => (d.type || "").toLowerCase().includes("vtol")).length;
+  const hybridCount = Math.max(0, totalCount - multiCount - fixedCount - vtolCount);
+
+  const multiPct = totalCount > 0 ? Math.round((multiCount / totalCount) * 100) : 0;
+  const fixedPct = totalCount > 0 ? Math.round((fixedCount / totalCount) * 100) : 0;
+  const vtolPct = totalCount > 0 ? Math.round((vtolCount / totalCount) * 100) : 0;
+  const hybridPct = Math.max(0, 100 - multiPct - fixedPct - vtolPct);
+
+  // Dynamic location distribution
+  const locationCounts = useMemo(() => {
+    const map = {};
+    fleetData.forEach((d) => {
+      const loc = d.location || "Base - HQ";
+      map[loc] = (map[loc] || 0) + 1;
+    });
+    const items = Object.entries(map).map(([loc, count]) => ({ loc, count }));
+    items.sort((a, b) => b.count - a.count);
+    return items;
+  }, [fleetData]);
+
+  // Handle Save New Drone
+  const handleSaveNewDrone = async (e) => {
+    e?.preventDefault();
+    const nextNum = registeredDrones.length + 1;
+    const droneId = (newDroneForm.id || `DR-${String(nextNum).padStart(3, "0")}`).trim().toUpperCase();
+    const droneName = (newDroneForm.name || `Falcon-${nextNum}`).trim();
+
+    await registerDrone({
+      id: droneId,
+      droneId: droneId,
+      name: droneName,
+      model: newDroneForm.model || "DJI Matrice 350 RTK",
+      type: newDroneForm.type || "Multirotor",
+      location: newDroneForm.location || "Base - HQ",
+      role: newDroneForm.role || null,
+      mission: newDroneForm.mission || null,
+      status: "Standby",
+      battery: 100,
+      hours: 0,
+      lastFlight: "Never",
+      serial: `SN-${droneId}`,
+      firmware: "v2.10",
+      purchaseDate: "Oct 2026",
+      team: "Team Alpha",
+    });
+
+    showToast(`Drone ${droneId} (${droneName}) enrolled successfully.`);
+    setSelectedDroneId(droneId);
+    selectDrone?.(droneId);
+    setShowAddDroneModal(false);
+  };
+
+  // Handle Retire Drone
+  const handleRetireDrone = async () => {
+    if (!activeDrone?.id) return;
+    const ok = window.confirm(`Retire ${activeDrone.id} (${activeDrone.name}) from the fleet inventory?`);
+    if (!ok) return;
+
+    await deleteDrone(activeDrone.id);
+    showToast(`Drone ${activeDrone.id} retired from fleet.`);
+    const remaining = registeredDrones.filter((d) => d.id !== activeDrone.id);
+    if (remaining.length > 0) {
+      setSelectedDroneId(remaining[0].id);
+      selectDrone?.(remaining[0].id);
+    }
+  };
 
   return (
     <div className="w-full h-full min-h-0 overflow-y-auto overflow-x-hidden flex flex-col bg-[#F8FAFC] text-[#0F172A] font-sans scroll-smooth">
@@ -259,7 +290,7 @@ const DroneFleetPage = () => {
           </div>
         </div>
 
-        {/* 6 Top KPI Cards (Matching reference screenshot) */}
+        {/* 6 Top KPI Cards (Dynamic fleet status) */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
           {/* 1: Total Drones */}
           <div className="bg-white border border-[#E2E8F0] rounded-xl p-3 flex items-center gap-2.5 shadow-sm">
@@ -267,9 +298,9 @@ const DroneFleetPage = () => {
               <Plane className="w-4 h-4" />
             </div>
             <div>
-              <div className="text-lg font-black text-[#0F172A]">42</div>
+              <div className="text-lg font-black text-[#0F172A]">{totalCount}</div>
               <div className="text-[10px] font-bold text-[#334155]">Total Drones</div>
-              <div className="text-[9px] text-[#64748B]">35 active · 5 inactive · 2 maint</div>
+              <div className="text-[9px] text-[#64748B]">{inMissionCount} active · {standbyCount + chargingCount} standby</div>
             </div>
           </div>
 
@@ -279,9 +310,9 @@ const DroneFleetPage = () => {
               <RefreshCw className="w-4 h-4" />
             </div>
             <div>
-              <div className="text-lg font-black text-[#0F172A]">83%</div>
+              <div className="text-lg font-black text-[#0F172A]">{availPct}%</div>
               <div className="text-[10px] font-bold text-[#334155]">Fleet Availability</div>
-              <div className="text-[9px] text-[#16A34A] font-semibold">↑ +6% vs. last month</div>
+              <div className="text-[9px] text-[#16A34A] font-semibold">{totalCount - maintCount} operational</div>
             </div>
           </div>
 
@@ -291,9 +322,9 @@ const DroneFleetPage = () => {
               <Wrench className="w-4 h-4" />
             </div>
             <div>
-              <div className="text-lg font-black text-[#0F172A]">5</div>
+              <div className="text-lg font-black text-[#0F172A]">{maintCount}</div>
               <div className="text-[10px] font-bold text-[#334155]">In Maintenance</div>
-              <div className="text-[9px] text-[#64748B]">2 under 24 hrs · 3 over 24</div>
+              <div className="text-[9px] text-[#64748B]">{maintCount > 0 ? `${maintCount} in servicing` : "All ready"}</div>
             </div>
           </div>
 
@@ -303,9 +334,9 @@ const DroneFleetPage = () => {
               <Battery className="w-4 h-4" />
             </div>
             <div>
-              <div className="text-lg font-black text-[#0F172A]">87%</div>
-              <div className="text-[10px] font-bold text-[#334155]">Avg. Battery Health</div>
-              <div className="text-[9px] text-[#16A34A] font-semibold">↑ +4% vs. last month</div>
+              <div className="text-lg font-black text-[#0F172A]">{avgBattery}%</div>
+              <div className="text-[10px] font-bold text-[#334155]">Avg. Battery Level</div>
+              <div className="text-[9px] text-[#16A34A] font-semibold">Active telemetry</div>
             </div>
           </div>
 
@@ -315,9 +346,9 @@ const DroneFleetPage = () => {
               <Calendar className="w-4 h-4" />
             </div>
             <div>
-              <div className="text-lg font-black text-[#0F172A]">128</div>
-              <div className="text-[10px] font-bold text-[#334155]">Flight Hours (week)</div>
-              <div className="text-[9px] text-[#16A34A] font-semibold">↑ +18% vs. last week</div>
+              <div className="text-lg font-black text-[#0F172A]">{totalHours}</div>
+              <div className="text-[10px] font-bold text-[#334155]">Total Flight Hours</div>
+              <div className="text-[9px] text-[#16A34A] font-semibold">Cumulative logging</div>
             </div>
           </div>
 
@@ -329,7 +360,7 @@ const DroneFleetPage = () => {
             <div>
               <div className="text-lg font-black text-[#0F172A]">100%</div>
               <div className="text-[10px] font-bold text-[#334155]">Compliance Status</div>
-              <div className="text-[9px] text-[#16A34A] font-semibold">● All certificates valid</div>
+              <div className="text-[9px] text-[#16A34A] font-semibold">● Authoritative sync</div>
             </div>
           </div>
         </div>
@@ -345,11 +376,11 @@ const DroneFleetPage = () => {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
               <div className="flex flex-wrap items-center gap-1.5 text-xs font-semibold">
                 {[
-                  { id: "all", label: "All Drones (42)" },
-                  { id: "in_mission", label: "In Mission" },
-                  { id: "standby", label: "Standby" },
-                  { id: "charging", label: "Charging" },
-                  { id: "maintenance", label: "Maintenance" },
+                  { id: "all", label: `All Drones (${totalCount})` },
+                  { id: "in_mission", label: `In Mission (${inMissionCount})` },
+                  { id: "standby", label: `Standby (${standbyCount})` },
+                  { id: "charging", label: `Charging (${chargingCount})` },
+                  { id: "maintenance", label: `Maintenance (${maintCount})` },
                 ].map((f) => (
                   <button
                     key={f.id}
@@ -400,14 +431,18 @@ const DroneFleetPage = () => {
                     return (
                       <tr
                         key={d.id}
-                        onClick={() => setSelectedDroneId(d.id)}
+                        onClick={() => {
+                          setSelectedDroneId(d.id);
+                          selectDrone?.(d.id);
+                        }}
                         className={`transition cursor-pointer ${
                           isSelected ? "bg-[#EFF6FF]" : "hover:bg-[#F8FAFC]"
                         }`}
                       >
                         <td className="py-2 px-3">
                           <div className="font-bold text-[#2563EB] font-mono">{d.id}</div>
-                          <div className="text-[10px] text-[#64748B]">Deep dive &gt;</div>
+                          <div className="text-[10px] text-[#0F172A] font-semibold truncate">{d.name}</div>
+                          {d.role && <div className="text-[9px] text-[#0284C7] font-semibold">{d.role}</div>}
                         </td>
                         <td className="py-2 px-3 font-semibold text-[#0F172A]">{d.model}</td>
                         <td className="py-2 px-3 text-[#475569]">{d.type}</td>
@@ -453,7 +488,7 @@ const DroneFleetPage = () => {
               </table>
             </div>
             <div className="text-[10.5px] text-[#64748B]">
-              Showing {filteredDrones.length} of 42 drones. Select a row for its detail below.
+              Showing {filteredDrones.length} of {totalCount} drones. Select a row for its detail below.
             </div>
           </div>
 
@@ -472,42 +507,42 @@ const DroneFleetPage = () => {
                 <div className="relative w-28 h-28 shrink-0">
                   <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
                     <circle cx="50" cy="50" r="38" stroke="#E2E8F0" strokeWidth="14" fill="none" />
-                    {/* Multirotor 67% */}
+                    {/* Multirotor */}
                     <circle
                       cx="50"
                       cy="50"
                       r="38"
                       stroke="#2563EB"
                       strokeWidth="14"
-                      strokeDasharray="160 238"
+                      strokeDasharray={`${Math.round((multiPct / 100) * 238)} 238`}
                       strokeDashoffset="0"
                       fill="none"
                     />
-                    {/* Fixed wing 19% */}
+                    {/* Fixed wing */}
                     <circle
                       cx="50"
                       cy="50"
                       r="38"
                       stroke="#F97316"
                       strokeWidth="14"
-                      strokeDasharray="45 238"
-                      strokeDashoffset="-160"
+                      strokeDasharray={`${Math.round((fixedPct / 100) * 238)} 238`}
+                      strokeDashoffset={`-${Math.round((multiPct / 100) * 238)}`}
                       fill="none"
                     />
-                    {/* VTOL 10% */}
+                    {/* VTOL */}
                     <circle
                       cx="50"
                       cy="50"
                       r="38"
                       stroke="#10B981"
                       strokeWidth="14"
-                      strokeDasharray="24 238"
-                      strokeDashoffset="-205"
+                      strokeDasharray={`${Math.round((vtolPct / 100) * 238)} 238`}
+                      strokeDashoffset={`-${Math.round(((multiPct + fixedPct) / 100) * 238)}`}
                       fill="none"
                     />
                   </svg>
                   <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                    <span className="text-base font-black text-[#0F172A]">42</span>
+                    <span className="text-base font-black text-[#0F172A]">{totalCount}</span>
                     <span className="text-[8.5px] text-[#64748B] uppercase font-bold">Drones</span>
                   </div>
                 </div>
@@ -518,25 +553,25 @@ const DroneFleetPage = () => {
                     <span className="flex items-center gap-1.5 text-[#334155]">
                       <span className="w-2 h-2 rounded-full bg-[#2563EB]" /> Multirotor
                     </span>
-                    <span className="font-mono font-bold text-[#0F172A]">28 (67%)</span>
+                    <span className="font-mono font-bold text-[#0F172A]">{multiCount} ({multiPct}%)</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="flex items-center gap-1.5 text-[#334155]">
                       <span className="w-2 h-2 rounded-full bg-[#F97316]" /> Fixed Wing
                     </span>
-                    <span className="font-mono font-bold text-[#0F172A]">8 (19%)</span>
+                    <span className="font-mono font-bold text-[#0F172A]">{fixedCount} ({fixedPct}%)</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="flex items-center gap-1.5 text-[#334155]">
                       <span className="w-2 h-2 rounded-full bg-[#10B981]" /> VTOL
                     </span>
-                    <span className="font-mono font-bold text-[#0F172A]">4 (10%)</span>
+                    <span className="font-mono font-bold text-[#0F172A]">{vtolCount} ({vtolPct}%)</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="flex items-center gap-1.5 text-[#334155]">
                       <span className="w-2 h-2 rounded-full bg-[#EAB308]" /> Hybrid
                     </span>
-                    <span className="font-mono font-bold text-[#0F172A]">2 (5%)</span>
+                    <span className="font-mono font-bold text-[#0F172A]">{hybridCount} ({hybridPct}%)</span>
                   </div>
                 </div>
               </div>
@@ -725,33 +760,29 @@ const DroneFleetPage = () => {
             </h3>
 
             <div className="space-y-1.5 text-xs">
-              {[
-                { loc: "Base - HQ", count: 12, max: 12 },
-                { loc: "North Ridge", count: 8, max: 12 },
-                { loc: "East Perimeter", count: 6, max: 12 },
-                { loc: "South Zone", count: 6, max: 12 },
-                { loc: "Service Center", count: 5, max: 12 },
-                { loc: "Other", count: 5, max: 12 },
-              ].map((item) => (
-                <div key={item.loc} className="flex items-center gap-3">
-                  <span className="w-28 text-[#475569] text-[11px] truncate flex items-center gap-1">
-                    <MapPin className="w-3 h-3 text-[#94A3B8]" />
-                    {item.loc}
-                  </span>
-                  <div className="flex-1 h-3 rounded bg-[#F1F5F9] overflow-hidden">
-                    <div
-                      className="h-full bg-[#2563EB]"
-                      style={{ width: `${(item.count / item.max) * 100}%` }}
-                    />
+              {locationCounts.map((item) => {
+                const max = Math.max(...locationCounts.map((l) => l.count), 1);
+                return (
+                  <div key={item.loc} className="flex items-center gap-3">
+                    <span className="w-28 text-[#475569] text-[11px] truncate flex items-center gap-1">
+                      <MapPin className="w-3 h-3 text-[#94A3B8]" />
+                      {item.loc}
+                    </span>
+                    <div className="flex-1 h-3 rounded bg-[#F1F5F9] overflow-hidden">
+                      <div
+                        className="h-full bg-[#2563EB]"
+                        style={{ width: `${(item.count / max) * 100}%` }}
+                      />
+                    </div>
+                    <span className="w-6 font-mono font-bold text-right text-[11px] text-[#0F172A]">
+                      {item.count}
+                    </span>
                   </div>
-                  <span className="w-6 font-mono font-bold text-right text-[11px] text-[#0F172A]">
-                    {item.count}
-                  </span>
-                </div>
-              ))}
+                );
+              })}
             </div>
             <div className="text-[10px] text-[#8E9EAA] pt-1 border-t border-[#F1F5F9]">
-              Adds up to 42 drones.
+              Adds up to {totalCount} drones across active fleet.
             </div>
           </div>
 
@@ -809,7 +840,7 @@ const DroneFleetPage = () => {
 
               <button
                 type="button"
-                onClick={() => showToast(`Retirement request filed for ${activeDrone.id}`)}
+                onClick={handleRetireDrone}
                 className="p-2.5 rounded-lg border border-[#E2E8F0] hover:border-[#EF4444] hover:bg-[#FEF2F2] transition cursor-pointer flex flex-col items-center justify-center"
               >
                 <X className="w-4 h-4 text-[#EF4444] mb-1" />
@@ -867,7 +898,10 @@ const DroneFleetPage = () => {
       {/* Add Drone Modal */}
       {showAddDroneModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 animate-in fade-in">
-          <div className="bg-white rounded-xl max-w-md w-full p-5 shadow-2xl border border-[#CBD5E1] space-y-4">
+          <form
+            onSubmit={handleSaveNewDrone}
+            className="bg-white rounded-xl max-w-md w-full p-5 shadow-2xl border border-[#CBD5E1] space-y-4"
+          >
             <div className="flex items-center justify-between border-b border-[#F1F5F9] pb-3">
               <h3 className="text-sm font-bold text-[#0F172A]">Register New Drone to Fleet</h3>
               <button
@@ -880,26 +914,85 @@ const DroneFleetPage = () => {
             </div>
 
             <div className="space-y-2.5 text-xs">
-              <div>
-                <label className="text-[#64748B] block mb-1">Drone ID</label>
-                <input type="text" defaultValue="DR-009" className="w-full bg-[#F8FAFC] border border-[#CBD5E1] rounded px-2.5 py-1.5 font-mono" />
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[#64748B] block mb-1">Drone ID</label>
+                  <input
+                    type="text"
+                    placeholder={`DR-${String(registeredDrones.length + 1).padStart(3, "0")}`}
+                    value={newDroneForm.id}
+                    onChange={(e) => setNewDroneForm({ ...newDroneForm, id: e.target.value })}
+                    className="w-full bg-[#F8FAFC] border border-[#CBD5E1] rounded px-2.5 py-1.5 font-mono uppercase"
+                  />
+                </div>
+                <div>
+                  <label className="text-[#64748B] block mb-1">Callsign / Name</label>
+                  <input
+                    type="text"
+                    placeholder={`Falcon-${registeredDrones.length + 1}`}
+                    value={newDroneForm.name}
+                    onChange={(e) => setNewDroneForm({ ...newDroneForm, name: e.target.value })}
+                    className="w-full bg-[#F8FAFC] border border-[#CBD5E1] rounded px-2.5 py-1.5"
+                  />
+                </div>
               </div>
+
               <div>
                 <label className="text-[#64748B] block mb-1">Aircraft Model</label>
-                <input type="text" defaultValue="DJI Matrice 350 RTK" className="w-full bg-[#F8FAFC] border border-[#CBD5E1] rounded px-2.5 py-1.5" />
+                <input
+                  type="text"
+                  value={newDroneForm.model}
+                  onChange={(e) => setNewDroneForm({ ...newDroneForm, model: e.target.value })}
+                  className="w-full bg-[#F8FAFC] border border-[#CBD5E1] rounded px-2.5 py-1.5"
+                />
               </div>
-              <div>
-                <label className="text-[#64748B] block mb-1">Airframe Type</label>
-                <select className="w-full bg-[#F8FAFC] border border-[#CBD5E1] rounded px-2.5 py-1.5 font-medium">
-                  <option>Multirotor</option>
-                  <option>Fixed Wing</option>
-                  <option>VTOL</option>
-                  <option>Hybrid</option>
-                </select>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[#64748B] block mb-1">Airframe Type</label>
+                  <select
+                    value={newDroneForm.type}
+                    onChange={(e) => setNewDroneForm({ ...newDroneForm, type: e.target.value })}
+                    className="w-full bg-[#F8FAFC] border border-[#CBD5E1] rounded px-2.5 py-1.5 font-medium"
+                  >
+                    <option>Multirotor</option>
+                    <option>Fixed Wing</option>
+                    <option>VTOL</option>
+                    <option>Hybrid</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[#64748B] block mb-1">Station / Location</label>
+                  <input
+                    type="text"
+                    value={newDroneForm.location}
+                    onChange={(e) => setNewDroneForm({ ...newDroneForm, location: e.target.value })}
+                    className="w-full bg-[#F8FAFC] border border-[#CBD5E1] rounded px-2.5 py-1.5"
+                  />
+                </div>
               </div>
-              <div>
-                <label className="text-[#64748B] block mb-1">Assigned Station / Location</label>
-                <input type="text" defaultValue="Base - HQ" className="w-full bg-[#F8FAFC] border border-[#CBD5E1] rounded px-2.5 py-1.5" />
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[#64748B] block mb-1">Role (Optional)</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Lead, Thermal, Survey"
+                    value={newDroneForm.role}
+                    onChange={(e) => setNewDroneForm({ ...newDroneForm, role: e.target.value })}
+                    className="w-full bg-[#F8FAFC] border border-[#CBD5E1] rounded px-2.5 py-1.5"
+                  />
+                </div>
+                <div>
+                  <label className="text-[#64748B] block mb-1">Mission (Optional)</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Perimeter Patrol"
+                    value={newDroneForm.mission}
+                    onChange={(e) => setNewDroneForm({ ...newDroneForm, mission: e.target.value })}
+                    className="w-full bg-[#F8FAFC] border border-[#CBD5E1] rounded px-2.5 py-1.5"
+                  />
+                </div>
               </div>
             </div>
 
@@ -907,22 +1000,18 @@ const DroneFleetPage = () => {
               <button
                 type="button"
                 onClick={() => setShowAddDroneModal(false)}
-                className="px-3 py-1.5 rounded-lg border border-[#CBD5E1] text-xs font-semibold text-[#475569]"
+                className="px-3 py-1.5 rounded-lg border border-[#CBD5E1] text-xs font-semibold text-[#475569] cursor-pointer"
               >
                 Cancel
               </button>
               <button
-                type="button"
-                onClick={() => {
-                  setShowAddDroneModal(false);
-                  showToast("Drone DR-009 enrolled successfully.");
-                }}
-                className="px-4 py-1.5 rounded-lg bg-[#2563EB] text-white text-xs font-bold"
+                type="submit"
+                className="px-4 py-1.5 rounded-lg bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-xs font-bold cursor-pointer"
               >
                 Save Drone
               </button>
             </div>
-          </div>
+          </form>
         </div>
       )}
     </div>

@@ -6,6 +6,7 @@ import AttitudeIndicator from "@/features/mession/components/instruments/Attitud
 import CompassIndicator from "@/features/mession/components/instruments/CompassIndicator.jsx";
 import { useAuth } from "@/hooks/useAuth.js";
 import { useDroneTelemetry } from "@/hooks/useDroneTelemetry.js";
+import { useTelemetry } from "@/hooks/useTelemetry.js";
 import {
   Gamepad2,
   Radio,
@@ -36,11 +37,18 @@ const RemotePilotPage = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { telemetry } = useDroneTelemetry();
+  const {
+    isArmed,
+    executeArmCommand,
+    selectedDroneId,
+    selectDrone,
+    registeredDrones,
+    activeDrone,
+    flightMode: contextFlightMode,
+    isLive,
+  } = useTelemetry();
 
-  // Active drone selection
-  const [selectedDrone, setSelectedDrone] = useState("DR-001");
   const [flightMode, setFlightMode] = useState("MANUAL - Pos Hold");
-  const [isArmed, setIsArmed] = useState(true);
   const [isRecording, setIsRecording] = useState(true);
 
   // Live joystick axis state (-100 to 100)
@@ -115,25 +123,31 @@ const RemotePilotPage = () => {
     };
   }, [addLog]);
 
-  // Update attitude indicators based on axes
+  // Update attitude indicators based on axes (movement only active when drone is armed)
   useEffect(() => {
     setPitch(-axes.ryPitch * 0.3);
     setRoll(axes.rxRoll * 0.4);
     setHeading((prev) => (prev + axes.lxYaw * 0.05 + 360) % 360);
-    setDronePosOffset((prev) => ({
-      x: Math.max(-25, Math.min(25, prev.x + axes.rxRoll * 0.05)),
-      y: Math.max(-25, Math.min(25, prev.y - axes.ryPitch * 0.05)),
-    }));
-  }, [axes]);
+    if (isArmed) {
+      setDronePosOffset((prev) => ({
+        x: Math.max(-25, Math.min(25, prev.x + axes.rxRoll * 0.05)),
+        y: Math.max(-25, Math.min(25, prev.y - axes.ryPitch * 0.05)),
+      }));
+    }
+  }, [axes, isArmed]);
 
   // Controller Button Click Handler
-  const handleButtonAction = (btn, actionName) => {
+  const handleButtonAction = async (btn, actionName) => {
     if (btn === "Start") {
-      setIsArmed((prev) => {
-        const next = !prev;
-        addLog(next ? "Motors Armed · Ready for flight" : "Motors Disarmed · Safe");
-        return next;
-      });
+      addLog(isArmed ? "Disarming vehicle..." : "Arming vehicle...");
+      if (typeof executeArmCommand === "function") {
+        try {
+          await executeArmCommand({ arm: !isArmed, droneId: selectedDroneId || "DRONE-001" });
+          addLog(!isArmed ? "Motors Armed · Ready for flight" : "Motors Disarmed · Safe");
+        } catch (err) {
+          addLog(`Arm/Disarm command failed: ${err.message}`);
+        }
+      }
       return;
     }
     if (btn === "Back") {
@@ -178,22 +192,22 @@ const RemotePilotPage = () => {
           </div>
 
           {/* Top Right Drone Selector Pills */}
-          <div className="flex items-center gap-1.5 bg-[#0C1624] p-1 rounded-lg border border-[#1C2C42]">
-            {["DR-001", "DR-003", "DR-007"].map((id) => (
+          <div className="flex items-center gap-1.5 bg-[#0C1624] p-1 rounded-lg border border-[#1C2C42] overflow-x-auto max-w-[320px]">
+            {(registeredDrones || []).map((d) => (
               <button
-                key={id}
+                key={d.id}
                 type="button"
                 onClick={() => {
-                  setSelectedDrone(id);
-                  addLog(`Connected remote control to ${id}`);
+                  selectDrone(d.id);
+                  addLog(`Connected remote control to ${d.id}`);
                 }}
-                className={`px-3 py-1 text-xs font-mono font-bold rounded-md transition cursor-pointer ${
-                  selectedDrone === id
+                className={`px-3 py-1 text-xs font-mono font-bold rounded-md transition cursor-pointer whitespace-nowrap ${
+                  selectedDroneId === d.id
                     ? "bg-[#2563EB] text-white shadow-sm"
                     : "text-[#8E9EAA] hover:text-white"
                 }`}
               >
-                {id}
+                {d.id}
               </button>
             ))}
           </div>
@@ -218,8 +232,12 @@ const RemotePilotPage = () => {
               <Plane className="w-5 h-5" />
             </div>
             <div>
-              <div className="text-xs font-bold text-white">{selectedDrone} - DJI Matrice 350</div>
-              <div className="text-[10.5px] text-[#8E9EAA]">Lead · Mapping · link strong · battery 66%</div>
+              <div className="text-xs font-bold text-white">
+                {activeDrone?.id || selectedDroneId}{activeDrone?.name && activeDrone.name !== activeDrone.id ? ` · ${activeDrone.name}` : ""}{activeDrone?.model ? ` - ${activeDrone.model}` : ""}
+              </div>
+              <div className="text-[10.5px] text-[#8E9EAA]">
+                {isArmed ? "ARMED" : "UNARMED"}{activeDrone?.role ? ` · ${activeDrone.role}` : ""}{activeDrone?.mission ? ` · ${activeDrone.mission}` : ""} · link {isLive ? "strong" : "standby"} · battery {typeof telemetry?.batteryPercentage === "number" ? Math.round(telemetry.batteryPercentage) : (activeDrone?.battery ?? 100)}%
+              </div>
             </div>
           </div>
 
@@ -411,8 +429,11 @@ const RemotePilotPage = () => {
               {/* FPV Header Tags */}
               <div className="absolute top-3 left-3 right-3 flex items-center justify-between text-[10px] text-white">
                 <div className="flex items-center gap-2 font-mono font-bold">
-                  <span className="text-[#38BDF8]">FPV · {selectedDrone}</span>
-                  <span className="text-[#10B981]">· MANUAL</span>
+                  <span className="text-[#38BDF8]">FPV · {activeDrone?.id || selectedDroneId}</span>
+                  <span className={isArmed ? "text-[#EF4444] font-bold" : "text-[#10B981]"}>
+                    · {isArmed ? "ARMED" : "UNARMED"}
+                  </span>
+                  <span className="text-[#8E9EAA]">· {contextFlightMode || flightMode}</span>
                 </div>
                 <div className="flex items-center gap-1.5 font-bold font-mono">
                   {isRecording && <span className="w-2 h-2 rounded-full bg-[#EF4444] animate-ping" />}
@@ -437,11 +458,11 @@ const RemotePilotPage = () => {
 
               {/* Bottom Flight Mode & Guidance Strip */}
               <div className="absolute bottom-3 left-3 right-3 flex items-center gap-2 bg-[#07101CEE] border border-[#1C2C42] rounded-lg px-2.5 py-1.5 text-[10px] backdrop-blur-md">
-                <span className="px-1.5 py-0.5 rounded bg-[#10B981] text-black font-extrabold text-[9px] uppercase tracking-wider shrink-0">
-                  {flightMode}
+                <span className={`px-1.5 py-0.5 rounded ${isArmed ? "bg-[#10B981] text-black" : "bg-[#374151] text-[#CBD5E1]"} font-extrabold text-[9px] uppercase tracking-wider shrink-0`}>
+                  {isArmed ? (contextFlightMode || flightMode) : "UNARMED - POS HOLD"}
                 </span>
                 <span className="text-[#CBD5E1] truncate">
-                  Release the sticks and the drone holds position. Fence, ceiling and reserve rules still apply.
+                  {isArmed ? "Release the sticks and the drone holds position. Fence, ceiling and reserve rules apply." : "Drone is UNARMED. Motors are disengaged. Press Start to initiate ARM sequence."}
                 </span>
               </div>
             </div>

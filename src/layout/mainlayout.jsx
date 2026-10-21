@@ -35,42 +35,45 @@ const MainLayout = () => {
   }, [])
 
   return (
-    <div className="command-app relative flex h-[100dvh] min-h-[100dvh] w-full max-w-full overflow-hidden bg-[#EEF3F8]">
-      {/* Mobile Drawer Backdrop Overlay */}
-      {mobileOpen && (
-        <div
-          role="button"
-          tabIndex={0}
-          aria-label="Close navigation sidebar"
-          onClick={() => setMobileOpen(false)}
-          onKeyDown={(e) => {
-            if (e.key === "Escape" || e.key === "Enter") setMobileOpen(false)
-          }}
-          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden transition-opacity"
+    <div className="command-app relative flex flex-col h-[100dvh] min-h-[100dvh] w-full max-w-full overflow-hidden bg-[#EEF3F8]">
+      {/* Global HUD Flight Safety Notification Toast */}
+      <FlightToast />
+
+      {/* Top Header Bar (Full-width edge-to-edge, 48-56px height) */}
+      <header className="command-topbar shrink-0 bg-[#08182B] border-b border-[#162A44] px-3 sm:px-4 z-30 h-13 sm:h-14 flex items-center">
+        <Header
+          sidebarCollapsed={collapsed}
+          onToggleSidebar={() => setCollapsed((prev) => !prev)}
+          onToggleMobile={() => setMobileOpen((prev) => !prev)}
+          mobileOpen={mobileOpen}
         />
-      )}
+      </header>
 
-      {/* Sidebar (Overlay on mobile < lg, in-flow on desktop >= lg) */}
-      <Sidebar
-        collapsed={collapsed}
-        onToggle={() => setCollapsed((prev) => !prev)}
-        mobileOpen={mobileOpen}
-        onCloseMobile={() => setMobileOpen(false)}
-      />
-
-      <div className="flex-1 flex flex-col min-w-0 min-h-0 w-full overflow-hidden relative">
-        {/* Global HUD Flight Safety Notification Toast */}
-        <FlightToast />
-
-        <header className="command-topbar shrink-0 bg-[#102A50] border-b border-[#203D64] px-2.5 sm:px-4 py-1.5 sm:py-2 lg:py-2.5 z-30 flex flex-col justify-center min-h-[56px] sm:min-h-[62px]">
-          <Header
-            sidebarCollapsed={collapsed}
-            onToggleSidebar={() => setCollapsed((prev) => !prev)}
-            onToggleMobile={() => setMobileOpen((prev) => !prev)}
-            mobileOpen={mobileOpen}
+      {/* Main Row: Sidebar on Left, Workspace on Right */}
+      <div className="flex-1 flex min-w-0 min-h-0 w-full overflow-hidden relative">
+        {/* Mobile Drawer Backdrop Overlay */}
+        {mobileOpen && (
+          <div
+            role="button"
+            tabIndex={0}
+            aria-label="Close navigation sidebar"
+            onClick={() => setMobileOpen(false)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape" || e.key === "Enter") setMobileOpen(false)
+            }}
+            className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden transition-opacity"
           />
-        </header>
+        )}
 
+        {/* Sidebar (Overlay on mobile < lg, in-flow on desktop >= lg) */}
+        <Sidebar
+          collapsed={collapsed}
+          onToggle={() => setCollapsed((prev) => !prev)}
+          mobileOpen={mobileOpen}
+          onCloseMobile={() => setMobileOpen(false)}
+        />
+
+        {/* Page Workspace Outlet */}
         <main className="command-workspace flex-1 min-h-0 w-full h-full flex flex-col overflow-hidden relative bg-[#EEF3F8]">
           <Outlet />
         </main>

@@ -36,13 +36,13 @@ const ALL_TABS = [
     { label: "Geofence", value: "/geofence", icon: ShieldAlert },
     { label: "Waypoint Planning", value: "/waypoint-planning", icon: MapPin },
     { label: "Fly", value: "/fly", img: Fly },
-    { label: "Incidents & Alerts", value: "/incidents", requiredPermission: Permissions.VIEW_INCIDENTS, icon: AlertTriangle, badge: 3 },
     { label: "Live Operations", value: "/live-operations", icon: Activity },
     { label: "Remote Pilot", value: "/remote-pilot", icon: Radio },
     { label: "Swarm Control", value: "/swarm-control", icon: Share2 },
     { label: "Drone Fleet", value: "/drone-fleet", icon: Plane },
     { label: "Payloads & Sensors", value: "/payloads-sensors", icon: Camera },
-    { label: "Analytics", value: "/analytics", icon: BarChart3 },
+    { label: "Incidents & Alerts", value: "/incidents", requiredPermission: Permissions.VIEW_INCIDENTS, icon: AlertTriangle, badge: 3 },
+    { label: "Data & Analytics", value: "/analytics", icon: BarChart3 },
     { label: "Reports", value: "/reports", icon: FileText },
     { label: "Logs", value: "/logs", requiredPermission: Permissions.VIEW_LOGS, img: Logs },
     { label: "Administration", value: "/admin", img: Settings },
@@ -56,15 +56,6 @@ const Sidebar = ({ collapsed = false, onToggle, mobileOpen = false, onCloseMobil
     const roleMeta = ROLE_METADATA[role] || ROLE_METADATA[Roles.VIEWER]
 
     const isMissionsActive = location.pathname.startsWith("/missions")
-    const [missionsExpanded, setMissionsExpanded] = useState(true)
-    const [prevPath, setPrevPath] = useState(location.pathname)
-
-    if (location.pathname !== prevPath) {
-        setPrevPath(location.pathname)
-        if (isMissionsActive) {
-            setMissionsExpanded(true)
-        }
-    }
 
     // Filter tabs dynamically based on user's active permissions
     const visibleTabs = useMemo(() => {

@@ -14,7 +14,7 @@ import {
   getUnderlyingMap,
   enforceMapLayerOrder,
 } from "./satelliteLayerHelper.js";
-import { buildDroneMarkerHtml } from "./droneMarkerHelper.js";
+import { buildDroneMarkerHtml, updateDroneMarkerDom } from "./droneMarkerHelper.js";
 import { buildWaypointMarkerHtml } from "./waypointMarkerHelper.js";
 import {
   syncGeofenceLayers,
@@ -42,6 +42,7 @@ const normalizeLongitude = (lng) => {
 const MapContainer = ({
   mapStyle = "normal",
   telemetry: propTelemetry,
+  showDrones = true,
   waypoints = [],
   selectedWaypointId = null,
   onWaypointSelect,
@@ -96,6 +97,8 @@ const MapContainer = ({
     telemetry: contextTelemetry,
     selectedDroneId,
     fleetTelemetry,
+    registeredDrones,
+    activeDrone,
     selectDrone,
     connectionState: telemetryConnectionState,
     connectionState: contextConnectionState,
@@ -105,7 +108,7 @@ const MapContainer = ({
 
   // Single source of truth: prioritize passed active telemetry
   const telemetry = propTelemetry || contextTelemetry;
-  const droneCallsign = selectedDroneId || "DRONE-001";
+  const droneCallsign = selectedDroneId || activeDrone?.id || "DR-001";
 
   // Check connection, staleness, and GPS validity
   const isDroneConnected = Boolean(
@@ -133,7 +136,7 @@ const MapContainer = ({
   }, [onDroneSelect]);
 
   const bindDashboardDroneSelect = useCallback((marker, droneId) => {
-    if (!marker || effectivePageType !== "dashboard") return;
+    if (!marker) return;
     const handleSelect = (event) => {
       event?.stopPropagation?.();
       if (onDroneSelectRef.current) {
@@ -149,7 +152,7 @@ const MapContainer = ({
     } else {
       setTimeout(() => marker.getElement?.()?.addEventListener("click", handleSelect), 60);
     }
-  }, [effectivePageType, selectDrone]);
+  }, [selectDrone]);
 
   // Position source resolution: prioritize LIVE real drone GPS, fallback to Hyderabad for development
   const positionSource = hasLiveDroneLocation
@@ -198,6 +201,20 @@ const MapContainer = ({
     }
   }, [activeLat, activeLng]);
 
+  // Dynamic marker options derived from registered drone profile and callsign
+  const activeMarkerOptions = useMemo(() => {
+    const regDrone =
+      (registeredDrones || []).find((d) => d.id === droneCallsign || d.droneId === droneCallsign) || activeDrone;
+    return {
+      name: regDrone?.name || null,
+      selected: true,
+    };
+  }, [
+    registeredDrones,
+    droneCallsign,
+    activeDrone,
+  ]);
+
   // Synchronize Drone Marker & Camera Transitions (Live vs Hyderabad Fallback)
   useEffect(() => {
     const map = mapRef.current;
@@ -222,8 +239,11 @@ const MapContainer = ({
             markerRef.current = new window.mappls.Marker({
               map,
               position: { lat: activeLat, lng: activeLng },
-              html: buildDroneMarkerHtml(droneCallsign, heading),
+              html: buildDroneMarkerHtml(droneCallsign, heading, activeMarkerOptions),
             });
+            if (!showDrones && markerRef.current) {
+              markerRef.current.getElement?.()?.style?.setProperty("display", "none");
+            }
             bindDashboardDroneSelect(markerRef.current, droneCallsign);
             attachMarkerDomRefs();
           } catch (err) {
@@ -235,6 +255,10 @@ const MapContainer = ({
               markerRef.current.setPosition({ lat: activeLat, lng: activeLng });
             } else if (typeof markerRef.current.setLngLat === "function") {
               markerRef.current.setLngLat([activeLng, activeLat]);
+            }
+            updateDroneMarkerDom(markerRef.current.getElement?.(), droneCallsign, heading, activeMarkerOptions);
+            if (markerRef.current.getElement?.()) {
+              markerRef.current.getElement().style.display = showDrones ? "block" : "none";
             }
           } catch {
             // Safe ignore
@@ -265,12 +289,29 @@ const MapContainer = ({
             markerRef.current = new window.mappls.Marker({
               map,
               position: { lat: activeLat, lng: activeLng },
-              html: buildDroneMarkerHtml(droneCallsign, heading),
+              html: buildDroneMarkerHtml(droneCallsign, heading, activeMarkerOptions),
             });
+            if (!showDrones && markerRef.current) {
+              markerRef.current.getElement?.()?.style?.setProperty("display", "none");
+            }
             bindDashboardDroneSelect(markerRef.current, droneCallsign);
             attachMarkerDomRefs();
           } catch (err) {
             console.warn("[MapContainer] Marker re-creation error:", err.message);
+          }
+        } else if (markerRef.current) {
+          try {
+            if (typeof markerRef.current.setPosition === "function") {
+              markerRef.current.setPosition({ lat: activeLat, lng: activeLng });
+            } else if (typeof markerRef.current.setLngLat === "function") {
+              markerRef.current.setLngLat([activeLng, activeLat]);
+            }
+            updateDroneMarkerDom(markerRef.current.getElement?.(), droneCallsign, heading, activeMarkerOptions);
+            if (markerRef.current.getElement?.()) {
+              markerRef.current.getElement().style.display = showDrones ? "block" : "none";
+            }
+          } catch {
+            // Safe ignore
           }
         }
 
@@ -313,8 +354,11 @@ const MapContainer = ({
           markerRef.current = new window.mappls.Marker({
             map,
             position: { lat: activeLat, lng: activeLng },
-            html: buildDroneMarkerHtml(droneCallsign, heading),
+            html: buildDroneMarkerHtml(droneCallsign, heading, activeMarkerOptions),
           });
+          if (!showDrones && markerRef.current) {
+            markerRef.current.getElement?.()?.style?.setProperty("display", "none");
+          }
           bindDashboardDroneSelect(markerRef.current, droneCallsign);
           attachMarkerDomRefs();
         } catch (err) {
@@ -326,6 +370,10 @@ const MapContainer = ({
             markerRef.current.setPosition({ lat: activeLat, lng: activeLng });
           } else if (typeof markerRef.current.setLngLat === "function") {
             markerRef.current.setLngLat([activeLng, activeLat]);
+          }
+          updateDroneMarkerDom(markerRef.current.getElement?.(), droneCallsign, heading, activeMarkerOptions);
+          if (markerRef.current.getElement?.()) {
+            markerRef.current.getElement().style.display = showDrones ? "block" : "none";
           }
         } catch {
           // Safe ignore
@@ -364,7 +412,7 @@ const MapContainer = ({
 
   useEffect(() => {
     const map = mapRef.current;
-    const canRenderFleet = effectivePageType === "dashboard" && map && window.mappls?.Marker && telemetryConnectionState === "AUTHENTICATED";
+    const canRenderFleet = map && window.mappls?.Marker && telemetryConnectionState === "AUTHENTICATED";
     const liveDrones = new Map();
 
     if (canRenderFleet) {
@@ -393,20 +441,28 @@ const MapContainer = ({
     }
 
     liveDrones.forEach((droneTelemetry, droneId) => {
+      const regDrone = (registeredDrones || []).find((d) => d.id === droneId || d.droneId === droneId);
       const position = {
         lat: Number(droneTelemetry.latitude),
         lng: Number(droneTelemetry.longitude),
       };
       const heading = typeof droneTelemetry.heading === "number" ? droneTelemetry.heading : 0;
       let markerRecord = fleetMarkersRef.current.get(droneId);
+      const fleetMarkerOptions = {
+        name: regDrone?.name || droneTelemetry.name || null,
+        selected: false,
+      };
 
       if (!markerRecord) {
         try {
           const marker = new window.mappls.Marker({
             map,
             position,
-            html: buildDroneMarkerHtml(droneId, heading),
+            html: buildDroneMarkerHtml(droneId, heading, fleetMarkerOptions),
           });
+          if (!showDrones && marker) {
+            marker.getElement?.()?.style?.setProperty("display", "none");
+          }
           const handleSelect = (event) => {
             event?.stopPropagation?.();
             if (onDroneSelectRef.current) {
@@ -433,8 +489,10 @@ const MapContainer = ({
           } else if (typeof markerRecord.marker.setLngLat === "function") {
             markerRecord.marker.setLngLat([position.lng, position.lat]);
           }
-          const rotator = markerRecord.marker.getElement?.().querySelector(".drone-marker-rotator");
-          if (rotator) rotator.style.transform = `rotate(${heading}deg)`;
+          updateDroneMarkerDom(markerRecord.marker.getElement?.(), droneId, heading, fleetMarkerOptions);
+          if (markerRecord.marker.getElement?.()) {
+            markerRecord.marker.getElement().style.display = showDrones ? "block" : "none";
+          }
         } catch (err) {
           console.debug("[MapContainer] Fleet marker update note:", err.message);
         }
@@ -443,6 +501,8 @@ const MapContainer = ({
   }, [
     effectivePageType,
     fleetTelemetry,
+    registeredDrones,
+    showDrones,
     selectedDroneId,
     selectDrone,
     sdkAvailable,
@@ -456,6 +516,26 @@ const MapContainer = ({
     }
     fleetMarkersRef.current.clear();
   }, []);
+
+  // Synchronize showDrones visibility with active marker and fleet markers
+  useEffect(() => {
+    const displayVal = showDrones ? "block" : "none";
+    if (markerRef.current?.getElement?.()) {
+      markerRef.current.getElement().style.display = displayVal;
+    }
+    fleetMarkersRef.current.forEach(({ marker }) => {
+      if (marker?.getElement?.()) {
+        marker.getElement().style.display = displayVal;
+      }
+    });
+  }, [showDrones]);
+
+  // Dynamic update of active marker label whenever options or callsign changes
+  useEffect(() => {
+    if (markerRef.current?.getElement?.()) {
+      updateDroneMarkerDom(markerRef.current.getElement(), droneCallsign, heading, activeMarkerOptions);
+    }
+  }, [droneCallsign, heading, activeMarkerOptions]);
 
   useEffect(() => {
     mapStyleRef.current = mapStyle;
@@ -1235,8 +1315,11 @@ const MapContainer = ({
               markerRef.current = new window.mappls.Marker({
                 map,
                 position: { lat: activeLat, lng: activeLng },
-                html: buildDroneMarkerHtml(droneCallsign, heading),
+                html: buildDroneMarkerHtml(droneCallsign, heading, activeMarkerOptions),
               });
+              if (!showDrones && markerRef.current) {
+                markerRef.current.getElement?.()?.style?.setProperty("display", "none");
+              }
               bindDashboardDroneSelect(markerRef.current, droneCallsign);
               attachMarkerDomRefs();
             } catch (markerErr) {
@@ -1984,7 +2067,11 @@ const MapContainer = ({
                       </svg>
                       <div className="absolute top-[70px] left-1/2 -translate-x-1/2 whitespace-nowrap">
                         <span className="text-[9.5px] font-mono font-bold text-[#35E0FF] bg-[#080C14CC] border border-[#35E0FF4D] px-1.5 py-0.5 rounded shadow">
-                          {droneCallsign}
+                          {(() => {
+                            const dName = activeDrone?.name || (registeredDrones || []).find((d) => d.id === droneCallsign || d.droneId === droneCallsign)?.name;
+                            const showName = dName && String(dName).trim().toLowerCase() !== String(droneCallsign).trim().toLowerCase();
+                            return showName ? `${droneCallsign} · ${dName}` : droneCallsign;
+                          })()}
                         </span>
                       </div>
                     </div>

@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTelemetry } from "@/context/TelemetryContext.jsx";
 import {
   Share2,
   Radio,
@@ -23,12 +24,11 @@ import {
 /**
  * SwarmControlPage
  * Dedicated enterprise multi-drone swarm coordination workspace.
- * Features selectable formation geometry diagrams, dynamic mesh topology,
- * real-time parameter tuning, roles table, autonomous behaviour toggles, and active swarm management.
- * Faithfully matches media_1791545044858.png reference.
+ * Synchronized with live registered drones and active swarm telemetry.
  */
 const SwarmControlPage = () => {
   const navigate = useNavigate();
+  const { registeredDrones = [], fleetTelemetry = {} } = useTelemetry();
 
   // Selected formation pattern
   const [formationPattern, setFormationPattern] = useState("grid"); // "grid" | "v_formation" | "line" | "orbit"
@@ -56,61 +56,97 @@ const SwarmControlPage = () => {
     setTimeout(() => setToastMsg(null), 3000);
   };
 
-  // Roles table data
-  const swarmRoles = useMemo(
-    () => [
-      { id: "DR-001", role: "Lead", task: "Sector A - 120 m", battery: 88, link: "Strong", isLead: true },
-      { id: "DR-003", role: "Thermal", task: "Sector B - 130 m", battery: 83, link: "Strong", isThermal: true },
-      { id: "DR-007", role: "Survey", task: "Sector C - 140 m", battery: 78, link: "Strong" },
-      { id: "DR-017", role: "Thermal", task: "Sector D - 150 m", battery: 73, link: "Strong", isThermal: true },
-      { id: "DR-020", role: "Survey", task: "Sector E - 160 m", battery: 68, link: "Fair" },
-      { id: "DR-014", role: "Relay", task: "Holds at 150 m", battery: 63, link: "Strong", isRelay: true },
-    ],
-    []
-  );
+  // Roles table data dynamically derived from registered fleet drones and live telemetry
+  const swarmRoles = useMemo(() => {
+    if (registeredDrones.length === 0) {
+      return [
+        { id: "DR-001", name: "Falcon-1", role: "Lead", task: "Sector A - 120 m", battery: 100, link: "Standby", isLead: true },
+      ];
+    }
 
-  // Dynamic node positions in formation diagram based on selected pattern
+    return registeredDrones.map((d, index) => {
+      const id = d.id || d.droneId;
+      const live = fleetTelemetry?.[id] || {};
+      const isLive = live && (live.connectionStatus === "connected" || Boolean(live.armed));
+
+      let battery = 100;
+      if (typeof live.battery?.level === "number") battery = live.battery.level;
+      else if (typeof live.battery === "number") battery = live.battery;
+      else if (typeof d.battery === "number") battery = d.battery;
+
+      const role = d.role || (index === 0 ? "Lead" : (index === 1 ? "Thermal" : (index === registeredDrones.length - 1 ? "Relay" : "Survey")));
+      const isLead = role.toLowerCase().includes("lead");
+      const isThermal = role.toLowerCase().includes("thermal");
+      const isRelay = role.toLowerCase().includes("relay");
+      const task = d.mission
+        ? `${d.mission} - ${120 + index * 10} m`
+        : `Sector ${String.fromCharCode(65 + index)} - ${120 + index * 10} m`;
+
+      const link = isLive ? "Strong" : (d.status === "ONLINE" ? "Strong" : "Standby");
+
+      return {
+        id,
+        name: d.name,
+        role,
+        task,
+        battery,
+        link,
+        isLead,
+        isThermal,
+        isRelay,
+      };
+    });
+  }, [registeredDrones, fleetTelemetry]);
+
+  // Dynamic node positions and labels in formation diagram based on selected pattern and actual drones
   const formationNodes = useMemo(() => {
+    const getNodeLabel = (index, fallback) => {
+      if (registeredDrones[index]) {
+        return registeredDrones[index].role || registeredDrones[index].id;
+      }
+      return fallback;
+    };
+
     if (formationPattern === "v_formation") {
       return [
-        { id: "Lead", label: "Lead", x: 180, y: 40, color: "#2563EB" },
-        { id: "Survey 1", label: "Survey 1", x: 130, y: 70, color: "#16A34A" },
-        { id: "Survey 2", label: "Survey 2", x: 230, y: 70, color: "#16A34A" },
-        { id: "Survey 3", label: "Survey 3", x: 80, y: 105, color: "#16A34A" },
-        { id: "Survey 4", label: "Survey 4", x: 280, y: 105, color: "#16A34A" },
-        { id: "Relay", label: "Relay", x: 180, y: 110, color: "#8B5CF6" },
+        { id: "Lead", label: getNodeLabel(0, "Lead"), x: 180, y: 40, color: "#2563EB" },
+        { id: "Survey 1", label: getNodeLabel(1, "Survey 1"), x: 130, y: 70, color: "#16A34A" },
+        { id: "Survey 2", label: getNodeLabel(2, "Survey 2"), x: 230, y: 70, color: "#16A34A" },
+        { id: "Survey 3", label: getNodeLabel(3, "Survey 3"), x: 80, y: 105, color: "#16A34A" },
+        { id: "Survey 4", label: getNodeLabel(4, "Survey 4"), x: 280, y: 105, color: "#16A34A" },
+        { id: "Relay", label: getNodeLabel(5, "Relay"), x: 180, y: 110, color: "#8B5CF6" },
       ];
     }
     if (formationPattern === "line") {
       return [
-        { id: "Lead", label: "Lead", x: 50, y: 75, color: "#2563EB" },
-        { id: "Survey 1", label: "Survey 1", x: 105, y: 75, color: "#16A34A" },
-        { id: "Survey 2", label: "Survey 2", x: 160, y: 75, color: "#16A34A" },
-        { id: "Survey 3", label: "Survey 3", x: 215, y: 75, color: "#16A34A" },
-        { id: "Survey 4", label: "Survey 4", x: 270, y: 75, color: "#16A34A" },
-        { id: "Relay", label: "Relay", x: 325, y: 75, color: "#8B5CF6" },
+        { id: "Lead", label: getNodeLabel(0, "Lead"), x: 50, y: 75, color: "#2563EB" },
+        { id: "Survey 1", label: getNodeLabel(1, "Survey 1"), x: 105, y: 75, color: "#16A34A" },
+        { id: "Survey 2", label: getNodeLabel(2, "Survey 2"), x: 160, y: 75, color: "#16A34A" },
+        { id: "Survey 3", label: getNodeLabel(3, "Survey 3"), x: 215, y: 75, color: "#16A34A" },
+        { id: "Survey 4", label: getNodeLabel(4, "Survey 4"), x: 270, y: 75, color: "#16A34A" },
+        { id: "Relay", label: getNodeLabel(5, "Relay"), x: 325, y: 75, color: "#8B5CF6" },
       ];
     }
     if (formationPattern === "orbit") {
       return [
-        { id: "Lead", label: "Lead", x: 190, y: 25, color: "#2563EB" },
-        { id: "Survey 1", label: "Survey 1", x: 260, y: 55, color: "#16A34A" },
-        { id: "Survey 2", label: "Survey 2", x: 260, y: 105, color: "#16A34A" },
-        { id: "Survey 3", label: "Survey 3", x: 190, y: 130, color: "#16A34A" },
-        { id: "Survey 4", label: "Survey 4", x: 120, y: 105, color: "#16A34A" },
-        { id: "Relay", label: "Relay", x: 120, y: 55, color: "#8B5CF6" },
+        { id: "Lead", label: getNodeLabel(0, "Lead"), x: 190, y: 25, color: "#2563EB" },
+        { id: "Survey 1", label: getNodeLabel(1, "Survey 1"), x: 260, y: 55, color: "#16A34A" },
+        { id: "Survey 2", label: getNodeLabel(2, "Survey 2"), x: 260, y: 105, color: "#16A34A" },
+        { id: "Survey 3", label: getNodeLabel(3, "Survey 3"), x: 190, y: 130, color: "#16A34A" },
+        { id: "Survey 4", label: getNodeLabel(4, "Survey 4"), x: 120, y: 105, color: "#16A34A" },
+        { id: "Relay", label: getNodeLabel(5, "Relay"), x: 120, y: 55, color: "#8B5CF6" },
       ];
     }
-    // Default: Area grid (matching screenshot)
+    // Default: Area grid
     return [
-      { id: "Lead", label: "Lead", x: 120, y: 45, color: "#2563EB" },
-      { id: "Survey 1", label: "Survey 1", x: 190, y: 45, color: "#16A34A" },
-      { id: "Survey 2", label: "Survey 2", x: 260, y: 45, color: "#16A34A" },
-      { id: "Survey 3", label: "Survey 3", x: 120, y: 110, color: "#16A34A" },
-      { id: "Survey 4", label: "Survey 4", x: 190, y: 110, color: "#16A34A" },
-      { id: "Relay", label: "Relay", x: 260, y: 110, color: "#8B5CF6" },
+      { id: "Lead", label: getNodeLabel(0, "Lead"), x: 120, y: 45, color: "#2563EB" },
+      { id: "Survey 1", label: getNodeLabel(1, "Survey 1"), x: 190, y: 45, color: "#16A34A" },
+      { id: "Survey 2", label: getNodeLabel(2, "Survey 2"), x: 260, y: 45, color: "#16A34A" },
+      { id: "Survey 3", label: getNodeLabel(3, "Survey 3"), x: 120, y: 110, color: "#16A34A" },
+      { id: "Survey 4", label: getNodeLabel(4, "Survey 4"), x: 190, y: 110, color: "#16A34A" },
+      { id: "Relay", label: getNodeLabel(5, "Relay"), x: 260, y: 110, color: "#8B5CF6" },
     ];
-  }, [formationPattern]);
+  }, [formationPattern, registeredDrones]);
 
   return (
     <div className="w-full h-full min-h-0 overflow-y-auto overflow-x-hidden flex flex-col bg-[#F8FAFC] text-[#0F172A] font-sans scroll-smooth">
@@ -300,7 +336,10 @@ const SwarmControlPage = () => {
                   <tbody className="divide-y divide-[#F1F5F9] font-mono text-[11px]">
                     {swarmRoles.map((r) => (
                       <tr key={r.id} className="hover:bg-[#F8FAFC] transition">
-                        <td className="py-2 px-3 font-bold text-[#0F172A]">{r.id}</td>
+                        <td className="py-2 px-3 font-bold text-[#0F172A]">
+                          <div>{r.id}</div>
+                          {r.name && <div className="text-[10px] text-[#64748B] font-sans font-normal">{r.name}</div>}
+                        </td>
                         <td className="py-2 px-3 font-sans font-medium text-[#334155]">{r.role}</td>
                         <td className="py-2 px-3 font-sans text-[#475569]">{r.task}</td>
                         <td className="py-2 px-3">
@@ -464,7 +503,7 @@ const SwarmControlPage = () => {
                   <span>08:18 AM: the swarm decided</span>
                 </div>
                 <p className="text-[10.5px] text-[#334155] leading-relaxed">
-                  DR-007 saw a thermal anomaly on the dam toe. The swarm gave its remaining lines to DR-003 and sent DR-007 back for a second pass. No operator input.
+                  {registeredDrones[2]?.id || registeredDrones[0]?.id || "DR-001"} detected a thermal anomaly on the survey perimeter. The swarm autonomously reallocated lines to {registeredDrones[1]?.id || registeredDrones[0]?.id || "standby drone"} and assigned verification pass. No operator input.
                 </p>
               </div>
             </div>
