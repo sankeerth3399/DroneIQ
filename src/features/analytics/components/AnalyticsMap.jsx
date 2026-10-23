@@ -5,6 +5,7 @@ export const AnalyticsMap = ({
   geofence = null,
   telemetry = null,
   height = "320px",
+  showAirspace = true,
 }) => {
   return (
     <div
@@ -14,6 +15,7 @@ export const AnalyticsMap = ({
       <div className="absolute inset-0 map-shell">
         <MapContainer
           mapStyle="normal"
+          showAirspace={showAirspace}
           waypoints={waypoints}
           geofence={geofence}
           telemetry={telemetry}

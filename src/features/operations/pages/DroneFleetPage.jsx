@@ -258,109 +258,109 @@ const DroneFleetPage = () => {
   };
 
   return (
-    <div className="w-full h-full min-h-0 overflow-y-auto overflow-x-hidden flex flex-col bg-[#F8FAFC] text-[#0F172A] font-sans scroll-smooth">
-      <div className="p-3 sm:p-4 lg:p-6 max-w-[1720px] w-full mx-auto space-y-4">
+    <div className="w-full h-full min-h-0 overflow-y-auto overflow-x-hidden flex flex-col bg-[#EEF3F8] text-[#0F172A] font-sans scroll-smooth">
+      <div className="p-4 sm:p-5 lg:p-6 max-w-[1780px] w-full mx-auto space-y-4 sm:space-y-5">
         {/* ======================================================================= */}
         {/* 1. HEADER ROW WITH + ADD DRONE                                          */}
         {/* ======================================================================= */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-1">
           <div>
-            <h1 className="text-xl lg:text-2xl font-black text-[#0B1F3D] tracking-tight">
+            <h1 className="text-[26px] sm:text-[28px] lg:text-[30px] font-bold text-[#0F284E] tracking-tight leading-tight">
               Drone Fleet
             </h1>
-            <p className="text-xs text-[#64748B] mt-0.5">
+            <p className="text-[13px] sm:text-[14px] text-[#334155] font-medium mt-1">
               One fleet. Any mission. Always ready.
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             {actionFeedback && (
-              <span className="text-xs font-bold px-3 py-1.5 rounded-lg bg-[#DCFCE7] text-[#15803D] border border-[#86EFAC] animate-in fade-in">
+              <span className="text-[12px] font-bold px-3 py-1.5 rounded-lg bg-[#DCFCE7] text-[#15803D] border border-[#86EFAC] animate-in fade-in">
                 {actionFeedback}
               </span>
             )}
             <button
               type="button"
               onClick={() => setShowAddDroneModal(true)}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-xs font-bold shadow-xs transition cursor-pointer"
+              className="flex items-center gap-2 h-10 px-4 py-2 rounded-lg bg-[#1B68D2] hover:bg-[#124E9D] text-white text-[13px] sm:text-[14px] font-bold shadow-sm transition cursor-pointer"
             >
-              <Plus className="w-4 h-4" />
+              <Plus className="w-4 h-4 stroke-[2.5]" />
               <span>Add Drone</span>
             </button>
           </div>
         </div>
 
         {/* 6 Top KPI Cards (Dynamic fleet status) */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-1 min-[420px]:grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3.5 sm:gap-4">
           {/* 1: Total Drones */}
-          <div className="bg-white border border-[#E2E8F0] rounded-xl p-3 flex items-center gap-2.5 shadow-sm">
-            <div className="w-9 h-9 rounded-lg bg-[#2563EB]/10 border border-[#2563EB]/25 flex items-center justify-center text-[#2563EB] shrink-0">
-              <Plane className="w-4 h-4" />
+          <div className="bg-white border border-[#CBD5E1] rounded-xl p-4 flex items-start gap-3.5 shadow-sm transition hover:border-[#94A3B8]">
+            <div className="w-11 h-11 rounded-xl bg-[#0F284E] text-[#35E0FF] flex items-center justify-center shrink-0 shadow-xs">
+              <Plane className="w-5 h-5" />
             </div>
-            <div>
-              <div className="text-lg font-black text-[#0F172A]">{totalCount}</div>
-              <div className="text-[10px] font-bold text-[#334155]">Total Drones</div>
-              <div className="text-[9px] text-[#64748B]">{inMissionCount} active · {standbyCount + chargingCount} standby</div>
+            <div className="min-w-0">
+              <div className="text-[26px] sm:text-[28px] font-extrabold text-[#0F284E] font-mono leading-none tracking-tight">{totalCount}</div>
+              <div className="text-[13px] font-bold text-[#1E293B] mt-1.5 leading-snug">Total Drones</div>
+              <div className="text-[12px] text-[#475569] font-medium mt-0.5 leading-tight">{inMissionCount} active · {standbyCount + chargingCount} standby</div>
             </div>
           </div>
 
           {/* 2: Fleet Availability */}
-          <div className="bg-white border border-[#E2E8F0] rounded-xl p-3 flex items-center gap-2.5 shadow-sm">
-            <div className="w-9 h-9 rounded-lg bg-[#16A34A]/10 border border-[#16A34A]/25 flex items-center justify-center text-[#16A34A] shrink-0">
-              <RefreshCw className="w-4 h-4" />
+          <div className="bg-white border border-[#CBD5E1] rounded-xl p-4 flex items-start gap-3.5 shadow-sm transition hover:border-[#94A3B8]">
+            <div className="w-11 h-11 rounded-xl bg-[#16A34A] text-white flex items-center justify-center shrink-0 shadow-xs">
+              <RefreshCw className="w-5 h-5" />
             </div>
-            <div>
-              <div className="text-lg font-black text-[#0F172A]">{availPct}%</div>
-              <div className="text-[10px] font-bold text-[#334155]">Fleet Availability</div>
-              <div className="text-[9px] text-[#16A34A] font-semibold">{totalCount - maintCount} operational</div>
+            <div className="min-w-0">
+              <div className="text-[26px] sm:text-[28px] font-extrabold text-[#0F284E] font-mono leading-none tracking-tight">{availPct}%</div>
+              <div className="text-[13px] font-bold text-[#1E293B] mt-1.5 leading-snug">Fleet Availability</div>
+              <div className="text-[12px] text-[#16A34A] font-bold mt-0.5 leading-tight">{totalCount - maintCount} operational</div>
             </div>
           </div>
 
           {/* 3: In Maintenance */}
-          <div className="bg-white border border-[#E2E8F0] rounded-xl p-3 flex items-center gap-2.5 shadow-sm">
-            <div className="w-9 h-9 rounded-lg bg-[#F59E0B]/10 border border-[#F59E0B]/25 flex items-center justify-center text-[#D97706] shrink-0">
-              <Wrench className="w-4 h-4" />
+          <div className="bg-white border border-[#CBD5E1] rounded-xl p-4 flex items-start gap-3.5 shadow-sm transition hover:border-[#94A3B8]">
+            <div className="w-11 h-11 rounded-xl bg-[#D97706] text-white flex items-center justify-center shrink-0 shadow-xs">
+              <Wrench className="w-5 h-5" />
             </div>
-            <div>
-              <div className="text-lg font-black text-[#0F172A]">{maintCount}</div>
-              <div className="text-[10px] font-bold text-[#334155]">In Maintenance</div>
-              <div className="text-[9px] text-[#64748B]">{maintCount > 0 ? `${maintCount} in servicing` : "All ready"}</div>
+            <div className="min-w-0">
+              <div className="text-[26px] sm:text-[28px] font-extrabold text-[#0F284E] font-mono leading-none tracking-tight">{maintCount}</div>
+              <div className="text-[13px] font-bold text-[#1E293B] mt-1.5 leading-snug">In Maintenance</div>
+              <div className="text-[12px] text-[#475569] font-medium mt-0.5 leading-tight">{maintCount > 0 ? `${maintCount} in servicing` : "All ready"}</div>
             </div>
           </div>
 
           {/* 4: Avg. Battery Health */}
-          <div className="bg-white border border-[#E2E8F0] rounded-xl p-3 flex items-center gap-2.5 shadow-sm">
-            <div className="w-9 h-9 rounded-lg bg-[#2563EB]/10 border border-[#2563EB]/25 flex items-center justify-center text-[#2563EB] shrink-0">
-              <Battery className="w-4 h-4" />
+          <div className="bg-white border border-[#CBD5E1] rounded-xl p-4 flex items-start gap-3.5 shadow-sm transition hover:border-[#94A3B8]">
+            <div className="w-11 h-11 rounded-xl bg-[#1B68D2] text-white flex items-center justify-center shrink-0 shadow-xs">
+              <Battery className="w-5 h-5" />
             </div>
-            <div>
-              <div className="text-lg font-black text-[#0F172A]">{avgBattery}%</div>
-              <div className="text-[10px] font-bold text-[#334155]">Avg. Battery Level</div>
-              <div className="text-[9px] text-[#16A34A] font-semibold">Active telemetry</div>
+            <div className="min-w-0">
+              <div className="text-[26px] sm:text-[28px] font-extrabold text-[#0F284E] font-mono leading-none tracking-tight">{avgBattery}%</div>
+              <div className="text-[13px] font-bold text-[#1E293B] mt-1.5 leading-snug">Avg. Battery Level</div>
+              <div className="text-[12px] text-[#16A34A] font-bold mt-0.5 leading-tight">Active telemetry</div>
             </div>
           </div>
 
           {/* 5: Flight Hours */}
-          <div className="bg-white border border-[#E2E8F0] rounded-xl p-3 flex items-center gap-2.5 shadow-sm">
-            <div className="w-9 h-9 rounded-lg bg-[#8B5CF6]/10 border border-[#8B5CF6]/25 flex items-center justify-center text-[#8B5CF6] shrink-0">
-              <Calendar className="w-4 h-4" />
+          <div className="bg-white border border-[#CBD5E1] rounded-xl p-4 flex items-start gap-3.5 shadow-sm transition hover:border-[#94A3B8]">
+            <div className="w-11 h-11 rounded-xl bg-[#6952D9] text-white flex items-center justify-center shrink-0 shadow-xs">
+              <Calendar className="w-5 h-5" />
             </div>
-            <div>
-              <div className="text-lg font-black text-[#0F172A]">{totalHours}</div>
-              <div className="text-[10px] font-bold text-[#334155]">Total Flight Hours</div>
-              <div className="text-[9px] text-[#16A34A] font-semibold">Cumulative logging</div>
+            <div className="min-w-0">
+              <div className="text-[26px] sm:text-[28px] font-extrabold text-[#0F284E] font-mono leading-none tracking-tight">{totalHours}</div>
+              <div className="text-[13px] font-bold text-[#1E293B] mt-1.5 leading-snug">Total Flight Hours</div>
+              <div className="text-[12px] text-[#475569] font-medium mt-0.5 leading-tight">Cumulative logging</div>
             </div>
           </div>
 
           {/* 6: Compliance Status */}
-          <div className="bg-white border border-[#E2E8F0] rounded-xl p-3 flex items-center gap-2.5 shadow-sm">
-            <div className="w-9 h-9 rounded-lg bg-[#16A34A]/10 border border-[#16A34A]/25 flex items-center justify-center text-[#16A34A] shrink-0">
-              <Shield className="w-4 h-4" />
+          <div className="bg-white border border-[#CBD5E1] rounded-xl p-4 flex items-start gap-3.5 shadow-sm transition hover:border-[#94A3B8]">
+            <div className="w-11 h-11 rounded-xl bg-[#16A34A] text-white flex items-center justify-center shrink-0 shadow-xs">
+              <Shield className="w-5 h-5" />
             </div>
-            <div>
-              <div className="text-lg font-black text-[#0F172A]">100%</div>
-              <div className="text-[10px] font-bold text-[#334155]">Compliance Status</div>
-              <div className="text-[9px] text-[#16A34A] font-semibold">● Authoritative sync</div>
+            <div className="min-w-0">
+              <div className="text-[26px] sm:text-[28px] font-extrabold text-[#0F284E] font-mono leading-none tracking-tight">100%</div>
+              <div className="text-[13px] font-bold text-[#1E293B] mt-1.5 leading-snug">Compliance Status</div>
+              <div className="text-[12px] text-[#16A34A] font-bold mt-0.5 leading-tight">● Authoritative sync</div>
             </div>
           </div>
         </div>
@@ -368,13 +368,13 @@ const DroneFleetPage = () => {
         {/* ======================================================================= */}
         {/* 2. FLEET INVENTORY TABLE + COMPOSITION & HEALTH CHARTS                   */}
         {/* ======================================================================= */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
           {/* --------------------------------------------------------------------- */}
           {/* LEFT: FLEET INVENTORY TABLE (lg:col-span-8)                           */}
           {/* --------------------------------------------------------------------- */}
-          <div className="lg:col-span-8 bg-white border border-[#E2E8F0] rounded-xl p-4 space-y-3 shadow-sm">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-              <div className="flex flex-wrap items-center gap-1.5 text-xs font-semibold">
+          <div className="lg:col-span-8 bg-white border border-[#CBD5E1] rounded-xl p-4 sm:p-5 space-y-3.5 shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-1.5 text-[13px] font-bold">
                 {[
                   { id: "all", label: `All Drones (${totalCount})` },
                   { id: "in_mission", label: `In Mission (${inMissionCount})` },
@@ -386,10 +386,10 @@ const DroneFleetPage = () => {
                     key={f.id}
                     type="button"
                     onClick={() => setStatusFilter(f.id)}
-                    className={`px-3 py-1 rounded-md transition cursor-pointer ${
+                    className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
                       statusFilter === f.id
-                        ? "bg-[#2563EB] text-white shadow-xs"
-                        : "bg-[#F1F5F9] text-[#475569] hover:bg-[#E2E8F0]"
+                        ? "bg-[#1B68D2] text-white shadow-xs"
+                        : "bg-[#F1F5F9] text-[#475569] hover:bg-[#E2E8F0] hover:text-[#0F284E]"
                     }`}
                   >
                     {f.label}
@@ -399,33 +399,33 @@ const DroneFleetPage = () => {
 
               {/* Search input */}
               <div className="relative">
-                <Search className="w-3.5 h-3.5 text-[#94A3B8] absolute left-2.5 top-2.5" />
+                <Search className="w-4 h-4 text-[#64748B] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
                   type="text"
                   placeholder="Search fleet..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-8 pr-3 py-1 bg-[#F8FAFC] border border-[#CBD5E1] rounded-lg text-xs outline-none focus:border-[#2563EB] w-44"
+                  className="pl-9 pr-3 py-1.5 bg-[#F8FAFC] border border-[#CBD5E1] rounded-lg text-[13px] text-[#0F284E] font-medium outline-none focus:border-[#1B68D2] focus:bg-white w-48 sm:w-56 transition"
                 />
               </div>
             </div>
 
             {/* Table */}
             <div className="overflow-x-auto border border-[#E2E8F0] rounded-lg">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-[#F8FAFC] text-[#64748B] border-b border-[#E2E8F0] font-semibold text-[11px]">
+              <table className="w-full min-w-[760px] text-left">
+                <thead className="bg-[#F4F7FB] text-[#0F284E] border-b border-[#CBD5E1] font-bold text-[13px]">
                   <tr>
-                    <th className="py-2.5 px-3">ID / Name</th>
-                    <th className="py-2.5 px-3">Model</th>
-                    <th className="py-2.5 px-3">Type</th>
-                    <th className="py-2.5 px-3">Status</th>
-                    <th className="py-2.5 px-3">Battery</th>
-                    <th className="py-2.5 px-3">Location</th>
-                    <th className="py-2.5 px-3">Last Flight</th>
-                    <th className="py-2.5 px-3 text-right">Hours</th>
+                    <th className="py-3 px-3.5">ID / Name</th>
+                    <th className="py-3 px-3.5">Model</th>
+                    <th className="py-3 px-3.5">Type</th>
+                    <th className="py-3 px-3.5">Status</th>
+                    <th className="py-3 px-3.5">Battery</th>
+                    <th className="py-3 px-3.5">Location</th>
+                    <th className="py-3 px-3.5">Last Flight</th>
+                    <th className="py-3 px-3.5 text-right">Hours</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#F1F5F9] text-[11px]">
+                <tbody className="divide-y divide-[#E2E8F0] text-[13px] sm:text-[14px] text-[#1E293B]">
                   {filteredDrones.map((d) => {
                     const isSelected = selectedDroneId === d.id;
                     return (
@@ -436,48 +436,48 @@ const DroneFleetPage = () => {
                           selectDrone?.(d.id);
                         }}
                         className={`transition cursor-pointer ${
-                          isSelected ? "bg-[#EFF6FF]" : "hover:bg-[#F8FAFC]"
+                          isSelected ? "bg-[#EFF6FF] border-l-4 border-[#1B68D2]" : "hover:bg-[#F8FAFC]"
                         }`}
                       >
-                        <td className="py-2 px-3">
-                          <div className="font-bold text-[#2563EB] font-mono">{d.id}</div>
-                          <div className="text-[10px] text-[#0F172A] font-semibold truncate">{d.name}</div>
-                          {d.role && <div className="text-[9px] text-[#0284C7] font-semibold">{d.role}</div>}
+                        <td className="py-3 px-3.5">
+                          <div className="font-bold text-[#1B68D2] font-mono">{d.id}</div>
+                          <div className="text-[12px] text-[#0F284E] font-bold truncate">{d.name}</div>
+                          {d.role && <div className="text-[11px] text-[#0284C7] font-semibold">{d.role}</div>}
                         </td>
-                        <td className="py-2 px-3 font-semibold text-[#0F172A]">{d.model}</td>
-                        <td className="py-2 px-3 text-[#475569]">{d.type}</td>
-                        <td className="py-2 px-3">
+                        <td className="py-3 px-3.5 font-bold text-[#0F284E]">{d.model}</td>
+                        <td className="py-3 px-3.5 text-[#334155] font-medium">{d.type}</td>
+                        <td className="py-3 px-3.5">
                           <span
-                            className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                            className={`px-2.5 py-1 rounded-md text-[11px] sm:text-[12px] font-bold inline-block leading-tight ${
                               d.status === "In Mission"
-                                ? "bg-[#DCFCE7] text-[#15803D]"
+                                ? "bg-[#DCFCE7] text-[#15803D] border border-[#86EFAC]"
                                 : d.status === "Charging"
-                                ? "bg-[#FEF3C7] text-[#B45309]"
+                                ? "bg-[#FEF3C7] text-[#B45309] border border-[#FCD34D]"
                                 : d.status === "Standby"
-                                ? "bg-[#DBEAFE] text-[#1D4ED8]"
-                                : "bg-[#FEE2E2] text-[#B91C1C]"
+                                ? "bg-[#DBEAFE] text-[#1D4ED8] border border-[#93C5FD]"
+                                : "bg-[#FEE2E2] text-[#B91C1C] border border-[#FCA5A5]"
                             }`}
                           >
                             {d.status}
                           </span>
                         </td>
-                        <td className="py-2 px-3">
+                        <td className="py-3 px-3.5">
                           {d.battery > 0 ? (
-                            <div className="flex items-center gap-1.5 font-mono">
-                              <div className="w-12 h-1.5 rounded-full bg-[#E2E8F0] overflow-hidden">
+                            <div className="flex items-center gap-2 font-mono">
+                              <div className="w-14 h-2 rounded-full bg-[#E2E8F0] overflow-hidden">
                                 <div
                                   className="h-full bg-[#16A34A]"
                                   style={{ width: `${d.battery}%` }}
                                 />
                               </div>
-                              <span>{d.battery}%</span>
+                              <span className="font-bold text-[#0F284E] text-[12px]">{d.battery}%</span>
                             </div>
                           ) : (
                             <span className="text-[#94A3B8]">—</span>
                           )}
                         </td>
-                        <td className="py-2 px-3 text-[#475569]">{d.location}</td>
-                        <td className="py-2 px-3 text-[#64748B]">{d.lastFlight}</td>
+                        <td className="py-3 px-3.5 text-[#334155] font-medium">{d.location}</td>
+                        <td className="py-3 px-3.5 text-[#64748B] font-medium">{d.lastFlight}</td>
                         <td className="py-2 px-3 text-right font-mono font-bold text-[#0F172A]">
                           {d.hours} h
                         </td>

@@ -122,11 +122,30 @@ export const CommandCenterOperational = () => {
     missionArea: true,
     geofence: true,
     linkCoverage: false,
+    noFlyZones: true,
   })
 
   const toggleLayer = (layerKey) => {
     setMapLayers((prev) => ({ ...prev, [layerKey]: !prev[layerKey] }))
   }
+
+  // Operational Map Style State (Normal / Satellite)
+  const [mapStyle, setMapStyle] = useState(() => {
+    try {
+      return localStorage.getItem("aeronexus_command_center_map_style") || "satellite"
+    } catch {
+      return "satellite"
+    }
+  })
+
+  const handleMapStyleChange = useCallback((newStyle) => {
+    setMapStyle(newStyle)
+    try {
+      localStorage.setItem("aeronexus_command_center_map_style", newStyle)
+    } catch {
+      // Safe ignore
+    }
+  }, [])
 
   // Active Incidents / Alerts State (Hydrated from storage / backend incidents)
   const [alerts, setAlerts] = useState(() => {
@@ -454,31 +473,31 @@ export const CommandCenterOperational = () => {
   }, [currentProject])
 
   return (
-    <div className="flex-1 w-full min-h-0 overflow-y-auto bg-[#EEF3F8] p-3 sm:p-5 lg:p-6 space-y-4 sm:space-y-5 select-none font-sans">
+    <div className="flex-1 w-full min-h-0 overflow-y-auto bg-[#EEF3F8] p-4 sm:p-5 lg:p-6 space-y-4 sm:space-y-5 font-sans scroll-smooth">
       {/* ========================================================= */}
       {/* HEADER: Title, Subtitle, Live Status, + Plan a Mission    */}
       {/* ========================================================= */}
       <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-1">
         <div>
-          <h1 className="text-2xl sm:text-[28px] font-bold text-[#0F284E] tracking-tight leading-tight">
+          <h1 className="text-[26px] sm:text-[28px] lg:text-[30px] font-bold text-[#0F284E] tracking-tight leading-tight">
             Command Center
           </h1>
-          <p className="text-xs sm:text-[13px] text-[#556982] font-medium mt-0.5">
+          <p className="text-[13px] sm:text-[14px] text-[#334155] font-medium mt-1">
             Every drone, mission and alert across all sites, right now.
           </p>
         </div>
 
         <div className="flex items-center gap-2.5 sm:gap-3 self-start sm:self-auto shrink-0 flex-wrap">
           {user?.username && (
-            <div className="hidden md:flex items-center gap-1.5 text-xs font-medium text-[#48607A] bg-white/70 px-2.5 py-1.5 rounded-full border border-[#D5E0EB]">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#1B68D2]" />
-              <span className="font-semibold text-[#0F284E]">{user.name || user.username}</span>
+            <div className="hidden md:flex items-center gap-1.5 text-[12px] font-semibold text-[#334155] bg-white px-3 py-1.5 rounded-full border border-[#CBD5E1] shadow-2xs">
+              <span className="w-2 h-2 rounded-full bg-[#1B68D2]" />
+              <span className="font-bold text-[#0F284E]">{user.name || user.username}</span>
               {role && <span className="text-[10px] text-[#64748B] uppercase font-mono">({role})</span>}
             </div>
           )}
 
-          <div className="flex items-center gap-2 text-xs font-medium text-[#48607A] bg-white/70 px-3 py-1.5 rounded-full border border-[#D5E0EB] shadow-2xs">
-            <span className="w-2 h-2 rounded-full bg-[#10B981] animate-pulse" />
+          <div className="flex items-center gap-2 text-[12px] font-semibold text-[#334155] bg-white px-3.5 py-1.5 rounded-full border border-[#CBD5E1] shadow-2xs">
+            <span className="w-2 h-2 rounded-full bg-[#16A34A] animate-pulse" />
             <span>
               Live · updated <strong className="font-mono text-[#0F284E]">{currentTime}</strong>
             </span>
@@ -487,9 +506,9 @@ export const CommandCenterOperational = () => {
           <button
             type="button"
             onClick={() => navigate("/mission-planning")}
-            className="inline-flex items-center gap-1.5 bg-[#1B68D2] hover:bg-[#1553B0] text-white px-4 py-2 rounded-lg text-xs sm:text-[13px] font-bold shadow-xs hover:shadow transition-all cursor-pointer"
+            className="inline-flex items-center justify-center gap-2 h-10 px-4 py-2 bg-[#1B68D2] hover:bg-[#124E9D] text-white rounded-lg text-[13px] sm:text-[14px] font-bold shadow-sm transition-all duration-150 cursor-pointer shrink-0"
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="w-4 h-4 stroke-[2.5]" />
             <span>Plan a Mission</span>
           </button>
         </div>
@@ -498,21 +517,21 @@ export const CommandCenterOperational = () => {
       {/* ========================================================= */}
       {/* 1. TOP KPI ROW: Six Horizontally Aligned Cards             */}
       {/* ========================================================= */}
-      <section className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-3.5" aria-label="Command Center Key Metrics">
+      <section className="grid grid-cols-1 min-[420px]:grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3.5 sm:gap-4" aria-label="Command Center Key Metrics">
         {/* KPI 1: Drones Active */}
-        <div className="bg-white rounded-xl border border-[#D9E3ED] p-3 sm:p-3.5 shadow-[0_1px_3px_rgba(0,0,0,0.04)] flex items-start gap-3 transition-all hover:border-[#CAD8E6]">
-          <div className="w-9 h-9 rounded-lg bg-[#0F284E] text-[#35E0FF] flex items-center justify-center shrink-0 shadow-xs">
-            <Plane className="w-4.5 h-4.5" />
+        <div className="bg-white rounded-xl border border-[#CBD5E1] p-4 shadow-sm flex items-start gap-3.5 h-full transition hover:border-[#94A3B8]">
+          <div className="w-11 h-11 rounded-xl bg-[#0F284E] text-[#35E0FF] flex items-center justify-center shrink-0 shadow-xs">
+            <Plane className="w-5 h-5" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-2xl font-extrabold text-[#0F284E] font-mono leading-none tracking-tight">
+            <p className="text-[26px] sm:text-[28px] font-extrabold text-[#0F284E] font-mono leading-none tracking-tight">
               {inAirCount}
             </p>
-            <p className="text-xs font-semibold text-[#52667D] mt-1 truncate">
+            <p className="text-[13px] font-bold text-[#1E293B] mt-1.5 leading-snug truncate">
               Drones Active
             </p>
-            <div className="flex items-center gap-1.5 text-[11px] text-[#5A7188] font-medium mt-1">
-              <span className={`w-1.5 h-1.5 rounded-full ${inAirCount > 0 ? "bg-[#10B981] animate-pulse" : "bg-[#94A3B8]"} shrink-0`} />
+            <div className="flex items-center gap-1.5 text-[12px] text-[#475569] font-medium mt-0.5 leading-tight">
+              <span className={`w-2 h-2 rounded-full ${inAirCount > 0 ? "bg-[#16A34A] animate-pulse" : "bg-[#94A3B8]"} shrink-0`} />
               <span className="truncate">
                 {registeredDrones?.length > 0
                   ? `${inAirCount} in air · ${onGroundCount} on ground`
@@ -523,19 +542,19 @@ export const CommandCenterOperational = () => {
         </div>
 
         {/* KPI 2: Cameras Online */}
-        <div className="bg-white rounded-xl border border-[#D9E3ED] p-3 sm:p-3.5 shadow-[0_1px_3px_rgba(0,0,0,0.04)] flex items-start gap-3 transition-all hover:border-[#CAD8E6]">
-          <div className="w-9 h-9 rounded-lg bg-[#1B68D2] text-white flex items-center justify-center shrink-0 shadow-xs">
-            <Video className="w-4.5 h-4.5" />
+        <div className="bg-white rounded-xl border border-[#CBD5E1] p-4 shadow-sm flex items-start gap-3.5 h-full transition hover:border-[#94A3B8]">
+          <div className="w-11 h-11 rounded-xl bg-[#1B68D2] text-white flex items-center justify-center shrink-0 shadow-xs">
+            <Video className="w-5 h-5" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-2xl font-extrabold text-[#0F284E] font-mono leading-none tracking-tight">
+            <p className="text-[26px] sm:text-[28px] font-extrabold text-[#0F284E] font-mono leading-none tracking-tight">
               {camerasOnlineCount}
             </p>
-            <p className="text-xs font-semibold text-[#52667D] mt-1 truncate">
+            <p className="text-[13px] font-bold text-[#1E293B] mt-1.5 leading-snug truncate">
               Cameras Online
             </p>
-            <div className="flex items-center gap-1.5 text-[11px] text-[#5A7188] font-medium mt-1">
-              <span className={`w-1.5 h-1.5 rounded-full ${camerasOnlineCount > 0 ? "bg-[#10B981]" : "bg-[#94A3B8]"} shrink-0`} />
+            <div className="flex items-center gap-1.5 text-[12px] text-[#475569] font-medium mt-0.5 leading-tight">
+              <span className={`w-2 h-2 rounded-full ${camerasOnlineCount > 0 ? "bg-[#16A34A]" : "bg-[#94A3B8]"} shrink-0`} />
               <span className="truncate">
                 {camerasOnlineCount > 0
                   ? `${camerasOnlineCount} online · 0 offline`
@@ -546,37 +565,37 @@ export const CommandCenterOperational = () => {
         </div>
 
         {/* KPI 3: Active Missions */}
-        <div className="bg-white rounded-xl border border-[#D9E3ED] p-3 sm:p-3.5 shadow-[0_1px_3px_rgba(0,0,0,0.04)] flex items-start gap-3 transition-all hover:border-[#CAD8E6]">
-          <div className="w-9 h-9 rounded-lg bg-[#6366F1] text-white flex items-center justify-center shrink-0 shadow-xs">
-            <Share2 className="w-4.5 h-4.5" />
+        <div className="bg-white rounded-xl border border-[#CBD5E1] p-4 shadow-sm flex items-start gap-3.5 h-full transition hover:border-[#94A3B8]">
+          <div className="w-11 h-11 rounded-xl bg-[#6366F1] text-white flex items-center justify-center shrink-0 shadow-xs">
+            <Share2 className="w-5 h-5" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-2xl font-extrabold text-[#0F284E] font-mono leading-none tracking-tight">
+            <p className="text-[26px] sm:text-[28px] font-extrabold text-[#0F284E] font-mono leading-none tracking-tight">
               {activeMissionsCount}
             </p>
-            <p className="text-xs font-semibold text-[#52667D] mt-1 truncate">
+            <p className="text-[13px] font-bold text-[#1E293B] mt-1.5 leading-snug truncate">
               Active Missions
             </p>
-            <p className="text-[11px] text-[#5A7188] font-medium mt-1 truncate">
+            <p className="text-[12px] text-[#475569] font-medium mt-0.5 leading-tight truncate">
               {projects?.length > 0 ? `${scheduledMissionsCount} scheduled today` : "0 scheduled"}
             </p>
           </div>
         </div>
 
         {/* KPI 4: Sites Monitored */}
-        <div className="bg-white rounded-xl border border-[#D9E3ED] p-3 sm:p-3.5 shadow-[0_1px_3px_rgba(0,0,0,0.04)] flex items-start gap-3 transition-all hover:border-[#CAD8E6]">
-          <div className="w-9 h-9 rounded-lg bg-[#10B981] text-white flex items-center justify-center shrink-0 shadow-xs">
-            <MapPin className="w-4.5 h-4.5" />
+        <div className="bg-white rounded-xl border border-[#CBD5E1] p-4 shadow-sm flex items-start gap-3.5 h-full transition hover:border-[#94A3B8]">
+          <div className="w-11 h-11 rounded-xl bg-[#16A34A] text-white flex items-center justify-center shrink-0 shadow-xs">
+            <MapPin className="w-5 h-5" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-2xl font-extrabold text-[#0F284E] font-mono leading-none tracking-tight">
+            <p className="text-[26px] sm:text-[28px] font-extrabold text-[#0F284E] font-mono leading-none tracking-tight">
               {sitesMonitoredCount}
             </p>
-            <p className="text-xs font-semibold text-[#52667D] mt-1 truncate">
+            <p className="text-[13px] font-bold text-[#1E293B] mt-1.5 leading-snug truncate">
               Sites Monitored
             </p>
-            <div className="flex items-center gap-1.5 text-[11px] text-[#5A7188] font-medium mt-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#10B981] shrink-0" />
+            <div className="flex items-center gap-1.5 text-[12px] text-[#475569] font-medium mt-0.5 leading-tight">
+              <span className="w-2 h-2 rounded-full bg-[#16A34A] shrink-0" />
               <span className="truncate">
                 {sitesMonitoredCount > 0 ? "All airspace clear" : "No sites configured"}
               </span>
@@ -585,58 +604,58 @@ export const CommandCenterOperational = () => {
         </div>
 
         {/* KPI 5: Active Alerts */}
-        <div className="bg-white rounded-xl border border-[#D9E3ED] p-3 sm:p-3.5 shadow-[0_1px_3px_rgba(0,0,0,0.04)] flex items-start gap-3 transition-all hover:border-[#CAD8E6]">
+        <div className="bg-white rounded-xl border border-[#CBD5E1] p-4 shadow-sm flex items-start gap-3.5 h-full transition hover:border-[#94A3B8]">
           <div
-            className={`w-9 h-9 rounded-lg text-white flex items-center justify-center shrink-0 shadow-xs transition-colors ${
-              unresolvedAlerts.length > 0 ? "bg-[#EF4444]" : "bg-[#10B981]"
+            className={`w-11 h-11 rounded-xl text-white flex items-center justify-center shrink-0 shadow-xs transition-colors ${
+              unresolvedAlerts.length > 0 ? "bg-[#DC2626]" : "bg-[#16A34A]"
             }`}
           >
             {unresolvedAlerts.length > 0 ? (
-              <AlertTriangle className="w-4.5 h-4.5" />
+              <AlertTriangle className="w-5 h-5" />
             ) : (
-              <CheckCircle2 className="w-4.5 h-4.5" />
+              <CheckCircle2 className="w-5 h-5" />
             )}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-2xl font-extrabold text-[#0F284E] font-mono leading-none tracking-tight">
+            <p className="text-[26px] sm:text-[28px] font-extrabold text-[#0F284E] font-mono leading-none tracking-tight">
               {unresolvedAlerts.length}
             </p>
-            <p className="text-xs font-semibold text-[#52667D] mt-1 truncate">
+            <p className="text-[13px] font-bold text-[#1E293B] mt-1.5 leading-snug truncate">
               Active Alerts
             </p>
-            <p className="text-[11px] text-[#5A7188] font-medium mt-1 truncate">
+            <p className="text-[12px] text-[#475569] font-medium mt-0.5 leading-tight truncate">
               {activeAlertSubtitle}
             </p>
           </div>
         </div>
 
         {/* KPI 6: Mission Success */}
-        <div className="bg-white rounded-xl border border-[#D9E3ED] p-3 sm:p-3.5 shadow-[0_1px_3px_rgba(0,0,0,0.04)] flex items-start gap-3 transition-all hover:border-[#CAD8E6]">
+        <div className="bg-white rounded-xl border border-[#CBD5E1] p-4 shadow-sm flex items-start gap-3.5 h-full transition hover:border-[#94A3B8]">
           <div
-            className={`w-9 h-9 rounded-lg text-white flex items-center justify-center shrink-0 shadow-xs transition-colors ${missionSuccessMetrics.bgColor}`}
+            className={`w-11 h-11 rounded-xl text-white flex items-center justify-center shrink-0 shadow-xs transition-colors ${missionSuccessMetrics.bgColor}`}
           >
-            <ShieldCheck className="w-4.5 h-4.5" />
+            <ShieldCheck className="w-5 h-5" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-2xl font-extrabold text-[#0F284E] font-mono leading-none tracking-tight">
+            <p className="text-[26px] sm:text-[28px] font-extrabold text-[#0F284E] font-mono leading-none tracking-tight">
               {missionSuccessMetrics.value}
             </p>
-            <p className="text-xs font-semibold text-[#52667D] mt-1 truncate">
+            <p className="text-[13px] font-bold text-[#1E293B] mt-1.5 leading-snug truncate">
               Mission Success Rate
             </p>
             {missionSuccessMetrics.hasTrend ? (
               <div
-                className={`flex items-center gap-1 text-[11px] font-semibold mt-1 truncate ${missionSuccessMetrics.trendColor}`}
+                className={`flex items-center gap-1 text-[12px] font-bold mt-0.5 leading-tight truncate ${missionSuccessMetrics.trendColor}`}
               >
                 {missionSuccessMetrics.trendPositive ? (
-                  <TrendingUp className="w-3.5 h-3.5" />
+                  <TrendingUp className="w-4 h-4" />
                 ) : (
-                  <TrendingDown className="w-3.5 h-3.5" />
+                  <TrendingDown className="w-4 h-4" />
                 )}
                 <span>{missionSuccessMetrics.trendText}</span>
               </div>
             ) : (
-              <p className="text-[11px] text-[#5A7188] font-medium mt-1 truncate">
+              <p className="text-[12px] text-[#475569] font-medium mt-0.5 leading-tight truncate">
                 {missionSuccessMetrics.detailText}
               </p>
             )}
@@ -647,41 +666,43 @@ export const CommandCenterOperational = () => {
       {/* ========================================================= */}
       {/* 2. MAIN ROW: Live Operations Map & Active Alerts          */}
       {/* ========================================================= */}
-      <section className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_390px] gap-4">
+      <section className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_380px] 2xl:grid-cols-[minmax(0,1fr)_420px] gap-5">
         {/* LEFT: Live Operations Map */}
-        <article className="bg-white rounded-xl border border-[#D9E3ED] shadow-[0_1px_3px_rgba(0,0,0,0.05)] overflow-hidden flex flex-col">
+        <article className="bg-white rounded-xl border border-[#CBD5E1] shadow-sm overflow-hidden flex flex-col">
           {/* Card Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-[#E5EDF5]">
-            <h2 className="text-sm font-bold text-[#0F284E] tracking-tight">
-              Live Operations Map · {currentProject?.name || "North Ridge Dam"}
+          <div className="flex items-center justify-between px-4 sm:px-5 py-3.5 border-b border-[#CBD5E1] bg-[#FCFDFE]">
+            <h2 className="text-[15px] sm:text-[16px] font-bold text-[#0F284E] tracking-tight">
+              Live Operations Map · {currentProject?.name || currentProject?.projectName || "North Ridge Dam"}
             </h2>
 
-            <div className="flex items-center gap-2">
-              <span className="hidden sm:inline text-xs text-[#6B7D91]">
+            <div className="flex items-center gap-3">
+              <span className="hidden sm:inline text-[12px] text-[#475569] font-medium">
                 Switch project in the top bar
               </span>
               <button
                 type="button"
                 onClick={() => navigate("/live-operations")}
-                className="inline-flex items-center gap-1 text-xs font-semibold text-[#1B68D2] hover:text-[#124E9D] hover:underline cursor-pointer"
+                className="inline-flex items-center gap-1 text-[13px] font-bold text-[#1B68D2] hover:text-[#124E9D] hover:underline cursor-pointer"
               >
                 <span>Open Live Operations</span>
-                <ChevronRight className="w-3.5 h-3.5" />
+                <ChevronRight className="w-4 h-4 stroke-[2.5]" />
               </button>
             </div>
           </div>
 
           {/* Map Body */}
-          <div className="relative w-full h-[410px] sm:h-[450px] xl:h-[480px] bg-[#0E1E2E] overflow-hidden">
+          <div className="relative w-full h-[440px] sm:h-[480px] xl:h-[520px] bg-[#0E1E2E] overflow-hidden">
             {/* Primary Interactive Map Engine */}
             <MapLoad
-              mapStyle="satellite"
+              mapStyle={mapStyle}
+              onMapStyleChange={handleMapStyleChange}
+              showAirspace={mapLayers.noFlyZones}
               telemetry={telemetry}
               pageType="dashboard"
               showDrones={mapLayers.drones}
               waypoints={mapLayers.flightPath ? mapWaypoints : []}
               showMissionRoute={mapLayers.flightPath}
-              geofence={mapLayers.geofence || mapLayers.missionArea ? mapGeofence : []}
+              geofence={mapLayers.geofence ? mapGeofence : []}
               onDroneSelect={(dId) => {
                 selectDrone(dId)
                 navigate("/live-operations")
@@ -689,53 +710,62 @@ export const CommandCenterOperational = () => {
             />
 
             {/* Floating Map Layers Overlay (Top Left) */}
-            <div className="absolute top-3 left-3 z-20 w-[142px] bg-[#0B1F3D]/92 backdrop-blur-md rounded-lg p-2.5 border border-[#203D64] shadow-xl text-white select-none">
-              <p className="text-[11px] font-bold text-[#E2EDF8] mb-2 tracking-wide uppercase">
+            <div className="absolute top-3 left-3 z-20 w-[156px] bg-[#0B1F3D]/95 backdrop-blur-md rounded-xl p-3 border border-[#203D64] shadow-xl text-white select-none">
+              <p className="text-[11px] font-bold text-[#E2EDF8] mb-2.5 tracking-wider uppercase">
                 Map Layers
               </p>
-              <div className="space-y-1.5 text-xs text-[#C5D5E6]">
-                <label className="flex items-center gap-2 cursor-pointer hover:text-white">
+              <div className="space-y-2 text-[12px] text-[#E2EDF8]">
+                <label className="flex items-center gap-2.5 cursor-pointer hover:text-white font-medium">
                   <input
                     type="checkbox"
                     checked={mapLayers.drones}
                     onChange={() => toggleLayer("drones")}
-                    className="w-3.5 h-3.5 rounded bg-[#162A45] border-[#2A466E] text-[#1B68D2] focus:ring-0 cursor-pointer"
+                    className="w-4 h-4 rounded bg-[#162A45] border-[#2A466E] text-[#1B68D2] focus:ring-0 cursor-pointer"
                   />
                   <span>Drones (live)</span>
                 </label>
-                <label className="flex items-center gap-2 cursor-pointer hover:text-white">
+                <label className="flex items-center gap-2.5 cursor-pointer hover:text-white font-medium">
                   <input
                     type="checkbox"
                     checked={mapLayers.flightPath}
                     onChange={() => toggleLayer("flightPath")}
-                    className="w-3.5 h-3.5 rounded bg-[#162A45] border-[#2A466E] text-[#1B68D2] focus:ring-0 cursor-pointer"
+                    className="w-4 h-4 rounded bg-[#162A45] border-[#2A466E] text-[#1B68D2] focus:ring-0 cursor-pointer"
                   />
                   <span>Flight path</span>
                 </label>
-                <label className="flex items-center gap-2 cursor-pointer hover:text-white">
+                <label className="flex items-center gap-2.5 cursor-pointer hover:text-white font-medium">
                   <input
                     type="checkbox"
                     checked={mapLayers.missionArea}
                     onChange={() => toggleLayer("missionArea")}
-                    className="w-3.5 h-3.5 rounded bg-[#162A45] border-[#2A466E] text-[#1B68D2] focus:ring-0 cursor-pointer"
+                    className="w-4 h-4 rounded bg-[#162A45] border-[#2A466E] text-[#1B68D2] focus:ring-0 cursor-pointer"
                   />
                   <span>Mission area</span>
                 </label>
-                <label className="flex items-center gap-2 cursor-pointer hover:text-white">
+                <label className="flex items-center gap-2.5 cursor-pointer hover:text-white font-medium">
                   <input
                     type="checkbox"
                     checked={mapLayers.geofence}
                     onChange={() => toggleLayer("geofence")}
-                    className="w-3.5 h-3.5 rounded bg-[#162A45] border-[#2A466E] text-[#1B68D2] focus:ring-0 cursor-pointer"
+                    className="w-4 h-4 rounded bg-[#162A45] border-[#2A466E] text-[#1B68D2] focus:ring-0 cursor-pointer"
                   />
-                  <span>Geo-fence</span>
+                  <span>Geofence</span>
                 </label>
-                <label className="flex items-center gap-2 cursor-pointer hover:text-white">
+                <label className="flex items-center gap-2.5 cursor-pointer hover:text-white font-medium">
+                  <input
+                    type="checkbox"
+                    checked={mapLayers.noFlyZones}
+                    onChange={() => toggleLayer("noFlyZones")}
+                    className="w-4 h-4 rounded bg-[#162A45] border-[#2A466E] text-[#1B68D2] focus:ring-0 cursor-pointer"
+                  />
+                  <span className="text-[#FDA4AF] font-bold">Airspace (NFZ)</span>
+                </label>
+                <label className="flex items-center gap-2.5 cursor-pointer hover:text-white font-medium">
                   <input
                     type="checkbox"
                     checked={mapLayers.linkCoverage}
                     onChange={() => toggleLayer("linkCoverage")}
-                    className="w-3.5 h-3.5 rounded bg-[#162A45] border-[#2A466E] text-[#1B68D2] focus:ring-0 cursor-pointer"
+                    className="w-4 h-4 rounded bg-[#162A45] border-[#2A466E] text-[#1B68D2] focus:ring-0 cursor-pointer"
                   />
                   <span>Link coverage</span>
                 </label>
@@ -745,35 +775,35 @@ export const CommandCenterOperational = () => {
         </article>
 
         {/* RIGHT: Active Alerts */}
-        <article className="bg-white rounded-xl border border-[#D9E3ED] shadow-[0_1px_3px_rgba(0,0,0,0.05)] overflow-hidden flex flex-col">
+        <article className="bg-white rounded-xl border border-[#CBD5E1] shadow-sm overflow-hidden flex flex-col">
           {/* Card Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-[#E5EDF5]">
-            <h2 className="text-sm font-bold text-[#0F284E] tracking-tight">
+          <div className="flex items-center justify-between px-4 sm:px-5 py-3.5 border-b border-[#CBD5E1] bg-[#FCFDFE]">
+            <h2 className="text-[15px] sm:text-[16px] font-bold text-[#0F284E] tracking-tight">
               Active Alerts ({unresolvedAlerts.length})
             </h2>
             <button
               type="button"
               onClick={() => navigate("/incidents")}
-              className="text-xs font-semibold text-[#1B68D2] hover:text-[#124E9D] hover:underline cursor-pointer"
+              className="text-[13px] font-bold text-[#1B68D2] hover:text-[#124E9D] hover:underline cursor-pointer"
             >
               View All
             </button>
           </div>
 
           {/* Alerts List */}
-          <div className="p-3 sm:p-3.5 space-y-2.5 flex-1 overflow-y-auto">
+          <div className="p-3.5 sm:p-4 space-y-3 flex-1 overflow-y-auto">
             {alertsLoading ? (
-              <div className="p-6 flex-1 flex flex-col items-center justify-center text-center">
-                <RotateCw className="w-5 h-5 text-[#1B68D2] animate-spin mb-2" />
-                <p className="text-xs font-medium text-[#4A5D71]">Loading incidents...</p>
+              <div className="p-8 flex-1 flex flex-col items-center justify-center text-center">
+                <RotateCw className="w-6 h-6 text-[#1B68D2] animate-spin mb-2" />
+                <p className="text-[13px] font-bold text-[#334155]">Loading incidents...</p>
               </div>
             ) : unresolvedAlerts.length === 0 ? (
-              <div className="p-6 flex-1 flex flex-col items-center justify-center text-center bg-[#F9FBFE] rounded-lg">
-                <div className="w-10 h-10 rounded-full bg-[#ECFDF5] border border-[#A7F3D0] flex items-center justify-center mb-2">
-                  <CheckCircle2 className="w-5 h-5 text-[#059669]" />
+              <div className="p-8 flex-1 flex flex-col items-center justify-center text-center bg-[#F8FAFC] rounded-xl border border-[#CBD5E1]">
+                <div className="w-11 h-11 rounded-full bg-[#ECFDF5] border border-[#A7F3D0] flex items-center justify-center mb-2.5 shadow-2xs">
+                  <CheckCircle2 className="w-6 h-6 text-[#16A34A]" />
                 </div>
-                <h3 className="text-xs font-bold text-[#0F284E] uppercase tracking-wide">No Active Alerts</h3>
-                <p className="text-[11px] text-[#64748B] mt-0.5 max-w-[220px]">
+                <h3 className="text-[14px] font-bold text-[#0F284E] uppercase tracking-wide">No Active Alerts</h3>
+                <p className="text-[12px] text-[#475569] font-medium mt-1 max-w-[240px]">
                   All monitored airspaces, telemetry channels and sensor feeds are nominal.
                 </p>
               </div>
@@ -796,32 +826,32 @@ export const CommandCenterOperational = () => {
                   <div
                     key={alert.id}
                     onClick={() => navigate("/incidents")}
-                    className="p-2 sm:p-2.5 rounded-lg border border-[#E5EDF5] hover:border-[#CAD8E6] hover:bg-[#F9FBFE] transition-all cursor-pointer flex items-center gap-3 group"
+                    className="p-3 rounded-xl border border-[#CBD5E1] hover:border-[#1B68D2] hover:bg-[#F8FAFC] transition-all cursor-pointer flex items-center gap-3.5 group shadow-2xs"
                   >
                     {thumb ? (
                       <img
                         src={thumb}
                         alt={alert.title}
-                        className="w-14 h-12 rounded-md object-cover border border-[#E2E8F0] shrink-0"
+                        className="w-16 h-14 rounded-lg object-cover border border-[#CBD5E1] shrink-0"
                       />
                     ) : (
-                      <div className="w-14 h-12 rounded-md bg-[#F1F5F9] border border-[#E2E8F0] flex items-center justify-center shrink-0 text-[#64748B]">
-                        <AlertTriangle className="w-5 h-5 text-[#EA580C]" />
+                      <div className="w-16 h-14 rounded-lg bg-[#F8FAFC] border border-[#CBD5E1] flex items-center justify-center shrink-0 text-[#64748B]">
+                        <AlertTriangle className="w-6 h-6 text-[#EA580C]" />
                       </div>
                     )}
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-1.5">
-                        <h3 className={`text-xs font-bold ${severityConfig.text} truncate group-hover:text-[#1B68D2]`}>
+                        <h3 className={`text-[13px] sm:text-[14px] font-bold ${severityConfig.text} truncate group-hover:text-[#1B68D2]`}>
                           {alert.title}
                         </h3>
-                        <span className={`px-2 py-0.5 text-[10px] font-bold rounded ${severityConfig.bg} ${severityConfig.badgeText} border ${severityConfig.border} shrink-0`}>
+                        <span className={`px-2.5 py-0.5 text-[11px] font-bold rounded-full ${severityConfig.bg} ${severityConfig.badgeText} border ${severityConfig.border} shrink-0`}>
                           {alert.severity}
                         </span>
                       </div>
-                      <p className="text-[11px] text-[#4A5D71] font-medium truncate mt-0.5">
+                      <p className="text-[12px] text-[#334155] font-medium truncate mt-0.5">
                         {alert.location || "Monitored Sector"}
                       </p>
-                      <p className="text-[10px] text-[#71859B] truncate mt-0.5">
+                      <p className="text-[11px] text-[#475569] font-medium truncate mt-0.5">
                         {alert.subtitle || `${alert.detectedTime || "Recent"} · Confidence ${alert.confidence || "90%"} · ${alert.seenBy || alert.droneId || "Sensor verified"}`}
                       </p>
                     </div>
@@ -833,8 +863,8 @@ export const CommandCenterOperational = () => {
           </div>
 
           {/* Footer Note */}
-          <div className="px-4 py-2.5 border-t border-[#E5EDF5] bg-[#F9FBFE]">
-            <p className="text-[11px] text-[#71859B] italic leading-tight">
+          <div className="px-4 sm:px-5 py-3 border-t border-[#CBD5E1] bg-[#FAFBFD]">
+            <p className="text-[12px] text-[#475569] italic leading-tight">
               Each alert carries its clip, position and the mission that raised it.
             </p>
           </div>
@@ -844,78 +874,79 @@ export const CommandCenterOperational = () => {
       {/* ========================================================= */}
       {/* 3. NEXT ROW: Mission Overview, Drone Fleet, Camera Feeds  */}
       {/* ========================================================= */}
-      <section className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <section className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         {/* CARD 1: Mission Overview */}
-        <article className="bg-white rounded-xl border border-[#D9E3ED] shadow-[0_1px_3px_rgba(0,0,0,0.05)] overflow-hidden flex flex-col">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-[#E5EDF5]">
-            <h2 className="text-sm font-bold text-[#0F284E] tracking-tight">
+        <article className="bg-white rounded-xl border border-[#CBD5E1] shadow-sm overflow-hidden flex flex-col">
+          <div className="flex items-center justify-between px-4 sm:px-5 py-3.5 border-b border-[#CBD5E1] bg-[#FCFDFE]">
+            <h2 className="text-[15px] sm:text-[16px] font-bold text-[#0F284E] tracking-tight">
               Mission Overview
             </h2>
             <button
               type="button"
               onClick={() => navigate("/missions")}
-              className="text-xs font-semibold text-[#1B68D2] hover:text-[#124E9D] hover:underline cursor-pointer"
+              className="text-[13px] font-bold text-[#1B68D2] hover:text-[#124E9D] hover:underline cursor-pointer"
             >
               View All
             </button>
           </div>
 
-          <div className="p-3 sm:p-3.5 flex-1 overflow-x-auto">
+          <div className="p-3.5 sm:p-4 flex-1 overflow-x-auto">
             {missionRows.length === 0 ? (
-              <div className="p-6 flex-1 flex flex-col items-center justify-center text-center bg-[#F9FBFE] rounded-lg">
+              <div className="p-8 flex-1 flex flex-col items-center justify-center text-center bg-[#F8FAFC] rounded-xl border border-[#CBD5E1]">
                 <Layers className="w-8 h-8 text-[#94A3B8] mb-2" />
-                <p className="text-xs font-bold text-[#0F284E]">No Missions Configured</p>
-                <p className="text-[11px] text-[#64748B] mt-0.5">
+                <p className="text-[14px] font-bold text-[#0F284E]">No Missions Configured</p>
+                <p className="text-[12px] text-[#475569] font-medium mt-1">
                   Plan a new flight mission to assign aircraft and monitor progress.
                 </p>
               </div>
             ) : (
-              <table className="w-full text-left text-xs">
+              <table className="w-full min-w-[360px] text-left">
                 <thead>
-                  <tr className="border-b border-[#EEF2F6] text-[11px] font-bold text-[#64748B]">
-                    <th className="pb-2 font-semibold">Mission</th>
-                    <th className="pb-2 font-semibold">Status</th>
-                    <th className="pb-2 font-semibold text-center">Drones</th>
-                    <th className="pb-2 font-semibold text-right pr-1">Progress</th>
+                  <tr className="border-b border-[#CBD5E1] text-[12px] sm:text-[13px] font-bold text-[#0F284E]">
+                    <th className="pb-2.5">Mission</th>
+                    <th className="pb-2.5">Status</th>
+                    <th className="pb-2.5 text-center">Drones</th>
+                    <th className="pb-2.5 text-right pr-1">Progress</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#F1F5F9]">
+                <tbody className="divide-y divide-[#E2E8F0]">
                   {missionRows.slice(0, 5).map((mission) => (
                     <tr
                       key={mission.id}
                       onClick={() => navigate("/missions")}
-                      className="hover:bg-[#F9FBFE] transition-colors cursor-pointer"
+                      className="hover:bg-[#F8FAFC] transition-colors cursor-pointer text-[13px] sm:text-[14px] text-[#1E293B]"
                     >
-                      <td className="py-2.5 pr-2">
+                      <td className="py-3 pr-2">
                         <span className="font-bold text-[#0F284E] block truncate max-w-[170px] sm:max-w-[200px]">
-                          <strong className="text-[#1B68D2] font-mono mr-1">{mission.id}</strong>
+                          <strong className="text-[#1B68D2] font-mono mr-1.5">{mission.id}</strong>
                           {mission.name}
                         </span>
                       </td>
-                      <td className="py-2.5 pr-2">
+                      <td className="py-3 pr-2">
                         <span
-                          className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
+                          className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
                             mission.status === "In Progress" || mission.status === "active"
-                              ? "bg-[#ECFDF5] text-[#059669]"
+                              ? "bg-[#16A34A] text-white shadow-xs"
                               : mission.status === "Completed"
-                              ? "bg-[#F0FDF4] text-[#15803D]"
-                              : "bg-[#EFF6FF] text-[#2563EB] border border-[#BFDBFE]"
+                              ? "bg-[#F0FDF4] text-[#15803D] border border-[#BBF7D0]"
+                              : "bg-[#EFF6FF] text-[#1D4ED8] border border-[#BFDBFE]"
                           }`}
                         >
                           {mission.status}
                         </span>
                       </td>
-                      <td className="py-2.5 pr-2 text-center font-mono font-semibold text-[#4A5D71]">
+                      <td className="py-3 pr-2 text-center font-mono font-bold text-[#0F284E]">
                         {mission.drones}
                       </td>
-                      <td className="py-2.5 text-right pl-2">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <div className="w-14 sm:w-16 h-1.5 bg-[#E2E8F0] rounded-full overflow-hidden">
+                      <td className="py-3 text-right pl-2">
+                        <div className="flex items-center justify-end gap-2">
+                          <div className="w-14 sm:w-16 h-2 bg-[#E2E8F0] rounded-full overflow-hidden">
                             <div
                               className="h-full bg-[#1B68D2] rounded-full transition-all"
                               style={{ width: `${mission.progress}%` }}
                             />
                           </div>
+                          <span className="text-[11px] font-bold text-[#475569]">{mission.progress}%</span>
                         </div>
                       </td>
                     </tr>
@@ -927,61 +958,61 @@ export const CommandCenterOperational = () => {
         </article>
 
         {/* CARD 2: Drone Fleet */}
-        <article className="bg-white rounded-xl border border-[#D9E3ED] shadow-[0_1px_3px_rgba(0,0,0,0.05)] overflow-hidden flex flex-col">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-[#E5EDF5]">
-            <h2 className="text-sm font-bold text-[#0F284E] tracking-tight">
+        <article className="bg-white rounded-xl border border-[#CBD5E1] shadow-sm overflow-hidden flex flex-col">
+          <div className="flex items-center justify-between px-4 sm:px-5 py-3.5 border-b border-[#CBD5E1] bg-[#FCFDFE]">
+            <h2 className="text-[15px] sm:text-[16px] font-bold text-[#0F284E] tracking-tight">
               Drone Fleet
             </h2>
             <button
               type="button"
               onClick={() => navigate("/drone-fleet")}
-              className="text-xs font-semibold text-[#1B68D2] hover:text-[#124E9D] hover:underline cursor-pointer"
+              className="text-[13px] font-bold text-[#1B68D2] hover:text-[#124E9D] hover:underline cursor-pointer"
             >
               View All
             </button>
           </div>
 
-          <div className="p-3 sm:p-3.5 flex-1 flex flex-col">
+          <div className="p-3.5 sm:p-4 flex-1 flex flex-col justify-between">
             {/* 3 Categories Summary Pill Box */}
-            <div className="grid grid-cols-3 divide-x divide-[#E2E8F0] border border-[#E2E8F0] rounded-lg p-2.5 bg-[#F9FBFE]">
+            <div className="grid grid-cols-3 divide-x divide-[#CBD5E1] border border-[#CBD5E1] rounded-xl p-3 bg-[#F8FAFC]">
               <div className="text-center px-1">
-                <Plane className="w-3.5 h-3.5 mx-auto text-[#1B68D2] mb-0.5" />
-                <p className="text-lg font-bold text-[#0F284E] font-mono leading-tight">{fleetSummary.multirotor}</p>
-                <p className="text-[10px] text-[#64748B] font-medium">Multirotor</p>
+                <Plane className="w-4 h-4 mx-auto text-[#1B68D2] mb-1" />
+                <p className="text-xl font-extrabold text-[#0F284E] font-mono leading-tight">{fleetSummary.multirotor}</p>
+                <p className="text-[12px] text-[#334155] font-semibold mt-0.5">Multirotor</p>
               </div>
               <div className="text-center px-1">
-                <Radio className="w-3.5 h-3.5 mx-auto text-[#1B68D2] mb-0.5" />
-                <p className="text-lg font-bold text-[#0F284E] font-mono leading-tight">{fleetSummary.fixedWing}</p>
-                <p className="text-[10px] text-[#64748B] font-medium">Fixed Wing</p>
+                <Radio className="w-4 h-4 mx-auto text-[#1B68D2] mb-1" />
+                <p className="text-xl font-extrabold text-[#0F284E] font-mono leading-tight">{fleetSummary.fixedWing}</p>
+                <p className="text-[12px] text-[#334155] font-semibold mt-0.5">Fixed Wing</p>
               </div>
               <div className="text-center px-1">
-                <Share2 className="w-3.5 h-3.5 mx-auto text-[#1B68D2] mb-0.5" />
-                <p className="text-lg font-bold text-[#0F284E] font-mono leading-tight">{fleetSummary.vtol}</p>
-                <p className="text-[10px] text-[#64748B] font-medium">VTOL</p>
+                <Share2 className="w-4 h-4 mx-auto text-[#1B68D2] mb-1" />
+                <p className="text-xl font-extrabold text-[#0F284E] font-mono leading-tight">{fleetSummary.vtol}</p>
+                <p className="text-[12px] text-[#334155] font-semibold mt-0.5">VTOL</p>
               </div>
             </div>
 
             {/* Subhead: Battery levels, drones on missions */}
-            <p className="text-[11px] font-semibold text-[#64748B] mt-3 mb-1">
+            <p className="text-[12px] font-bold text-[#334155] mt-3.5 mb-1">
               Battery levels, drones on missions
             </p>
 
             {/* Battery Distribution Bar Chart */}
             <div className="flex-1 flex flex-col justify-end pt-2">
-              <div className="flex items-end justify-between gap-2 h-24 border-b border-[#E2E8F0] pb-1 px-1">
+              <div className="flex items-end justify-between gap-2 h-24 border-b border-[#CBD5E1] pb-1 px-1">
                 {fleetSummary.batteryBins.map((item, idx) => {
                   const maxCount = Math.max(1, ...fleetSummary.batteryBins.map((b) => b.count))
-                  const barHeightPercent = item.count > 0 ? Math.max(16, Math.round((item.count / maxCount) * 100)) : 4
+                  const barHeightPercent = item.count > 0 ? Math.max(18, Math.round((item.count / maxCount) * 100)) : 6
                   return (
                     <div key={idx} className="flex-1 flex flex-col items-center gap-1">
                       {item.count > 0 && (
-                        <span className="text-[10px] font-bold text-[#0F284E] font-mono leading-none">
+                        <span className="text-[11px] font-bold text-[#0F284E] font-mono leading-none">
                           {item.count}
                         </span>
                       )}
                       <div className="w-full max-w-[28px] h-16 flex items-end justify-center">
                         <div
-                          className={`w-full rounded-t-sm transition-all ${item.count > 0 ? "bg-[#1B68D2]" : "bg-[#E2E8F0]/60"}`}
+                          className={`w-full rounded-t-sm transition-all ${item.count > 0 ? "bg-[#1B68D2]" : "bg-[#E2E8F0]"}`}
                           style={{ height: `${barHeightPercent}%` }}
                         />
                       </div>
@@ -991,7 +1022,7 @@ export const CommandCenterOperational = () => {
               </div>
 
               {/* Labels below chart */}
-              <div className="flex justify-between gap-2 pt-1.5 px-1 text-[10px] text-[#64748B] font-medium">
+              <div className="flex justify-between gap-2 pt-2 px-1 text-[11px] text-[#334155] font-bold">
                 {fleetSummary.batteryBins.map((item, idx) => (
                   <span key={idx} className="flex-1 text-center truncate">
                     {item.label}
@@ -1003,14 +1034,14 @@ export const CommandCenterOperational = () => {
         </article>
 
         {/* CARD 3: Live Camera Feeds */}
-        <article className="bg-white rounded-xl border border-[#D9E3ED] shadow-[0_1px_3px_rgba(0,0,0,0.05)] overflow-hidden flex flex-col">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-[#E5EDF5]">
+        <article className="bg-white rounded-xl border border-[#CBD5E1] shadow-sm overflow-hidden flex flex-col">
+          <div className="flex items-center justify-between px-4 sm:px-5 py-3.5 border-b border-[#CBD5E1] bg-[#FCFDFE]">
             <div className="flex items-center gap-2">
-              <h2 className="text-sm font-bold text-[#0F284E] tracking-tight">
+              <h2 className="text-[15px] sm:text-[16px] font-bold text-[#0F284E] tracking-tight">
                 Live Camera Feeds
               </h2>
               {liveStreams.length > 0 && (
-                <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-[#ECFDF5] text-[#059669] border border-[#A7F3D0]">
+                <span className="px-2 py-0.5 rounded-full text-[11px] font-mono font-bold bg-[#DCFCE7] text-[#15803D] border border-[#86EFAC]">
                   {liveStreams.length} Active
                 </span>
               )}
@@ -1018,45 +1049,45 @@ export const CommandCenterOperational = () => {
             <button
               type="button"
               onClick={() => navigate("/live-operations")}
-              className="text-xs font-semibold text-[#1B68D2] hover:text-[#124E9D] hover:underline cursor-pointer"
+              className="text-[13px] font-bold text-[#1B68D2] hover:text-[#124E9D] hover:underline cursor-pointer"
             >
               View All
             </button>
           </div>
 
           {isStreamsLoading ? (
-            <div className="p-6 flex-1 flex flex-col items-center justify-center text-center">
-              <RotateCw className="w-5 h-5 text-[#1B68D2] animate-spin mb-2" />
-              <p className="text-xs font-medium text-[#4A5D71]">
+            <div className="p-8 flex-1 flex flex-col items-center justify-center text-center">
+              <RotateCw className="w-6 h-6 text-[#1B68D2] animate-spin mb-2" />
+              <p className="text-[13px] font-bold text-[#334155]">
                 Checking for live camera feeds...
               </p>
             </div>
           ) : liveStreams.length === 0 ? (
-            <div className="p-4 sm:p-5 flex-1 flex flex-col items-center justify-center text-center bg-[#F9FBFE]">
-              <div className="w-11 h-11 rounded-full bg-[#F1F5F9] border border-[#CBD5E1] flex items-center justify-center mb-2.5">
-                <VideoOff className="w-5 h-5 text-[#64748B]" />
+            <div className="p-5 sm:p-6 flex-1 flex flex-col items-center justify-center text-center bg-[#F8FAFC]">
+              <div className="w-12 h-12 rounded-full bg-white border border-[#CBD5E1] flex items-center justify-center mb-3 shadow-2xs">
+                <VideoOff className="w-6 h-6 text-[#64748B]" />
               </div>
-              <h3 className="text-xs font-bold text-[#0F284E] uppercase tracking-wide">
+              <h3 className="text-[13px] font-bold text-[#0F284E] uppercase tracking-wide">
                 No Live Streams Available
               </h3>
-              <p className="text-[11px] text-[#64748B] max-w-[260px] mt-1 mb-3">
+              <p className="text-[12px] text-[#475569] font-medium max-w-[270px] mt-1 mb-3.5 leading-relaxed">
                 No active aircraft video streams detected. Ensure drones are powered on and publishing WHEP/WebRTC feeds.
               </p>
               <button
                 type="button"
                 onClick={fetchLiveStreams}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#F1F5F9] border border-[#CBD5E1] text-[#0F284E] hover:bg-[#E2E8F0] text-xs font-semibold transition active:scale-95 cursor-pointer shadow-xs"
+                className="flex items-center gap-2 h-9 px-4 rounded-lg bg-white border border-[#CBD5E1] text-[#0F284E] hover:bg-[#F1F5F9] text-[12px] font-bold transition cursor-pointer shadow-xs"
               >
                 <RotateCw className="w-3.5 h-3.5 text-[#1B68D2]" />
                 <span>Retry Connection</span>
               </button>
             </div>
           ) : (
-            <div className="p-3 sm:p-3.5 flex-1 grid grid-cols-2 gap-2.5">
+            <div className="p-3.5 sm:p-4 flex-1 grid grid-cols-2 gap-3">
               {liveStreams.slice(0, 4).map((stream) => (
                 <div
                   key={stream.id || stream.streamId}
-                  className="relative rounded-lg overflow-hidden border border-[#D5E0EB] bg-[#0A121E] aspect-[4/3]"
+                  className="relative rounded-xl overflow-hidden border border-[#CBD5E1] bg-[#0A121E] aspect-[4/3]"
                 >
                   <LiveDroneFeed
                     droneId={stream.droneId || stream.id}
@@ -1073,30 +1104,30 @@ export const CommandCenterOperational = () => {
       {/* ========================================================= */}
       {/* 4. BOTTOM ROW: Mission Planning Workflow & Quick Actions */}
       {/* ========================================================= */}
-      <section className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_390px] gap-4">
+      <section className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_380px] 2xl:grid-cols-[minmax(0,1fr)_420px] gap-5">
         {/* LEFT: Mission Planning Workflow */}
-        <article className="bg-white rounded-xl border border-[#D9E3ED] shadow-[0_1px_3px_rgba(0,0,0,0.05)] overflow-hidden flex flex-col justify-between p-4">
-          <h2 className="text-sm font-bold text-[#0F284E] tracking-tight mb-4 sm:mb-6">
+        <article className="bg-white rounded-xl border border-[#CBD5E1] shadow-sm overflow-hidden flex flex-col justify-between p-4 sm:p-5">
+          <h2 className="text-[15px] sm:text-[16px] font-bold text-[#0F284E] tracking-tight mb-4 sm:mb-6">
             Mission Planning Workflow
           </h2>
 
           {/* Stepper with Connected Nodes */}
           <div className="relative pb-2">
             {/* Connected Horizontal Line */}
-            <div className="absolute top-1.5 left-3 right-3 h-[2px] bg-[#1B68D2] z-0 hidden sm:block" />
+            <div className="absolute top-2 left-4 right-4 h-[2px] bg-[#1B68D2] z-0 hidden sm:block" />
 
-            <div className="grid grid-cols-2 sm:grid-cols-6 gap-3 sm:gap-2 relative z-10">
+            <div className="grid grid-cols-2 sm:grid-cols-6 gap-3.5 sm:gap-2.5 relative z-10">
               {WORKFLOW_STEPS.map((s) => (
                 <div
                   key={s.step}
                   onClick={() => navigate(s.path)}
                   className="flex flex-col items-start cursor-pointer group"
                 >
-                  <div className="w-3.5 h-3.5 rounded-full bg-[#1B68D2] border-2 border-white ring-2 ring-[#1B68D2]/30 mb-2 group-hover:scale-125 transition-transform shrink-0" />
-                  <p className="text-xs font-bold text-[#0F284E] group-hover:text-[#1B68D2] transition-colors">
+                  <div className="w-4 h-4 rounded-full bg-[#1B68D2] border-2 border-white ring-2 ring-[#1B68D2]/30 mb-2.5 group-hover:scale-125 transition-transform shrink-0" />
+                  <p className="text-[13px] font-bold text-[#0F284E] group-hover:text-[#1B68D2] transition-colors">
                     {s.title}
                   </p>
-                  <p className="text-[11px] text-[#64748B] font-medium leading-tight mt-0.5">
+                  <p className="text-[12px] text-[#475569] font-medium leading-tight mt-1">
                     {s.desc}
                   </p>
                 </div>
@@ -1106,29 +1137,29 @@ export const CommandCenterOperational = () => {
         </article>
 
         {/* RIGHT: Quick Actions */}
-        <article className="bg-white rounded-xl border border-[#D9E3ED] shadow-[0_1px_3px_rgba(0,0,0,0.05)] overflow-hidden p-4 flex flex-col justify-between">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-bold text-[#0F284E] tracking-tight">
+        <article className="bg-white rounded-xl border border-[#CBD5E1] shadow-sm overflow-hidden p-4 sm:p-5 flex flex-col justify-between">
+          <div className="flex items-center justify-between mb-3.5">
+            <h2 className="text-[15px] sm:text-[16px] font-bold text-[#0F284E] tracking-tight">
               Quick Actions
             </h2>
-            <span className="text-[11px] font-semibold text-[#64748B]">
+            <span className="text-[12px] font-bold text-[#475569]">
               6 Shortcuts
             </span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3 flex-1">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 flex-1">
             {/* Action 1: Create Mission */}
             <button
               type="button"
               onClick={() => navigate("/mission-planning")}
               title="Create Mission"
               aria-label="Create Mission"
-              className="flex items-center gap-3 p-2.5 sm:p-3 rounded-xl border border-[#D9E3ED] bg-white hover:bg-[#F0F6FE] hover:border-[#1B68D2] focus:outline-none focus:ring-2 focus:ring-[#1B68D2]/30 active:scale-[0.98] transition-all cursor-pointer shadow-[0_1px_2px_rgba(0,0,0,0.03)] hover:shadow-xs group text-left min-h-[54px]"
+              className="flex items-center gap-3.5 p-3 rounded-xl border border-[#CBD5E1] bg-white hover:bg-[#EFF6FF] hover:border-[#1B68D2] focus:outline-none focus:ring-2 focus:ring-[#1B68D2]/30 active:scale-[0.98] transition-all cursor-pointer shadow-2xs hover:shadow-xs group text-left min-h-[56px]"
             >
-              <div className="w-8 h-8 rounded-lg bg-[#EFF6FF] text-[#1B68D2] flex items-center justify-center shrink-0 border border-[#DBEAFE] group-hover:bg-[#1B68D2] group-hover:text-white transition-colors shadow-2xs">
-                <Plus className="w-4.5 h-4.5" />
+              <div className="w-9 h-9 rounded-lg bg-[#EFF6FF] text-[#1B68D2] flex items-center justify-center shrink-0 border border-[#BFDBFE] group-hover:bg-[#1B68D2] group-hover:text-white transition-colors shadow-2xs">
+                <Plus className="w-5 h-5 stroke-[2.5]" />
               </div>
-              <span className="text-xs sm:text-[12.5px] font-bold text-[#0F284E] group-hover:text-[#1B68D2] transition-colors leading-tight">
+              <span className="text-[13px] sm:text-[14px] font-bold text-[#0F284E] group-hover:text-[#1B68D2] transition-colors leading-tight">
                 Create Mission
               </span>
             </button>
@@ -1139,12 +1170,12 @@ export const CommandCenterOperational = () => {
               onClick={() => navigate("/live-operations")}
               title="Deploy Drone"
               aria-label="Deploy Drone"
-              className="flex items-center gap-3 p-2.5 sm:p-3 rounded-xl border border-[#D9E3ED] bg-white hover:bg-[#F0F6FE] hover:border-[#1B68D2] focus:outline-none focus:ring-2 focus:ring-[#1B68D2]/30 active:scale-[0.98] transition-all cursor-pointer shadow-[0_1px_2px_rgba(0,0,0,0.03)] hover:shadow-xs group text-left min-h-[54px]"
+              className="flex items-center gap-3.5 p-3 rounded-xl border border-[#CBD5E1] bg-white hover:bg-[#EFF6FF] hover:border-[#1B68D2] focus:outline-none focus:ring-2 focus:ring-[#1B68D2]/30 active:scale-[0.98] transition-all cursor-pointer shadow-2xs hover:shadow-xs group text-left min-h-[56px]"
             >
-              <div className="w-8 h-8 rounded-lg bg-[#EFF6FF] text-[#1B68D2] flex items-center justify-center shrink-0 border border-[#DBEAFE] group-hover:bg-[#1B68D2] group-hover:text-white transition-colors shadow-2xs">
-                <Plane className="w-4.5 h-4.5" />
+              <div className="w-9 h-9 rounded-lg bg-[#EFF6FF] text-[#1B68D2] flex items-center justify-center shrink-0 border border-[#BFDBFE] group-hover:bg-[#1B68D2] group-hover:text-white transition-colors shadow-2xs">
+                <Plane className="w-5 h-5" />
               </div>
-              <span className="text-xs sm:text-[12.5px] font-bold text-[#0F284E] group-hover:text-[#1B68D2] transition-colors leading-tight">
+              <span className="text-[13px] sm:text-[14px] font-bold text-[#0F284E] group-hover:text-[#1B68D2] transition-colors leading-tight">
                 Deploy Drone
               </span>
             </button>
@@ -1155,12 +1186,12 @@ export const CommandCenterOperational = () => {
               onClick={() => navigate("/swarm-control")}
               title="Launch Swarm"
               aria-label="Launch Swarm"
-              className="flex items-center gap-3 p-2.5 sm:p-3 rounded-xl border border-[#D9E3ED] bg-white hover:bg-[#F0F6FE] hover:border-[#1B68D2] focus:outline-none focus:ring-2 focus:ring-[#1B68D2]/30 active:scale-[0.98] transition-all cursor-pointer shadow-[0_1px_2px_rgba(0,0,0,0.03)] hover:shadow-xs group text-left min-h-[54px]"
+              className="flex items-center gap-3.5 p-3 rounded-xl border border-[#CBD5E1] bg-white hover:bg-[#EFF6FF] hover:border-[#1B68D2] focus:outline-none focus:ring-2 focus:ring-[#1B68D2]/30 active:scale-[0.98] transition-all cursor-pointer shadow-2xs hover:shadow-xs group text-left min-h-[56px]"
             >
-              <div className="w-8 h-8 rounded-lg bg-[#EFF6FF] text-[#1B68D2] flex items-center justify-center shrink-0 border border-[#DBEAFE] group-hover:bg-[#1B68D2] group-hover:text-white transition-colors shadow-2xs">
-                <Network className="w-4.5 h-4.5" />
+              <div className="w-9 h-9 rounded-lg bg-[#EFF6FF] text-[#1B68D2] flex items-center justify-center shrink-0 border border-[#BFDBFE] group-hover:bg-[#1B68D2] group-hover:text-white transition-colors shadow-2xs">
+                <Network className="w-5 h-5" />
               </div>
-              <span className="text-xs sm:text-[12.5px] font-bold text-[#0F284E] group-hover:text-[#1B68D2] transition-colors leading-tight">
+              <span className="text-[13px] sm:text-[14px] font-bold text-[#0F284E] group-hover:text-[#1B68D2] transition-colors leading-tight">
                 Launch Swarm
               </span>
             </button>
@@ -1171,12 +1202,12 @@ export const CommandCenterOperational = () => {
               onClick={() => navigate("/live-operations")}
               title="View Live Feed"
               aria-label="View Live Feed"
-              className="flex items-center gap-3 p-2.5 sm:p-3 rounded-xl border border-[#D9E3ED] bg-white hover:bg-[#F0F6FE] hover:border-[#1B68D2] focus:outline-none focus:ring-2 focus:ring-[#1B68D2]/30 active:scale-[0.98] transition-all cursor-pointer shadow-[0_1px_2px_rgba(0,0,0,0.03)] hover:shadow-xs group text-left min-h-[54px]"
+              className="flex items-center gap-3.5 p-3 rounded-xl border border-[#CBD5E1] bg-white hover:bg-[#EFF6FF] hover:border-[#1B68D2] focus:outline-none focus:ring-2 focus:ring-[#1B68D2]/30 active:scale-[0.98] transition-all cursor-pointer shadow-2xs hover:shadow-xs group text-left min-h-[56px]"
             >
-              <div className="w-8 h-8 rounded-lg bg-[#EFF6FF] text-[#1B68D2] flex items-center justify-center shrink-0 border border-[#DBEAFE] group-hover:bg-[#1B68D2] group-hover:text-white transition-colors shadow-2xs">
-                <Video className="w-4.5 h-4.5" />
+              <div className="w-9 h-9 rounded-lg bg-[#EFF6FF] text-[#1B68D2] flex items-center justify-center shrink-0 border border-[#BFDBFE] group-hover:bg-[#1B68D2] group-hover:text-white transition-colors shadow-2xs">
+                <Video className="w-5 h-5" />
               </div>
-              <span className="text-xs sm:text-[12.5px] font-bold text-[#0F284E] group-hover:text-[#1B68D2] transition-colors leading-tight">
+              <span className="text-[13px] sm:text-[14px] font-bold text-[#0F284E] group-hover:text-[#1B68D2] transition-colors leading-tight">
                 View Live Feed
               </span>
             </button>
@@ -1187,12 +1218,12 @@ export const CommandCenterOperational = () => {
               onClick={() => navigate("/geofence")}
               title="No-Fly Zone"
               aria-label="No-Fly Zone"
-              className="flex items-center gap-3 p-2.5 sm:p-3 rounded-xl border border-[#D9E3ED] bg-white hover:bg-[#F0F6FE] hover:border-[#1B68D2] focus:outline-none focus:ring-2 focus:ring-[#1B68D2]/30 active:scale-[0.98] transition-all cursor-pointer shadow-[0_1px_2px_rgba(0,0,0,0.03)] hover:shadow-xs group text-left min-h-[54px]"
+              className="flex items-center gap-3.5 p-3 rounded-xl border border-[#CBD5E1] bg-white hover:bg-[#EFF6FF] hover:border-[#1B68D2] focus:outline-none focus:ring-2 focus:ring-[#1B68D2]/30 active:scale-[0.98] transition-all cursor-pointer shadow-2xs hover:shadow-xs group text-left min-h-[56px]"
             >
-              <div className="w-8 h-8 rounded-lg bg-[#EFF6FF] text-[#1B68D2] flex items-center justify-center shrink-0 border border-[#DBEAFE] group-hover:bg-[#1B68D2] group-hover:text-white transition-colors shadow-2xs">
-                <MinusCircle className="w-4.5 h-4.5" />
+              <div className="w-9 h-9 rounded-lg bg-[#EFF6FF] text-[#1B68D2] flex items-center justify-center shrink-0 border border-[#BFDBFE] group-hover:bg-[#1B68D2] group-hover:text-white transition-colors shadow-2xs">
+                <MinusCircle className="w-5 h-5" />
               </div>
-              <span className="text-xs sm:text-[12.5px] font-bold text-[#0F284E] group-hover:text-[#1B68D2] transition-colors leading-tight">
+              <span className="text-[13px] sm:text-[14px] font-bold text-[#0F284E] group-hover:text-[#1B68D2] transition-colors leading-tight">
                 No-Fly Zone
               </span>
             </button>
@@ -1203,12 +1234,12 @@ export const CommandCenterOperational = () => {
               onClick={() => navigate("/reports")}
               title="Download Report"
               aria-label="Download Report"
-              className="flex items-center gap-3 p-2.5 sm:p-3 rounded-xl border border-[#D9E3ED] bg-white hover:bg-[#F0F6FE] hover:border-[#1B68D2] focus:outline-none focus:ring-2 focus:ring-[#1B68D2]/30 active:scale-[0.98] transition-all cursor-pointer shadow-[0_1px_2px_rgba(0,0,0,0.03)] hover:shadow-xs group text-left min-h-[54px]"
+              className="flex items-center gap-3.5 p-3 rounded-xl border border-[#CBD5E1] bg-white hover:bg-[#EFF6FF] hover:border-[#1B68D2] focus:outline-none focus:ring-2 focus:ring-[#1B68D2]/30 active:scale-[0.98] transition-all cursor-pointer shadow-2xs hover:shadow-xs group text-left min-h-[56px]"
             >
-              <div className="w-8 h-8 rounded-lg bg-[#EFF6FF] text-[#1B68D2] flex items-center justify-center shrink-0 border border-[#DBEAFE] group-hover:bg-[#1B68D2] group-hover:text-white transition-colors shadow-2xs">
-                <FileDown className="w-4.5 h-4.5" />
+              <div className="w-9 h-9 rounded-lg bg-[#EFF6FF] text-[#1B68D2] flex items-center justify-center shrink-0 border border-[#BFDBFE] group-hover:bg-[#1B68D2] group-hover:text-white transition-colors shadow-2xs">
+                <FileDown className="w-5 h-5" />
               </div>
-              <span className="text-xs sm:text-[12.5px] font-bold text-[#0F284E] group-hover:text-[#1B68D2] transition-colors leading-tight">
+              <span className="text-[13px] sm:text-[14px] font-bold text-[#0F284E] group-hover:text-[#1B68D2] transition-colors leading-tight">
                 Download Report
               </span>
             </button>
@@ -1219,58 +1250,58 @@ export const CommandCenterOperational = () => {
       {/* ========================================================= */}
       {/* 5. FOOTER: AeroNexus Aerospace Value Proposition Strip    */}
       {/* ========================================================= */}
-      <footer className="bg-white rounded-xl border border-[#D9E3ED] p-4 sm:p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+      <footer className="bg-white rounded-xl border border-[#CBD5E1] p-4 sm:p-5 shadow-sm">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4 lg:gap-6 items-center">
           {/* Prop 1 */}
           <div className="flex items-center gap-3">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#EFF6FF] text-[#1B68D2] border border-[#DBEAFE]">
-              <Crosshair className="h-4.5 w-4.5" />
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#EFF6FF] text-[#1B68D2] border border-[#BFDBFE] shadow-2xs">
+              <Crosshair className="h-5 w-5" />
             </span>
             <div>
-              <h3 className="text-xs font-bold text-[#0F284E]">Plan with Confidence</h3>
-              <p className="text-[11px] text-[#64748B]">Accurate, efficient and safe missions.</p>
+              <h3 className="text-[13px] font-bold text-[#0F284E]">Plan with Confidence</h3>
+              <p className="text-[12px] text-[#475569] font-medium">Accurate, efficient and safe missions.</p>
             </div>
           </div>
 
           {/* Prop 2 */}
           <div className="flex items-center gap-3">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#EFF6FF] text-[#1B68D2] border border-[#DBEAFE]">
-              <Network className="h-4.5 w-4.5" />
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#EFF6FF] text-[#1B68D2] border border-[#BFDBFE] shadow-2xs">
+              <Network className="h-5 w-5" />
             </span>
             <div>
-              <h3 className="text-xs font-bold text-[#0F284E]">Multi-Drone, Multi-Use</h3>
-              <p className="text-[11px] text-[#64748B]">Any industry. Any environment.</p>
+              <h3 className="text-[13px] font-bold text-[#0F284E]">Multi-Drone, Multi-Use</h3>
+              <p className="text-[12px] text-[#475569] font-medium">Any industry. Any environment.</p>
             </div>
           </div>
 
           {/* Prop 3 */}
           <div className="flex items-center gap-3">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#EFF6FF] text-[#1B68D2] border border-[#DBEAFE]">
-              <BarChart3 className="h-4.5 w-4.5" />
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#EFF6FF] text-[#1B68D2] border border-[#BFDBFE] shadow-2xs">
+              <BarChart3 className="h-5 w-5" />
             </span>
             <div>
-              <h3 className="text-xs font-bold text-[#0F284E]">From Data to Decisions</h3>
-              <p className="text-[11px] text-[#64748B]">Turn aerial data into real value.</p>
+              <h3 className="text-[13px] font-bold text-[#0F284E]">From Data to Decisions</h3>
+              <p className="text-[12px] text-[#475569] font-medium">Turn aerial data into real value.</p>
             </div>
           </div>
 
           {/* Prop 4 */}
           <div className="flex items-center gap-3">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#EFF6FF] text-[#1B68D2] border border-[#DBEAFE]">
-              <ShieldCheck className="h-4.5 w-4.5" />
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#EFF6FF] text-[#1B68D2] border border-[#BFDBFE] shadow-2xs">
+              <ShieldCheck className="h-5 w-5" />
             </span>
             <div>
-              <h3 className="text-xs font-bold text-[#0F284E]">Safer Operations</h3>
-              <p className="text-[11px] text-[#64748B]">People. Assets. Communities.</p>
+              <h3 className="text-[13px] font-bold text-[#0F284E]">Safer Operations</h3>
+              <p className="text-[12px] text-[#475569] font-medium">People. Assets. Communities.</p>
             </div>
           </div>
 
           {/* Prop 5: Motto */}
-          <div className="hidden xl:flex flex-col items-end justify-center text-right border-l border-[#E2E8F0] pl-6">
-            <span className="text-[10px] font-extrabold tracking-widest text-[#0F284E] uppercase font-mono">
+          <div className="hidden xl:flex flex-col items-end justify-center text-right border-l border-[#CBD5E1] pl-6">
+            <span className="text-[11px] font-extrabold tracking-widest text-[#0F284E] uppercase font-mono">
               ONE FLEET. ANY MISSION.
             </span>
-            <span className="text-[11px] font-extrabold tracking-widest text-[#1B68D2] uppercase font-mono mt-0.5">
+            <span className="text-[12px] font-extrabold tracking-widest text-[#1B68D2] uppercase font-mono mt-0.5">
               ALWAYS READY.
             </span>
           </div>

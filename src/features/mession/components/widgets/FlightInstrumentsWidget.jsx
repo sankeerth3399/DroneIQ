@@ -112,7 +112,7 @@ export const FlightInstrumentsWidget = ({
 
   return (
     <div
-      className="absolute top-2 left-2 sm:top-3.5 sm:left-4 z-20 pointer-events-auto flex flex-col items-start select-none bg-transparent border-none shadow-none font-mono"
+      className="absolute top-11 left-2 sm:top-14 sm:left-3 z-20 pointer-events-auto flex flex-col items-start select-none bg-transparent border-none shadow-none font-mono"
       style={{ background: "transparent", border: "none", boxShadow: "none" }}
     >
       {/* Mobile / Short Height Collapsed Toggle Pill */}

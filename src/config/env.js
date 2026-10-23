@@ -54,7 +54,7 @@ const getEnvVar = (key, fallback = "") => {
 
 export const API_BASE_URL = normalizeUrl(getEnvVar("VITE_API_BASE_URL"), false)
 export const WS_BASE_URL = normalizeUrl(getEnvVar("VITE_WS_BASE_URL"), true, API_BASE_URL)
-export const MAPPLS_KEY = getEnvVar("VITE_MAPPLS_KEY", "")
+export const MAPPLS_KEY = getEnvVar("VITE_MAPPLS_KEY", "55c86f8121a6de56055b22115de6a9ae")
 
 
 /**

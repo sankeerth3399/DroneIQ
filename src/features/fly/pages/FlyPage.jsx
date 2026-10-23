@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import MapLoad from "@/components/Map/mapContainer.jsx";
 import { useDroneTelemetry } from "@/hooks/useDroneTelemetry.js";
 import { useMission } from "@/hooks/useMission.js";
@@ -7,6 +8,7 @@ import FlightInstrumentsWidget from "@/features/mession/components/widgets/Fligh
 import CameraWidget from "@/features/fly/components/CameraWidget.jsx";
 import FlightModeDropdown from "@/features/fly/components/FlightModeDropdown.jsx";
 import { LayoutGrid, ShieldAlert, X as CloseIcon } from "lucide-react";
+import { validateMissionAgainstGeofence } from "@/utils/geofence.js";
 
 import { useAuth } from "@/hooks/useAuth.js";
 import { Permissions } from "@/auth/permissions.js";
@@ -24,7 +26,7 @@ const toggleBtn = (active) =>
       : "text-[#718197] hover:text-[#244768]"
   }`;
 
-const MapStyleBar = ({ options, value, onChange }) => (
+const MapStyleBar = ({ options, value, onChange, showAirspace, onToggleAirspace }) => (
   <div
     className="flex h-[22px] sm:h-[25px] shrink-0 items-center justify-center gap-1 sm:gap-1.5 bg-[#0A0E12F2] border-t border-[#1C2834]"
     onClick={(e) => e.stopPropagation()}
@@ -40,6 +42,16 @@ const MapStyleBar = ({ options, value, onChange }) => (
         {option.label}
       </button>
     ))}
+    {onToggleAirspace && (
+      <button
+        type="button"
+        className={toggleBtn(showAirspace)}
+        onClick={onToggleAirspace}
+        title="Toggle Mappls Airspace / No-Fly Zones"
+      >
+        Airspace (NFZ)
+      </button>
+    )}
   </div>
 );
 
@@ -49,6 +61,7 @@ const mapStyleOptions = [
 ];
 
 const FlyPage = () => {
+  const navigate = useNavigate();
   const [mapIsLarge, setMapIsLarge] = useState(true);
   const [camSelected, setCamSelected] = useState("main");
   const [mapStyle, setMapStyle] = useState(() => {
@@ -66,6 +79,25 @@ const FlyPage = () => {
     } catch {
       // Ignore
     }
+  }, []);
+
+  const [showAirspace, setShowAirspace] = useState(() => {
+    try {
+      const saved = localStorage.getItem("aeronexus_show_airspace");
+      return saved !== null ? saved === "true" : true;
+    } catch {
+      return true;
+    }
+  });
+
+  const handleToggleAirspace = useCallback(() => {
+    setShowAirspace((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem("aeronexus_show_airspace", String(next));
+      } catch {}
+      return next;
+    });
   }, []);
 
   // Dual Virtual Joysticks visibility state (Mandatory Default: HIDDEN / false)
@@ -105,6 +137,28 @@ const FlyPage = () => {
   const mapGeofence = useMemo(() => {
     return currentProject?.geofence || null;
   }, [currentProject]);
+
+  // Extract canonical geofence vertices array
+  const geofenceCoords = useMemo(() => {
+    if (!mapGeofence) return [];
+    if (Array.isArray(mapGeofence)) return mapGeofence;
+    if (Array.isArray(mapGeofence.vertices)) return mapGeofence.vertices;
+    if (Array.isArray(mapGeofence.polygon)) return mapGeofence.polygon;
+    if (Array.isArray(mapGeofence.coordinates)) return mapGeofence.coordinates;
+    return [];
+  }, [mapGeofence]);
+
+  // Operational geofence validation for mission route (Section 4)
+  const missionValidation = useMemo(() => {
+    if (!geofenceCoords || geofenceCoords.length < 3 || mapWaypoints.length < 2) {
+      return {
+        isValid: false,
+        violatingSegments: [],
+        invalidWaypointIds: new Set(),
+      };
+    }
+    return validateMissionAgainstGeofence(mapWaypoints, geofenceCoords);
+  }, [mapWaypoints, geofenceCoords]);
 
   const [selectedWaypointId, setSelectedWaypointId] = useState(null);
 
@@ -263,6 +317,7 @@ const FlyPage = () => {
         <div className={`relative ${mapIsLarge ? "h-full w-full" : "min-h-0 flex-1"}`}>
           <MapLoad
             mapStyle={mapStyle}
+            showAirspace={showAirspace}
             telemetry={telemetry}
             pageType="fly"
             waypoints={mapWaypoints}
@@ -270,6 +325,7 @@ const FlyPage = () => {
             geofence={mapGeofence}
             selectedWaypointId={selectedWaypointId}
             onWaypointSelect={setSelectedWaypointId}
+            routeViolations={missionValidation.violatingSegments}
           />
           {!mapIsLarge && (
             <button
@@ -284,12 +340,24 @@ const FlyPage = () => {
             </button>
           )}
         </div>
-        {!mapIsLarge && (
+        {!mapIsLarge ? (
           <MapStyleBar
             options={mapStyleOptions}
             value={mapStyle}
             onChange={handleMapStyleChange}
+            showAirspace={showAirspace}
+            onToggleAirspace={handleToggleAirspace}
           />
+        ) : (
+          <div className="absolute bottom-4 right-4 z-20 rounded-md overflow-hidden border border-[#1C2834] shadow-xl">
+            <MapStyleBar
+              options={mapStyleOptions}
+              value={mapStyle}
+              onChange={handleMapStyleChange}
+              showAirspace={showAirspace}
+              onToggleAirspace={handleToggleAirspace}
+            />
+          </div>
         )}
       </div>
 
@@ -376,6 +444,8 @@ const FlyPage = () => {
             </>
           )}
         </div>
+
+
 
         {/* Selected Waypoint Inspection Chip */}
         {selectedWaypoint && (
@@ -475,6 +545,7 @@ const FlyPage = () => {
           </div>
         </div>
       </div>
+
     </div>
   );
 };

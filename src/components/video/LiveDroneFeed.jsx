@@ -22,7 +22,15 @@ import { videoService, getStreamIdFromDroneId } from "@/services/videoService.js
  * @param {string} [props.cameraType="main"] - Camera stream mode ("main" or "fpv")
  * @param {string} [props.className=""] - Optional wrapper container CSS classes
  */
-export function LiveDroneFeed({ droneId = "DRONE-001", cameraType = "main", className = "", onStatusChange }) {
+export function LiveDroneFeed({
+  droneId = "DRONE-001",
+  cameraType = "main",
+  className = "",
+  videoFit = "cover",
+  showHudBar = true,
+  onStatusChange,
+  children,
+}) {
   const containerRef = useRef(null)
   const isUnmountedRef = useRef(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
@@ -51,7 +59,7 @@ export function LiveDroneFeed({ droneId = "DRONE-001", cameraType = "main", clas
             setFetchError(null)
           } else {
             setStreamInfo(null)
-            setFetchError("Camera Offline: No active video feed")
+            setFetchError("No Camera Available")
           }
           setIsFetchingMetadata(false)
         }
@@ -65,9 +73,9 @@ export function LiveDroneFeed({ droneId = "DRONE-001", cameraType = "main", clas
           } else if (status === 403) {
             friendlyMsg = "Access Denied to camera feed"
           } else if (status === 404) {
-            friendlyMsg = "Camera stream not found"
+            friendlyMsg = "No Camera Available"
           } else if (err?.isNetworkError) {
-            friendlyMsg = "Camera Offline (Video service unreachable)"
+            friendlyMsg = "Camera Offline"
           }
 
           if (import.meta.env?.DEV) {
@@ -195,10 +203,11 @@ export function LiveDroneFeed({ droneId = "DRONE-001", cameraType = "main", clas
   const isLoading = isFetchingMetadata || isPlayerLoading
   const effectiveError = fetchError || playerError
 
-  // Determine HUD Status Badge
+  // Determine HUD Status Badge (Honest states: LIVE, CONNECTING, NO CAMERA AVAILABLE, CONNECTION FAILED, CAMERA OFFLINE)
   const getStatusBadge = () => {
     if (isPlaying && connectionState === "connected") {
       return {
+        key: "live",
         label: "LIVE",
         dotClass: "bg-[#2FE089] shadow-[0_0_8px_#2FE089] animate-pulse",
         textClass: "text-[#2FE089]",
@@ -207,13 +216,41 @@ export function LiveDroneFeed({ droneId = "DRONE-001", cameraType = "main", clas
     }
     if (isLoading || connectionState === "connecting" || connectionState === "reconnecting") {
       return {
+        key: "connecting",
         label: "CONNECTING...",
         dotClass: "bg-[#F59E0B] shadow-[0_0_8px_#F59E0B] animate-ping",
         textClass: "text-[#F59E0B]",
         borderClass: "border-[#F59E0B40] bg-[#140F08CC]",
       }
     }
+    const errText = String(effectiveError || "").toLowerCase()
+    if (
+      errText.includes("unavailable") ||
+      errText.includes("not provided") ||
+      errText.includes("not supported") ||
+      errText.includes("no camera") ||
+      errText.includes("not found") ||
+      (!streamInfo && !isLoading && errText.includes("404"))
+    ) {
+      return {
+        key: "stream-unavailable",
+        label: "STREAM UNAVAILABLE",
+        dotClass: "bg-[#94A3B8] shadow-[0_0_6px_#94A3B8]",
+        textClass: "text-[#CBD5E1]",
+        borderClass: "border-[#334155] bg-[#0F172ACC]",
+      }
+    }
+    if (playerError || connectionState === "failed") {
+      return {
+        key: "failed",
+        label: "CONNECTION FAILED",
+        dotClass: "bg-[#FF4D4D] shadow-[0_0_6px_#FF4D4D]",
+        textClass: "text-[#FF8585]",
+        borderClass: "border-[#5E2222] bg-[#140808CC]",
+      }
+    }
     return {
+      key: "offline",
       label: "CAMERA OFFLINE",
       dotClass: "bg-[#FF4D4D] shadow-[0_0_6px_#FF4D4D]",
       textClass: "text-[#FF8585]",
@@ -224,8 +261,16 @@ export function LiveDroneFeed({ droneId = "DRONE-001", cameraType = "main", clas
   const status = getStatusBadge()
 
   useEffect(() => {
-    onStatusChange?.({ isPlaying, isLoading, error: effectiveError, connectionState })
-  }, [connectionState, effectiveError, isLoading, isPlaying, onStatusChange])
+    onStatusChange?.({
+      isPlaying,
+      isLoading,
+      error: effectiveError,
+      connectionState,
+      statusLabel: status.label,
+      statusKey: status.key,
+      retry: handleRetry,
+    })
+  }, [connectionState, effectiveError, handleRetry, isLoading, isPlaying, onStatusChange, status.key, status.label])
 
   return (
     <div
@@ -238,7 +283,7 @@ export function LiveDroneFeed({ droneId = "DRONE-001", cameraType = "main", clas
         autoPlay
         playsInline
         muted
-        className={`h-full w-full object-cover transition-opacity duration-300 ${
+        className={`h-full w-full ${videoFit === "cover" ? "object-cover" : "object-contain"} transition-opacity duration-300 ${
           isPlaying ? "opacity-100" : "opacity-0 pointer-events-none"
         }`}
       />
@@ -265,14 +310,12 @@ export function LiveDroneFeed({ droneId = "DRONE-001", cameraType = "main", clas
               <span className="font-mono text-[9px] uppercase tracking-wider text-[#64748B]">
                 {droneId} • {streamId}
               </span>
-              <p className="font-mono text-[10px] sm:text-[11px] font-semibold text-[#CBD5E1] mt-0.5">
-                {isLoading
-                  ? "Connecting to camera feed..."
-                  : effectiveError || "Camera Offline"}
+              <p className="font-mono text-[11px] sm:text-[12px] font-bold text-[#CBD5E1] mt-0.5">
+                {isLoading ? "Connecting to camera feed..." : status.label}
               </p>
               {!isLoading && (
                 <p className="font-mono text-[9px] text-[#64748B] mt-0.5">
-                  No active video stream available
+                  {effectiveError || (status.key === "no-camera" || status.key === "stream-unavailable" ? "No camera stream configured for this drone" : "No active video stream available")}
                 </p>
               )}
             </div>
@@ -282,11 +325,11 @@ export function LiveDroneFeed({ droneId = "DRONE-001", cameraType = "main", clas
               <button
                 type="button"
                 onClick={handleRetry}
-                className="mt-1 flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#35E0FF1A] border border-[#35E0FF4D] text-[#35E0FF] hover:bg-[#35E0FF2E] hover:border-[#35E0FF] font-mono text-[9px] font-bold shadow-[0_0_8px_rgba(53,224,255,0.15)] transition active:scale-95 cursor-pointer"
+                className="mt-1.5 flex items-center gap-1.5 px-3 py-1 rounded bg-[#35E0FF1A] border border-[#35E0FF4D] text-[#35E0FF] hover:bg-[#35E0FF2E] hover:border-[#35E0FF] font-mono text-[9px] font-bold shadow-[0_0_8px_rgba(53,224,255,0.15)] transition active:scale-95 cursor-pointer"
                 title="Retry connecting to WebRTC stream"
               >
                 <RotateCw className="w-2.5 h-2.5" />
-                <span>RETRY FEED</span>
+                <span>RETRY STREAM</span>
               </button>
             )}
           </div>
@@ -294,68 +337,70 @@ export function LiveDroneFeed({ droneId = "DRONE-001", cameraType = "main", clas
       )}
 
       {/* TOP HUD BAR: Status Badge (Left) & Controls (Right) */}
-      <div className="absolute top-2 left-2 right-2 z-30 flex items-center justify-between pointer-events-none">
-        {/* Status Pill Badge */}
-        <div
-          className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full border backdrop-blur-md shadow-lg pointer-events-auto transition-all ${status.borderClass}`}
-        >
-          <span className={`w-1.5 h-1.5 rounded-full ${status.dotClass}`} />
-          <span className={`font-mono text-[8px] sm:text-[9px] font-bold tracking-wider ${status.textClass}`}>
-            {status.label}
-          </span>
-          <span className="text-[#475569] font-mono text-[8px] hidden xs:inline">|</span>
-          <span className="text-[#94A3B8] font-mono text-[8px] hidden xs:inline uppercase">
-            {cameraType}
-          </span>
-        </div>
-
-        {/* Video Control Action Overlay */}
-        <div className="flex items-center gap-1 bg-[#080C14CC] border border-[#1E293B] rounded-md p-0.5 backdrop-blur-md shadow-lg pointer-events-auto">
-          {/* Refresh / Retry */}
-          <button
-            type="button"
-            onClick={handleRetry}
-            className={`p-1 rounded text-[#8E9EAA] hover:text-[#35E0FF] hover:bg-[#35E0FF1A] transition active:scale-95 cursor-pointer ${
-              isLoading ? "animate-spin text-[#35E0FF]" : ""
-            }`}
-            title="Refresh stream connection"
-            aria-label="Refresh video stream"
+      {showHudBar && (
+        <div className="absolute top-2 left-2 right-2 z-30 flex items-center justify-between pointer-events-none">
+          {/* Status Pill Badge */}
+          <div
+            className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full border backdrop-blur-md shadow-lg pointer-events-auto transition-all ${status.borderClass}`}
           >
-            <RotateCw className="w-3 h-3" />
-          </button>
+            <span className={`w-1.5 h-1.5 rounded-full ${status.dotClass}`} />
+            <span className={`font-mono text-[8px] sm:text-[9px] font-bold tracking-wider ${status.textClass}`}>
+              {status.label}
+            </span>
+            <span className="text-[#475569] font-mono text-[8px] hidden xs:inline">|</span>
+            <span className="text-[#94A3B8] font-mono text-[8px] hidden xs:inline uppercase">
+              {cameraType}
+            </span>
+          </div>
 
-          {/* Picture-in-Picture */}
-          {canPip && isPlaying && (
+          {/* Video Control Action Overlay */}
+          <div className="flex items-center gap-1 bg-[#080C14CC] border border-[#1E293B] rounded-md p-0.5 backdrop-blur-md shadow-lg pointer-events-auto">
+            {/* Refresh / Retry */}
             <button
               type="button"
-              onClick={togglePip}
-              className="p-1 rounded text-[#8E9EAA] hover:text-[#35E0FF] hover:bg-[#35E0FF1A] transition active:scale-95 cursor-pointer"
-              title="Pop out in Picture-in-Picture"
-              aria-label="Picture-in-Picture"
+              onClick={handleRetry}
+              className={`p-1 rounded text-[#8E9EAA] hover:text-[#35E0FF] hover:bg-[#35E0FF1A] transition active:scale-95 cursor-pointer ${
+                isLoading ? "animate-spin text-[#35E0FF]" : ""
+              }`}
+              title="Refresh stream connection"
+              aria-label="Refresh video stream"
             >
-              <PictureInPicture2 className="w-3 h-3" />
+              <RotateCw className="w-3 h-3" />
             </button>
-          )}
 
-          {/* Fullscreen */}
-          <button
-            type="button"
-            onClick={toggleFullscreen}
-            className="p-1 rounded text-[#8E9EAA] hover:text-[#35E0FF] hover:bg-[#35E0FF1A] transition active:scale-95 cursor-pointer"
-            title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
-            aria-label={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
-          >
-            {isFullscreen ? (
-              <Minimize className="w-3 h-3" />
-            ) : (
-              <Maximize className="w-3 h-3" />
+            {/* Picture-in-Picture */}
+            {canPip && isPlaying && (
+              <button
+                type="button"
+                onClick={togglePip}
+                className="p-1 rounded text-[#8E9EAA] hover:text-[#35E0FF] hover:bg-[#35E0FF1A] transition active:scale-95 cursor-pointer"
+                title="Pop out in Picture-in-Picture"
+                aria-label="Picture-in-Picture"
+              >
+                <PictureInPicture2 className="w-3 h-3" />
+              </button>
             )}
-          </button>
-        </div>
-      </div>
 
-      {/* BOTTOM-LEFT STREAM TELEMETRY HUD OVERLAY (When Playing) */}
-      {isPlaying && (
+            {/* Fullscreen */}
+            <button
+              type="button"
+              onClick={toggleFullscreen}
+              className="p-1 rounded text-[#8E9EAA] hover:text-[#35E0FF] hover:bg-[#35E0FF1A] transition active:scale-95 cursor-pointer"
+              title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
+              aria-label={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
+            >
+              {isFullscreen ? (
+                <Minimize className="w-3 h-3" />
+              ) : (
+                <Maximize className="w-3 h-3" />
+              )}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* BOTTOM-LEFT STREAM TELEMETRY HUD OVERLAY (When Playing and showHudBar is enabled) */}
+      {showHudBar && isPlaying && (
         <div className="absolute bottom-2 left-2 z-20 pointer-events-none flex items-center gap-2 px-2 py-0.5 rounded bg-[#06090ECC] border border-[#16222F] backdrop-blur-sm text-[8px] font-mono text-[#8E9EAA]">
           <div className="flex items-center gap-1 text-[#2FE089]">
             <Wifi className="w-2.5 h-2.5" />
@@ -365,6 +410,9 @@ export function LiveDroneFeed({ droneId = "DRONE-001", cameraType = "main", clas
           <span className="text-[#35E0FF] font-semibold uppercase">{droneId}</span>
         </div>
       )}
+
+      {/* Children Custom Overlays */}
+      {children}
     </div>
   )
 }

@@ -7,14 +7,9 @@ import {
   Layers,
   ChevronDown,
   Check,
-  Compass,
-  Plane,
-  AlertTriangle,
-  FileText,
-  Activity,
   Sun,
-  X,
 } from "lucide-react"
+import AeroLogo from "@/components/AeroLogo.jsx"
 import ProfileDetails from "@/components/profile/profileDetails.jsx"
 import { useTelemetry } from "@/hooks/useTelemetry.js"
 import { useAuth } from "@/hooks/useAuth.js"
@@ -25,6 +20,7 @@ import { Permissions } from "@/auth/permissions.js"
 import EmergencyOverrideDeck from "@/features/fly/components/EmergencyOverrideDeck.jsx"
 import GlobalInfoButton from "@/components/info/GlobalInfoButton.jsx"
 import NotificationCenterModal from "@/components/notification/NotificationCenterModal.jsx"
+import GlobalSearchModal from "@/components/search/GlobalSearchModal.jsx"
 
 // 6 Core Operational Workflow Stages matching reference
 const WORKFLOW_STAGES = [
@@ -36,6 +32,12 @@ const WORKFLOW_STAGES = [
   { id: "act", label: "Act", path: "/incidents" },
 ]
 
+/**
+ * Header - AeroNexus Unified Command Center Header
+ * Layout Order:
+ * AeroNexus Branding → Workflow Navigation → Global Search → Project Selector → Date/Status Information → Emergency Deck → INFO → Notifications → User Profile
+ * Responsive to all zoom levels (80% - 200%) and screen sizes (320px - 1920px).
+ */
 const Header = ({ onToggleMobile, mobileOpen }) => {
   const location = useLocation()
   const navigate = useNavigate()
@@ -98,107 +100,26 @@ const Header = ({ onToggleMobile, mobileOpen }) => {
     return null
   }, [location.pathname])
 
-  // Search input state and keyboard listener
-  const [searchQuery, setSearchQuery] = useState("")
-  const [searchFocused, setSearchFocused] = useState(false)
-  const searchInputRef = useRef(null)
-  const searchContainerRef = useRef(null)
+  // Global Search Modal State and Keyboard Shortcuts (/ and Ctrl+K / Cmd+K)
+  const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false)
 
   useEffect(() => {
     const handleKeyDown = (e) => {
+      // '/' key or 'Ctrl+K' / 'Cmd+K' opens global command palette
       if (
-        e.key === "/" &&
-        document.activeElement?.tagName !== "INPUT" &&
-        document.activeElement?.tagName !== "TEXTAREA" &&
-        !document.activeElement?.isContentEditable
+        (e.key === "/" &&
+          document.activeElement?.tagName !== "INPUT" &&
+          document.activeElement?.tagName !== "TEXTAREA" &&
+          !document.activeElement?.isContentEditable) ||
+        ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k")
       ) {
         e.preventDefault()
-        searchInputRef.current?.focus()
+        setIsGlobalSearchOpen(true)
       }
     }
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
   }, [])
-
-  // Dismiss search dropdown on outside click
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (searchContainerRef.current && !searchContainerRef.current.contains(e.target)) {
-        setSearchFocused(false)
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside)
-    return () => document.removeEventListener("mousedown", handleClickOutside)
-  }, [])
-
-  // Search filter options
-  const quickNavLinks = [
-    { label: "Command Center", path: "/dashboard", icon: Activity, category: "Page" },
-    { label: "Fly Operations", path: "/fly", icon: Plane, category: "Page" },
-    { label: "Mission Planning", path: "/mission-planning", icon: Compass, category: "Page" },
-    { label: "Missions", path: "/missions", icon: Layers, category: "Page" },
-    { label: "Incidents & Alerts", path: "/incidents", icon: AlertTriangle, category: "Page" },
-    { label: "Reports & Logs", path: "/reports", icon: FileText, category: "Page" },
-  ]
-
-  const filteredSearchResults = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase()
-    if (!q) return []
-
-    const results = []
-
-    // 1. Matching Projects
-    projects.forEach((p) => {
-      const name = p.projectName || p.name || p.id
-      if (name.toLowerCase().includes(q)) {
-        results.push({
-          type: "project",
-          id: p.id,
-          title: name,
-          subtitle: `Project · ${p.location || "Active Site"}`,
-          action: () => {
-            selectProject(p.id)
-            setSearchQuery("")
-            setSearchFocused(false)
-          },
-        })
-      }
-    })
-
-    // 2. Matching Drones
-    if (telemetry?.droneId && telemetry.droneId.toLowerCase().includes(q)) {
-      results.push({
-        type: "drone",
-        id: telemetry.droneId,
-        title: telemetry.droneId,
-        subtitle: `Drone · ${telemetry.flightMode || "GUIDED"}`,
-        action: () => {
-          navigate("/fly")
-          setSearchQuery("")
-          setSearchFocused(false)
-        },
-      })
-    }
-
-    // 3. Matching Pages
-    quickNavLinks.forEach((link) => {
-      if (link.label.toLowerCase().includes(q)) {
-        results.push({
-          type: "page",
-          id: link.path,
-          title: link.label,
-          subtitle: link.category,
-          action: () => {
-            navigate(link.path)
-            setSearchQuery("")
-            setSearchFocused(false)
-          },
-        })
-      }
-    })
-
-    return results.slice(0, 5)
-  }, [searchQuery, projects, telemetry, selectProject, navigate])
 
   // Project dropdown menu state
   const [projectDropdownOpen, setProjectDropdownOpen] = useState(false)
@@ -232,142 +153,104 @@ const Header = ({ onToggleMobile, mobileOpen }) => {
   }, [isLive, connectionState])
 
   return (
-    <div className="flex items-center justify-between w-full h-full select-none gap-2 sm:gap-3">
+    <div className="flex items-center justify-between w-full h-full min-w-0 select-none gap-2 sm:gap-3">
       {/* ========================================================
-          LEFT: BRANDING & NAVIGATION WORKFLOW
+          1. LEFT: AERONEXUS BRANDING → WORKFLOW NAVIGATION
           ======================================================== */}
-      <div className="flex items-center min-w-0 gap-2 sm:gap-3 lg:gap-4 shrink-0">
-        {/* Mobile Hamburger Drawer Button */}
+      <div className="flex items-center min-w-0 gap-2 sm:gap-3 lg:gap-3.5 shrink-0">
+        {/* Mobile Hamburger Drawer Button (< lg) */}
         <button
           type="button"
           onClick={onToggleMobile}
-          className="flex lg:hidden items-center justify-center w-8 h-8 rounded-md bg-[#0F223A] border border-[#1E3A5F] text-[#38BDF8] hover:bg-[#162E4E] transition"
+          className="flex lg:hidden items-center justify-center w-8 h-8 rounded-md bg-[#0F223A] border border-[#1E3A5F] text-[#38BDF8] hover:bg-[#162E4E] transition cursor-pointer shrink-0"
           aria-label="Toggle navigation drawer"
           aria-expanded={mobileOpen}
         >
           <Menu className="w-4 h-4" />
         </button>
 
-        {/* AeroNexus / DroneOps IQ Branding */}
-        <Link to="/dashboard" className="flex items-center gap-2.5 text-left group shrink-0">
-          {/* 4-Circle Quad-Rotor / Clover Brand Icon */}
-          <div className="w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center rounded-lg bg-gradient-to-br from-[#122A4C] to-[#0A182B] border border-[#1E3A5F] shadow-sm shrink-0 group-hover:border-[#38BDF8] transition-colors">
-            <svg
-              className="w-4.5 h-4.5 sm:w-5 sm:h-5 text-[#38BDF8]"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.4"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <rect x="3" y="3" width="7" height="7" rx="2.5" />
-              <rect x="14" y="3" width="7" height="7" rx="2.5" />
-              <rect x="3" y="14" width="7" height="7" rx="2.5" />
-              <rect x="14" y="14" width="7" height="7" rx="2.5" />
-            </svg>
-          </div>
-
-          <div className="flex flex-col leading-none">
-            <div className="flex items-center gap-1">
-              <span className="text-[14px] sm:text-[15px] font-black tracking-tight text-white">DroneOps</span>
-              <span className="text-[14px] sm:text-[15px] font-black tracking-tight text-[#38BDF8]">IQ</span>
-            </div>
-            <span className="text-[9.5px] sm:text-[10px] text-[#8EA3BE] font-medium tracking-tight mt-0.5 truncate max-w-[190px] sm:max-w-none">
-              Drone Operations Intelligence Platform
-            </span>
-          </div>
+        {/* Sole Primary AeroNexus Branding (Zero DroneOps IQ, Minimal Horizontal Footprint) */}
+        <Link
+          to="/dashboard"
+          className="flex items-center gap-2 text-left group shrink-0"
+          title="AeroNexus Command Center"
+        >
+          <AeroLogo className="w-6 h-6 text-[#35E0FF] shrink-0" size={24} />
+          <span className="text-sm sm:text-base font-bold text-white tracking-tight group-hover:text-[#38BDF8] transition-colors">
+            AeroNexus
+          </span>
         </Link>
 
-        {/* Thin Vertical Divider */}
-        <div className="hidden lg:block h-6 w-[1px] bg-[#1E3A5F] shrink-0" />
+        {/* Subtle Vertical Divider */}
+        <div className="hidden lg:block h-5 w-[1px] bg-[#1E3A5F]/80 shrink-0" />
 
         {/* Workflow Navigation: Plan → Orchestrate → Fly → Monitor → Analyze → Act */}
-        <div className="hidden lg:flex flex-col justify-center min-w-0">
-          <div className="flex items-center gap-1 text-[11.5px] tracking-tight">
-            {WORKFLOW_STAGES.map((stage, idx) => {
-              const isActive = activeWorkflowStage === stage.id
-              return (
-                <div key={stage.id} className="flex items-center">
-                  <Link
-                    to={stage.path}
-                    className={`font-semibold transition-all px-1 py-0.5 rounded ${
-                      isActive
-                        ? "text-[#38BDF8] drop-shadow-[0_0_8px_rgba(56,189,248,0.5)] underline decoration-[#38BDF8] decoration-2 underline-offset-4"
-                        : "text-[#8EA3BE] hover:text-white"
-                    }`}
-                  >
-                    {stage.label}
-                  </Link>
-                  {idx < WORKFLOW_STAGES.length - 1 && (
-                    <span className="text-[#3A5373] text-[10.5px] select-none mx-0.5">→</span>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-          <span className="text-[9.5px] text-[#5D7694] italic tracking-tight hidden 2xl:block leading-none mt-0.5">
-            Smarter missions. Safer operations. Greater impact.
-          </span>
-        </div>
+        <nav
+          aria-label="Operational Workflow"
+          className="hidden lg:flex items-center gap-0.5 text-xs tracking-tight shrink-0"
+        >
+          {WORKFLOW_STAGES.map((stage, idx) => {
+            const isActive = activeWorkflowStage === stage.id
+            return (
+              <div key={stage.id} className="flex items-center">
+                <Link
+                  to={stage.path}
+                  className={`font-semibold transition-all px-1.5 py-0.5 rounded text-[11px] xl:text-xs ${
+                    isActive
+                      ? "text-[#38BDF8] bg-[#38BDF8]/15 drop-shadow-[0_0_8px_rgba(56,189,248,0.35)] font-bold"
+                      : "text-[#8EA3BE] hover:text-white hover:bg-white/5"
+                  }`}
+                >
+                  {stage.label}
+                </Link>
+                {idx < WORKFLOW_STAGES.length - 1 && (
+                  <span className="text-[#3A5373] text-[10px] select-none mx-0.5">→</span>
+                )}
+              </div>
+            )
+          })}
+        </nav>
       </div>
 
       {/* ========================================================
-          CENTER: SEARCH FIELD & PROJECT SELECTOR
+          2. CENTER: GLOBAL SEARCH → PROJECT SELECTOR
           ======================================================== */}
-      <div className="flex items-center gap-2 sm:gap-3 min-w-0 justify-center flex-1 max-w-2xl px-2">
-        {/* Compact Search Bar with [/] indicator */}
-        <div ref={searchContainerRef} className="relative min-w-[140px] sm:w-60 md:w-64 lg:w-72">
-          <div className="relative flex items-center bg-[#0C1B2E] border border-[#1E3A5F] rounded-full px-2.5 sm:px-3 py-1 sm:py-1.5 shadow-inner focus-within:border-[#38BDF8] focus-within:ring-1 focus-within:ring-[#38BDF8]/40 transition">
-            <Search className="w-3.5 h-3.5 text-[#7E95B1] mr-1.5 shrink-0" />
-            <input
-              ref={searchInputRef}
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onFocus={() => setSearchFocused(true)}
-              placeholder="Search missions, drones, locations…"
-              className="bg-transparent text-xs text-white placeholder-[#5A7391] outline-none w-full min-w-0"
-              aria-label="Search missions, drones, locations"
-            />
-            {searchQuery ? (
-              <button
-                type="button"
-                onClick={() => setSearchQuery("")}
-                className="text-[#7E95B1] hover:text-white transition ml-1"
-                aria-label="Clear search"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            ) : (
-              <span className="hidden sm:inline-flex px-1.5 py-0.5 rounded border border-[#1E3A5F] bg-[#10243B] text-[9.5px] font-mono text-[#7E95B1] select-none shrink-0 ml-1">
-                /
-              </span>
-            )}
-          </div>
+      <div className="flex items-center gap-2 min-w-0 justify-center flex-1 max-w-xl px-1 sm:px-2">
+        {/* Mobile Search Button (< sm) */}
+        <button
+          type="button"
+          onClick={() => setIsGlobalSearchOpen(true)}
+          className="sm:hidden flex items-center justify-center w-8 h-8 rounded-full bg-[#0C1B2E] hover:bg-[#12263F] border border-[#1E3A5F] hover:border-[#38BDF8] text-[#7E95B1] hover:text-[#38BDF8] transition shrink-0 cursor-pointer shadow-inner"
+          aria-label="Open search"
+          title="Search missions, drones, locations (/)"
+        >
+          <Search className="w-4 h-4" />
+        </button>
 
-          {/* Quick Search Popover Dropdown */}
-          {searchFocused && filteredSearchResults.length > 0 && (
-            <div className="absolute top-[calc(100%+6px)] left-0 w-full z-50 rounded-lg border border-[#1E3A5F] bg-[#0A1626] shadow-[0_12px_28px_rgba(0,0,0,0.7)] backdrop-blur-md overflow-hidden py-1">
-              <div className="px-3 py-1 text-[10px] font-bold text-[#5A7391] uppercase tracking-wider">
-                Matching Results
-              </div>
-              {filteredSearchResults.map((item) => (
-                <button
-                  key={`${item.type}-${item.id}`}
-                  type="button"
-                  onClick={item.action}
-                  className="w-full text-left px-3 py-1.5 hover:bg-[#142944] flex items-center justify-between transition cursor-pointer text-xs"
-                >
-                  <span className="font-semibold text-white truncate">{item.title}</span>
-                  <span className="text-[10px] text-[#7E95B1] shrink-0 ml-2">{item.subtitle}</span>
-                </button>
-              ))}
-            </div>
-          )}
+        {/* Global Search Field (Fluid Resizing for Zoom Adaptability) */}
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => setIsGlobalSearchOpen(true)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault()
+              setIsGlobalSearchOpen(true)
+            }
+          }}
+          className="relative hidden sm:flex items-center bg-[#0C1B2E] hover:bg-[#0F223A] border border-[#1E3A5F] hover:border-[#38BDF8]/60 focus:border-[#38BDF8] focus:ring-1 focus:ring-[#38BDF8]/30 rounded-full px-3 py-1 sm:py-1.5 shadow-inner transition cursor-pointer w-full min-w-[110px] max-w-[260px] md:max-w-[290px] shrink group select-none"
+          title="Search missions, drones, locations (Press / or Ctrl+K)"
+        >
+          <Search className="w-3.5 h-3.5 text-[#7E95B1] group-hover:text-[#38BDF8] mr-2 shrink-0 transition-colors" />
+          <span className="text-xs text-[#5A7391] group-hover:text-[#8EA3BE] truncate flex-1 transition-colors">
+            Search missions, drones…
+          </span>
+          <kbd className="inline-flex items-center justify-center h-4 min-w-[16px] px-1 text-[9.5px] font-mono font-semibold text-[#7E95B1] bg-[#10243B] border border-[#1E3A5F] rounded select-none shrink-0 ml-1.5 shadow-2xs">
+            /
+          </kbd>
         </div>
 
-        {/* Project Selector */}
+        {/* Project Selector (Fluid Dropdown, Never Overlapping) */}
         <div ref={projectDropdownRef} className="relative hidden md:flex items-center gap-1.5 shrink-0">
           <span className="text-[10px] font-bold tracking-wider uppercase text-[#7E95B1] shrink-0">
             PROJECT
@@ -377,45 +260,25 @@ const Header = ({ onToggleMobile, mobileOpen }) => {
           <button
             type="button"
             onClick={() => setProjectDropdownOpen((prev) => !prev)}
-            className="bg-[#1B68D2] hover:bg-[#2074e6] text-white px-2.5 sm:px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1.5 shadow-sm transition shrink-0 cursor-pointer"
-            aria-label="Select project"
+            className="bg-[#1B68D2] hover:bg-[#2074e6] text-white px-2.5 sm:px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1.5 shadow-sm transition shrink-0 cursor-pointer max-w-[140px] lg:max-w-[180px]"
+            aria-label="Select active project"
             aria-expanded={projectDropdownOpen}
           >
-            <Layers className="w-3.5 h-3.5 shrink-0" />
-            <span className="truncate max-w-[120px] lg:max-w-[160px]">
+            <Layers className="w-3.5 h-3.5 shrink-0 text-[#93C5FD]" />
+            <span className="truncate">
               {currentProject?.projectName || currentProject?.name || "Active Project"}
             </span>
             <ChevronDown className="w-3 h-3 text-white/80 shrink-0" />
           </button>
 
-          {/* Inactive Project Pills (Displayed if space allows) */}
-          <div className="hidden xl:flex items-center gap-1.5">
-            {projects
-              .filter((p) => p.id !== currentProject?.id)
-              .slice(0, 2)
-              .map((p) => {
-                const name = p.projectName || p.name || p.id
-                return (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => selectProject(p.id)}
-                    className="border border-[#1E3A5F] hover:border-[#38BDF8] text-[#8EA3BE] hover:text-white px-2.5 py-1 rounded-full text-xs font-medium transition cursor-pointer shrink-0 truncate max-w-[120px]"
-                    title={`Switch to ${name}`}
-                  >
-                    {name}
-                  </button>
-                )
-              })}
-          </div>
-
-          {/* Full Project List Dropdown Menu */}
+          {/* Project Selection Dropdown */}
           {projectDropdownOpen && (
-            <div className="absolute top-[calc(100%+6px)] right-0 z-50 w-64 rounded-lg border border-[#1E3A5F] bg-[#0A1626] shadow-[0_12px_28px_rgba(0,0,0,0.7)] backdrop-blur-md overflow-hidden py-1">
-              <div className="px-3 py-1.5 text-[10px] font-bold text-[#5A7391] uppercase tracking-wider border-b border-[#162A44]">
-                Available Projects ({projects.length})
+            <div className="absolute top-[calc(100%+6px)] right-0 z-50 w-64 rounded-xl border border-[#1E3A5F] bg-[#0A1626FA] shadow-[0_16px_36px_rgba(0,0,0,0.85)] backdrop-blur-md overflow-hidden py-1 animate-in fade-in slide-in-from-top-1 font-mono">
+              <div className="px-3 py-1.5 text-[10px] font-bold text-[#5A7391] uppercase tracking-wider border-b border-[#162A44] flex items-center justify-between">
+                <span>Available Projects</span>
+                <span className="text-[#38BDF8]">{projects.length}</span>
               </div>
-              <div className="max-h-60 overflow-y-auto">
+              <div className="max-h-60 overflow-y-auto divide-y divide-[#162A44]/50">
                 {projects.map((p) => {
                   const isSelected = p.id === currentProject?.id
                   const name = p.projectName || p.name || p.id
@@ -428,11 +291,11 @@ const Header = ({ onToggleMobile, mobileOpen }) => {
                         setProjectDropdownOpen(false)
                       }}
                       className={`w-full text-left px-3 py-2 flex items-center justify-between text-xs transition cursor-pointer ${
-                        isSelected ? "bg-[#1B68D2]/20 text-[#38BDF8]" : "text-[#CAD5E2] hover:bg-[#142944] hover:text-white"
+                        isSelected ? "bg-[#1B68D2]/20 text-[#38BDF8] font-bold" : "text-[#CAD5E2] hover:bg-[#142944] hover:text-white"
                       }`}
                     >
                       <div className="min-w-0 pr-2">
-                        <p className="font-semibold truncate">{name}</p>
+                        <p className="truncate">{name}</p>
                         <p className="text-[10px] text-[#7E95B1] truncate">{p.location || "Operational Site"}</p>
                       </div>
                       {isSelected && <Check className="w-3.5 h-3.5 text-[#38BDF8] shrink-0" />}
@@ -446,38 +309,38 @@ const Header = ({ onToggleMobile, mobileOpen }) => {
       </div>
 
       {/* ========================================================
-          RIGHT: OPERATIONAL INFORMATION, NOTIFICATIONS & PROFILE
+          3. RIGHT: DATE/STATUS → EMERGENCY DECK → INFO → NOTIFICATIONS → USER PROFILE
           ======================================================== */}
-      <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
-        {/* Genuine Weather Information (Only when genuine temperature data exists) */}
+      <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0 justify-end">
+        {/* Telemetry Ambient Temperature (if telemetry has temperature) */}
         {genuineWeather !== null && (
           <>
-            <div className="hidden lg:flex items-center gap-1.5 text-xs text-[#E2E8F0] font-medium" title="Telemetry Ambient Temperature">
+            <div className="hidden 2xl:flex items-center gap-1.5 text-xs text-[#E2E8F0] font-medium" title="Telemetry Ambient Temperature">
               <Sun className="w-3.5 h-3.5 text-[#F59E0B]" />
               <span>{genuineWeather}°C</span>
             </div>
-            <span className="hidden lg:inline text-[#1E3A5F] select-none">|</span>
+            <span className="hidden 2xl:inline text-[#1E3A5F] select-none">|</span>
           </>
         )}
 
         {/* Live Date: "Tue, 16 Sep 2026" */}
-        <span className="hidden xl:inline text-xs text-[#8EA3BE] font-medium whitespace-nowrap">
+        <span className="hidden 2xl:inline text-xs text-[#8EA3BE] font-medium whitespace-nowrap">
           {formattedDate}
         </span>
 
-        <span className="hidden xl:inline text-[#1E3A5F] select-none">|</span>
+        <span className="hidden 2xl:inline text-[#1E3A5F] select-none">|</span>
 
-        {/* Live Time: "08:42 AM" */}
-        <span className="hidden sm:inline text-xs text-white font-mono font-semibold whitespace-nowrap">
+        {/* Live Clock: "08:42 AM" */}
+        <span className="hidden md:inline text-xs text-white font-mono font-semibold whitespace-nowrap">
           {formattedTime}
         </span>
 
         {/* Live Telemetry Status Dot */}
-        <div className="flex items-center" title={`Telemetry Connection: ${connectionState}`}>
+        <div className="flex items-center px-0.5" title={`Telemetry Connection: ${connectionState}`}>
           <div className={`w-2 h-2 rounded-full ${connectionDotClass}`} />
         </div>
 
-        <span className="text-[#1E3A5F] select-none">|</span>
+        <span className="hidden sm:inline text-[#1E3A5F] select-none">|</span>
 
         {/* Preserved Emergency Override Deck (Strictly for authorized operators) */}
         {(canOverrideFlight || canExecuteFlight) && <EmergencyOverrideDeck />}
@@ -498,7 +361,7 @@ const Header = ({ onToggleMobile, mobileOpen }) => {
           >
             <Bell className="w-4 h-4" />
             {unreadCount > 0 && (
-              <span className="absolute 0 top-0.5 right-0.5 flex h-4 min-w-[16px] px-1 items-center justify-center rounded-full bg-[#EF4444] text-[9.5px] font-bold text-white shadow-[0_0_6px_#EF4444]">
+              <span className="absolute top-0.5 right-0.5 flex h-4 min-w-[16px] px-1 items-center justify-center rounded-full bg-[#EF4444] text-[9.5px] font-bold text-white shadow-[0_0_6px_#EF4444]">
                 {unreadCount > 9 ? "9+" : unreadCount}
               </span>
             )}
@@ -506,9 +369,15 @@ const Header = ({ onToggleMobile, mobileOpen }) => {
           <NotificationCenterModal />
         </div>
 
-        {/* User Avatar, Name and Role Trigger */}
+        {/* User Profile and Fast Role Switcher */}
         <ProfileDetails />
       </div>
+
+      {/* Global Search Command Palette Modal */}
+      <GlobalSearchModal
+        isOpen={isGlobalSearchOpen}
+        onClose={() => setIsGlobalSearchOpen(false)}
+      />
     </div>
   )
 }

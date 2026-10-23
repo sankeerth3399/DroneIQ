@@ -112,7 +112,7 @@ export const MissionLogTable = ({
     <div className="rounded-2xl bg-white border border-[#D5E1ED] overflow-hidden shadow-xs select-none font-sans flex flex-col">
       {/* Desktop View: Full Table (lg+) */}
       <div className="overflow-x-auto">
-        <table className="w-full text-left text-xs font-sans border-collapse">
+        <table className="w-full min-w-[960px] text-left text-xs font-sans border-collapse">
           <thead className="bg-[#F8FAFC] text-[#64748B] border-b border-[#E2E8F0] uppercase text-[11px] font-bold tracking-wider">
             <tr>
               <th className="px-4 py-3.5 w-[140px]">Timestamp</th>

@@ -97,7 +97,7 @@ export const CameraPreview = ({
 };
 
 const getPipClass = (isFpv) =>
-  `absolute right-2 top-2 sm:right-4 sm:top-4 z-20 flex cursor-pointer flex-col overflow-hidden rounded-[5px] border border-[#D2DCE7] bg-white shadow-[0_8px_26px_rgba(18,42,72,0.22)] backdrop-blur-md transition-all duration-300 ${
+  `absolute right-2 top-2 sm:right-4 sm:top-4 z-20 flex cursor-pointer flex-col overflow-hidden rounded-[5px] border border-[#D2DCE7] bg-white shadow-[0_8px_26px_rgba(18,42,72,0.22)] backdrop-blur-md transition-all duration-300 max-w-[calc(100vw-16px)] ${
     isFpv
       ? "h-[250px] w-[250px] sm:h-[305px] sm:w-[320px] md:h-[355px] md:w-[380px]"
       : "h-[190px] w-[185px] sm:h-[225px] sm:w-[220px] md:h-[255px] md:w-[250px]"

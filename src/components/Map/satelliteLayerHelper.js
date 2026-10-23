@@ -38,6 +38,11 @@ export const enforceMapLayerOrder = (mapInstance) => {
 
   const layerStack = [
     SATELLITE_LAYER_ID,
+    // Mappls official DigitalSky Airspace raster layers
+    "airport_region_radius_0_to_5_km",
+    "airport_region_radius_5_to_8_km",
+    "airport_region_radius_8_to_12_km_yellow",
+    "coastal_area_india_region_25km",
     "aeronexus-geofence-fill",
     "aeronexus-geofence-line",
     "aeronexus-geofence-preview-line",
@@ -61,6 +66,24 @@ export const ensureSatelliteLayer = (mapInstance, isSatellite = false, onDone) =
   const map = getUnderlyingMap(mapInstance);
   if (!map || typeof map.getSource !== "function" || typeof map.addSource !== "function") return;
 
+  // Track the most recent desired satellite visibility on the map instance
+  map._desiredSatelliteVisibility = Boolean(isSatellite);
+
+  // If layer already exists, update visibility immediately
+  if (map.getLayer && map.getLayer(SATELLITE_LAYER_ID)) {
+    try {
+      const visibility = map._desiredSatelliteVisibility ? "visible" : "none";
+      if (typeof map.setLayoutProperty === "function") {
+        map.setLayoutProperty(SATELLITE_LAYER_ID, "visibility", visibility);
+      }
+      enforceMapLayerOrder(map);
+      if (onDone) onDone(map);
+    } catch (err) {
+      console.debug("[SatelliteHelper] Visibility update note:", err.message);
+    }
+    return;
+  }
+
   const tryAdd = () => {
     try {
       if (!map.getSource(SATELLITE_SOURCE_ID)) {
@@ -80,11 +103,12 @@ export const ensureSatelliteLayer = (mapInstance, isSatellite = false, onDone) =
       }
 
       if (map.getSource(SATELLITE_SOURCE_ID) && !map.getLayer(SATELLITE_LAYER_ID)) {
+        const activeDesired = map._desiredSatelliteVisibility !== undefined ? map._desiredSatelliteVisibility : isSatellite;
         map.addLayer({
           id: SATELLITE_LAYER_ID,
           type: "raster",
           source: SATELLITE_SOURCE_ID,
-          layout: { visibility: isSatellite ? "visible" : "none" },
+          layout: { visibility: activeDesired ? "visible" : "none" },
           paint: {
             "raster-opacity": 1,
             "raster-fade-duration": 0,
@@ -102,7 +126,7 @@ export const ensureSatelliteLayer = (mapInstance, isSatellite = false, onDone) =
     }
   };
 
-  if (typeof map.isStyleLoaded === "function" && map.isStyleLoaded()) {
+  if ((typeof map.isStyleLoaded === "function" && map.isStyleLoaded()) || (typeof map.loaded === "function" && map.loaded())) {
     tryAdd();
   } else {
     map.once?.("styledata", tryAdd);

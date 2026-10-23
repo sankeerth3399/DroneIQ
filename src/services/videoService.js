@@ -13,11 +13,35 @@ import { apiClient } from "./api/apiClient.js"
  */
 export function getStreamIdFromDroneId(droneId, cameraType = "main") {
   if (!droneId) return "drone-001-camera"
-  const cleanId = String(droneId).trim().toLowerCase()
-  if (cleanId.endsWith("-camera") || cleanId.endsWith("-fpv")) {
+  let cleanId = String(droneId).trim().toLowerCase()
+  if (
+    cleanId.endsWith("-camera") ||
+    cleanId.endsWith("-fpv") ||
+    cleanId.endsWith("-thermal") ||
+    cleanId.endsWith("-zoom") ||
+    cleanId.endsWith("-multispectral")
+  ) {
     return cleanId
   }
-  const suffix = cameraType === "fpv" ? "fpv" : "camera"
+
+  // Normalize "dr-001", "drone 1", "drone-1" -> "drone-001"
+  if (cleanId.startsWith("dr-")) {
+    cleanId = cleanId.replace(/^dr-/, "drone-")
+  } else if (/^drone\s*(\d+)$/.test(cleanId)) {
+    const num = cleanId.match(/^drone\s*(\d+)$/)[1].padStart(3, "0")
+    cleanId = `drone-${num}`
+  } else if (/^drone-(\d)$/.test(cleanId)) {
+    const num = cleanId.match(/^drone-(\d)$/)[1].padStart(3, "0")
+    cleanId = `drone-${num}`
+  }
+  cleanId = cleanId.replace(/\s+/g, "-")
+
+  let suffix = "camera"
+  if (cameraType === "fpv") suffix = "fpv"
+  else if (cameraType === "thermal") suffix = "thermal"
+  else if (cameraType === "zoom") suffix = "zoom"
+  else if (cameraType === "multispectral") suffix = "multispectral"
+
   return `${cleanId}-${suffix}`
 }
 

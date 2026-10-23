@@ -442,6 +442,17 @@ export function normalizeProject(proj) {
     description: proj.description || "",
     missionDescription: proj.missionDescription || "",
     contactInfo: proj.contactInfo || "",
+    status: proj.status || "Draft",
+    progress: typeof proj.progress === "number" ? proj.progress : null,
+    assignedDrones: Array.isArray(proj.assignedDrones)
+      ? proj.assignedDrones
+      : proj.drones
+      ? (Array.isArray(proj.drones) ? proj.drones : [proj.drones])
+      : [],
+    drones: Array.isArray(proj.drones) ? proj.drones : (proj.assignedDrones || []),
+    startTime: proj.startTime || proj.createdAt || null,
+    elapsed: proj.elapsed || null,
+    events: Array.isArray(proj.events) ? proj.events : [],
     createdAt: proj.createdAt || new Date().toISOString(),
     updatedAt: proj.updatedAt || new Date().toISOString(),
     geofence: normalizeGeofence(proj.geofence),
@@ -490,8 +501,15 @@ export function getProjects() {
           siteA.geofence = INITIAL_DEMO_PROJECTS[0].geofence;
           siteA.mission.waypoints = INITIAL_DEMO_PROJECTS[0].mission.waypoints;
           siteA.mission.items = INITIAL_DEMO_PROJECTS[0].mission.items;
-          localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(parsed));
         }
+
+        // Filter out any legacy injected screenshot demo missions M-2026-001..010
+        const cleaned = parsed.filter((p) => !p.id?.startsWith("M-2026-"));
+        if (cleaned.length !== parsed.length) {
+          localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(cleaned));
+          return cleaned.map(normalizeProject).filter(Boolean);
+        }
+
         return parsed.map(normalizeProject).filter(Boolean);
       }
     }

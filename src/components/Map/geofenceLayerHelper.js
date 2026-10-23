@@ -8,6 +8,25 @@ export const GEOFENCE_PREVIEW_LINE_LAYER_ID = "aeronexus-geofence-preview-line";
 export const VIOLATIONS_SOURCE_ID = "aeronexus-violations-source";
 export const VIOLATIONS_LINE_LAYER_ID = "aeronexus-violations-line";
 
+const extractLngLat = (pt) => {
+  if (!pt) return null;
+  if (Array.isArray(pt) && pt.length >= 2) {
+    const v0 = Number(pt[0]);
+    const v1 = Number(pt[1]);
+    if (isNaN(v0) || isNaN(v1)) return null;
+    if (Math.abs(v0) > Math.abs(v1)) {
+      return [Number(v0.toFixed(6)), Number(v1.toFixed(6))];
+    }
+    return [Number(v1.toFixed(6)), Number(v0.toFixed(6))];
+  }
+  const rawLng = pt.lng ?? pt.longitude;
+  const rawLat = pt.lat ?? pt.latitude;
+  const lng = typeof rawLng === "number" ? rawLng : Number(rawLng);
+  const lat = typeof rawLat === "number" ? rawLat : Number(rawLat);
+  if (isNaN(lng) || isNaN(lat)) return null;
+  return [Number(lng.toFixed(6)), Number(lat.toFixed(6))];
+};
+
 /**
  * Builds GeoJSON FeatureCollection for a single continuous polygon geofence.
  * Guarantees exactly ONE polygon feature: V1 -> V2 -> ... -> Vn -> V1.
@@ -25,10 +44,13 @@ export const buildGeofenceGeoJson = (coordinates = []) => {
   }
 
   // Ring must be closed for GeoJSON Polygon: first and last coordinate must match
-  const ring = coordinates.map((pt) => [
-    Number(Number(pt.lng ?? pt.longitude).toFixed(6)),
-    Number(Number(pt.lat ?? pt.latitude).toFixed(6)),
-  ]);
+  const ring = coordinates.map(extractLngLat).filter(Boolean);
+  if (ring.length < 3) {
+    return {
+      type: "FeatureCollection",
+      features: [],
+    };
+  }
 
   const first = ring[0];
   const last = ring[ring.length - 1];
@@ -44,7 +66,7 @@ export const buildGeofenceGeoJson = (coordinates = []) => {
         id: "geofence-canonical-polygon",
         properties: {
           type: "geofence",
-          vertexCount: coordinates.length,
+          vertexCount: ring.length - 1,
         },
         geometry: {
           type: "Polygon",
@@ -73,10 +95,13 @@ export const buildGeofencePreviewGeoJson = (coordinates = [], isDrawing = false,
     };
   }
 
-  const lineCoords = coordinates.map((pt) => [
-    Number(Number(pt.lng ?? pt.longitude).toFixed(6)),
-    Number(Number(pt.lat ?? pt.latitude).toFixed(6)),
-  ]);
+  const lineCoords = coordinates.map(extractLngLat).filter(Boolean);
+  if (lineCoords.length < 2) {
+    return {
+      type: "FeatureCollection",
+      features: [],
+    };
+  }
 
   return {
     type: "FeatureCollection",
@@ -319,16 +344,17 @@ export const buildGeofenceVertexMarkerHtml = (index, isSelected = false) => {
   const glow = isSelected
     ? "0 0 0 3px rgba(53, 224, 255, 0.45), 0 0 16px #35E0FF, 0 0 24px rgba(53, 224, 255, 0.6)"
     : "0 0 6px rgba(6, 182, 212, 0.6)";
-  const scale = isSelected ? "scale(1.3)" : "scale(1)";
+  const scale = isSelected ? "scale(1.25)" : "scale(1)";
   const zIndex = isSelected ? "999" : "10";
 
   return `
     <div class="geofence-vertex-marker ${isSelected ? "selected-vertex" : ""}" data-index="${index}" style="
+      position: relative;
       width: 22px;
       height: 22px;
       border-radius: 50%;
       background: ${bg};
-      border: 2.5px solid ${borderColor};
+      border: 2px solid ${borderColor};
       box-shadow: ${glow};
       display: flex;
       align-items: center;
@@ -339,7 +365,8 @@ export const buildGeofenceVertexMarkerHtml = (index, isSelected = false) => {
       color: #030712;
       cursor: pointer;
       user-select: none;
-      transform: translate(-50%, -50%) ${scale};
+      transform-origin: 50% 50%;
+      transform: ${scale};
       z-index: ${zIndex};
       transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
     ">

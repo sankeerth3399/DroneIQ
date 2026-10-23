@@ -57,15 +57,15 @@ const Routing = () => {
         <Route path="/mission" element={<Navigate to="/missions" replace />} />
         <Route path="/missions/details" element={<MissionDetailsPage />} />
 
-        {/* Dedicated Geofence Management Routes */}
-        <Route path="/geofence" element={<GeofencePage />} />
-        <Route path="/missions/geofence" element={<GeofencePage />} />
+        {/* Dedicated Geofence Routes -> Redirects into Mission Planning Safety (Subsection 1) */}
+        <Route path="/geofence" element={<Navigate to="/mission-planning" state={{ step: 4, subSection: "geofence" }} replace />} />
+        <Route path="/missions/geofence" element={<Navigate to="/mission-planning" state={{ step: 4, subSection: "geofence" }} replace />} />
 
-        {/* Dedicated Waypoint Planning Routes */}
-        <Route path="/waypoint-planning" element={<WaypointPlanningPage />} />
-        <Route path="/missions/waypoints" element={<WaypointPlanningPage />} />
-        <Route path="/waypts" element={<Navigate to="/missions/waypoints" replace />} />
-        <Route path="/waypoints" element={<Navigate to="/missions/waypoints" replace />} />
+        {/* Dedicated Waypoint Planning Routes -> Redirects into Mission Planning Safety (Subsection 2) */}
+        <Route path="/waypoint-planning" element={<Navigate to="/mission-planning" state={{ step: 4, subSection: "waypoints" }} replace />} />
+        <Route path="/missions/waypoints" element={<Navigate to="/mission-planning" state={{ step: 4, subSection: "waypoints" }} replace />} />
+        <Route path="/waypts" element={<Navigate to="/mission-planning" state={{ step: 4, subSection: "waypoints" }} replace />} />
+        <Route path="/waypoints" element={<Navigate to="/mission-planning" state={{ step: 4, subSection: "waypoints" }} replace />} />
 
         {/* Live Operations & Cockpit */}
         <Route path="/live-operations" element={<LiveOperationsPage />} />

@@ -14,7 +14,12 @@ import {
   getUnderlyingMap,
   enforceMapLayerOrder,
 } from "./satelliteLayerHelper.js";
-import { buildDroneMarkerHtml, updateDroneMarkerDom } from "./droneMarkerHelper.js";
+import {
+  buildDroneMarkerHtml,
+  updateDroneMarkerDom,
+  buildSimulatedDroneMarkerHtml,
+  updateSimulatedDroneMarkerDom,
+} from "./droneMarkerHelper.js";
 import { buildWaypointMarkerHtml } from "./waypointMarkerHelper.js";
 import {
   syncGeofenceLayers,
@@ -28,9 +33,15 @@ import {
   syncMissionRoute,
   syncDirectionMarkers,
   removeRouteLayers,
+  syncCompletedRoute,
 } from "./routeLayerHelper.js";
+import {
+  syncAirspaceLayer,
+  removeAirspaceLayer,
+} from "./airspaceLayerHelper.js";
 import { useMission } from "@/hooks/useMission.js";
 import { isPointInsideGeofence } from "@/utils/geofence.js";
+import MapControls from "./MapControls.jsx";
 
 const normalizeLongitude = (lng) => {
   if (typeof lng !== "number" || isNaN(lng)) return FALLBACK_DRONE_LOCATION.longitude;
@@ -41,6 +52,8 @@ const normalizeLongitude = (lng) => {
 
 const MapContainer = ({
   mapStyle = "normal",
+  onMapStyleChange,
+  showStyleToggle,
   telemetry: propTelemetry,
   showDrones = true,
   waypoints = [],
@@ -69,11 +82,20 @@ const MapContainer = ({
   initialCenter: propInitialCenter = null,
   initialZoom: propInitialZoom = null,
   onDroneSelect,
+  simulatedDrone = null,
+  followSimulatedDrone = false,
+  completedCoordinates = [],
+  activeSimWaypointId = null,
+  showAirspace = false,
+  onAirspaceStatusChange = null,
+  showControls = true,
+  controlsPosition = "top-right",
 }) => {
   const { currentProjectId, currentProject } = useMission();
   const mapRef = useRef(null);
   const containerRef = useRef(null);
   const markerRef = useRef(null);
+  const simMarkerRef = useRef(null);
   const fleetMarkersRef = useRef(new Map());
   const onDroneSelectRef = useRef(onDroneSelect);
   const markerRotatorRef = useRef(null);
@@ -83,8 +105,31 @@ const MapContainer = ({
   const mapId = `mappls-map-${autoId.replace(/[^a-zA-Z0-9_-]/g, "")}`;
   const markerScalerRef = useRef(null);
   const polylineRef = useRef(null);
+  const mapStyleRef = useRef(mapStyle);
+  const [internalMapStyle, setInternalMapStyle] = useState(mapStyle);
+
+  useEffect(() => {
+    setInternalMapStyle(mapStyle);
+  }, [mapStyle]);
+
+  const activeMapStyle = mapStyle || internalMapStyle;
+  mapStyleRef.current = activeMapStyle;
+
+  const handleMapStyleSwitch = useCallback((newStyle) => {
+    setInternalMapStyle(newStyle);
+    mapStyleRef.current = newStyle;
+    applyMapStyle(mapRef.current, newStyle, polylineRef);
+    if (typeof onMapStyleChange === "function") {
+      onMapStyleChange(newStyle);
+    }
+  }, [onMapStyleChange]);
+
   const [sdkAvailable, setSdkAvailable] = useState(() => typeof window !== "undefined" && Boolean(window.mappls));
   const [mapReady, setMapReady] = useState(false);
+  const [scrollZoomEnabled, setScrollZoomEnabled] = useState(false);
+  const scrollZoomEnabledRef = useRef(false);
+  scrollZoomEnabledRef.current = scrollZoomEnabled;
+  const [radarScale, setRadarScale] = useState(1.0);
 
   const effectivePageType = useMemo(() => {
     if (pageType) return String(pageType).toLowerCase().trim();
@@ -166,8 +211,6 @@ const MapContainer = ({
     ? Number(telemetry.longitude)
     : FALLBACK_DRONE_LOCATION.longitude;
   const heading = typeof telemetry?.heading === "number" ? telemetry.heading : 0;
-
-  const mapStyleRef = useRef(mapStyle);
 
   // Smoothing refs
   const currentPosRef = useRef({ lat: activeLat, lng: activeLng });
@@ -334,7 +377,6 @@ const MapContainer = ({
       // The camera remains undisturbed where the user had it. DO NOT fly to [20, 0]!
       if (prevSource === PositionSource.LIVE || hasHadFirstFixRef.current) {
         hasHadFirstFixRef.current = false;
-        userHasPannedRef.current = false;
 
         // Clear polyline trail
         if (polylineRef.current) {
@@ -408,6 +450,93 @@ const MapContainer = ({
     bindDashboardDroneSelect,
     effectivePageType,
     hasLiveDroneLocation,
+  ]);
+
+  // Synchronize Simulation Drone Marker and Completed Route Layer (Section 3 & 5: Completely separate from real drone)
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !window.mappls) return;
+
+    const isSimActive = Boolean(
+      simulatedDrone?.active &&
+      typeof simulatedDrone.lat === "number" &&
+      typeof simulatedDrone.lng === "number" &&
+      !isNaN(simulatedDrone.lat) &&
+      !isNaN(simulatedDrone.lng)
+    );
+
+    if (isSimActive) {
+      const simLat = simulatedDrone.lat;
+      const simLng = simulatedDrone.lng;
+      const simHeading = typeof simulatedDrone.heading === "number" ? simulatedDrone.heading : 0;
+      const simAlt = typeof simulatedDrone.altitude === "number" ? simulatedDrone.altitude : 50;
+      const simLabel = simulatedDrone.label || "SIMULATION";
+
+      if (!simMarkerRef.current && typeof window.mappls.Marker === "function") {
+        try {
+          simMarkerRef.current = new window.mappls.Marker({
+            map,
+            position: { lat: simLat, lng: simLng },
+            html: buildSimulatedDroneMarkerHtml(simHeading, simAlt, simLabel),
+          });
+        } catch (err) {
+          console.debug("[MapContainer] Sim marker creation note:", err.message);
+        }
+      } else if (simMarkerRef.current) {
+        try {
+          if (typeof simMarkerRef.current.setPosition === "function") {
+            simMarkerRef.current.setPosition({ lat: simLat, lng: simLng });
+          } else if (typeof simMarkerRef.current.setLngLat === "function") {
+            simMarkerRef.current.setLngLat([simLng, simLat]);
+          }
+          updateSimulatedDroneMarkerDom(
+            simMarkerRef.current.getElement?.(),
+            simHeading,
+            simAlt,
+            simLabel
+          );
+          if (simMarkerRef.current.getElement?.()) {
+            simMarkerRef.current.getElement().style.display = "block";
+          }
+        } catch {
+          // Safe ignore
+        }
+      }
+
+      // Smoothly follow simulated drone if enabled
+      if (followSimulatedDrone) {
+        try {
+          if (typeof map.panTo === "function") {
+            map.panTo({ lat: simLat, lng: simLng });
+          } else if (typeof map.setCenter === "function") {
+            map.setCenter({ lat: simLat, lng: simLng });
+          }
+        } catch {
+          // Safe ignore
+        }
+      }
+    } else {
+      if (simMarkerRef.current) {
+        try {
+          simMarkerRef.current.remove?.();
+        } catch {
+          // Safe ignore
+        }
+        simMarkerRef.current = null;
+      }
+    }
+
+    // Synchronize completed simulation route polyline
+    syncCompletedRoute(map, isSimActive ? (completedCoordinates || []) : []);
+  }, [
+    simulatedDrone?.lat,
+    simulatedDrone?.lng,
+    simulatedDrone?.heading,
+    simulatedDrone?.altitude,
+    simulatedDrone?.active,
+    simulatedDrone?.label,
+    followSimulatedDrone,
+    completedCoordinates,
   ]);
 
   useEffect(() => {
@@ -515,6 +644,14 @@ const MapContainer = ({
       marker?.remove?.();
     }
     fleetMarkersRef.current.clear();
+    if (simMarkerRef.current) {
+      try {
+        simMarkerRef.current.remove?.();
+      } catch {
+        // Safe ignore
+      }
+      simMarkerRef.current = null;
+    }
   }, []);
 
   // Synchronize showDrones visibility with active marker and fleet markers
@@ -538,17 +675,56 @@ const MapContainer = ({
   }, [droneCallsign, heading, activeMarkerOptions]);
 
   useEffect(() => {
-    mapStyleRef.current = mapStyle;
-    applyMapStyle(mapRef.current, mapStyle, polylineRef);
-  }, [mapStyle]);
+    mapStyleRef.current = activeMapStyle;
+    applyMapStyle(mapRef.current, activeMapStyle, polylineRef);
+  }, [activeMapStyle]);
 
   // Mission Planning Waypoint Refs & Dynamic Synchronization
   const geofenceCoords = useMemo(() => {
-    if (Array.isArray(geofence)) return geofence;
-    if (Array.isArray(geofence?.vertices)) return geofence.vertices;
-    if (Array.isArray(geofence?.polygon)) return geofence.polygon;
-    if (Array.isArray(geofence?.coordinates)) return geofence.coordinates;
-    return [];
+    let raw = [];
+    if (Array.isArray(geofence)) raw = geofence;
+    else if (Array.isArray(geofence?.vertices)) raw = geofence.vertices;
+    else if (Array.isArray(geofence?.polygon)) raw = geofence.polygon;
+    else if (Array.isArray(geofence?.coordinates)) raw = geofence.coordinates;
+
+    if (!Array.isArray(raw)) return [];
+
+    return raw
+      .map((pt, idx) => {
+        let lat = 0;
+        let lng = 0;
+        if (Array.isArray(pt) && pt.length >= 2) {
+          const v0 = Number(pt[0]);
+          const v1 = Number(pt[1]);
+          if (isNaN(v0) || isNaN(v1)) return null;
+          if (Math.abs(v0) > Math.abs(v1)) {
+            lng = v0;
+            lat = v1;
+          } else {
+            lat = v0;
+            lng = v1;
+          }
+        } else if (pt && typeof pt === "object") {
+          const rawLat = pt.lat ?? pt.latitude;
+          const rawLng = pt.lng ?? pt.longitude;
+          lat = typeof rawLat === "number" ? rawLat : Number(rawLat);
+          lng = typeof rawLng === "number" ? rawLng : Number(rawLng);
+          if (isNaN(lat) || isNaN(lng)) return null;
+        } else {
+          return null;
+        }
+
+        const id = pt?.id || `vertex-${idx + 1}`;
+        return {
+          ...(typeof pt === "object" && !Array.isArray(pt) ? pt : {}),
+          id,
+          lat: Number(lat.toFixed(6)),
+          lng: Number(lng.toFixed(6)),
+          latitude: Number(lat.toFixed(6)),
+          longitude: Number(lng.toFixed(6)),
+        };
+      })
+      .filter(Boolean);
   }, [geofence]);
 
   const waypointMarkersRef = useRef(new Map());
@@ -578,6 +754,175 @@ const MapContainer = ({
   const onWaypointSelectRef = useRef(onWaypointSelect);
   const onWaypointDragRef = useRef(onWaypointDrag);
   const onWaypointDragEndRef = useRef(onWaypointDragEnd);
+
+  // Toggle Scroll-to-Zoom Handler
+  const handleToggleScrollZoom = useCallback(() => {
+    setScrollZoomEnabled((prev) => !prev);
+  }, []);
+
+  // Zoom In Handler (clamped to max zoom 19, decouples auto-centering)
+  const handleZoomIn = useCallback(() => {
+    userHasPannedRef.current = true;
+    const map = mapRef.current;
+    const under = getUnderlyingMap(map);
+    if (under) {
+      const currentZoom = typeof under.getZoom === "function" ? under.getZoom() : (map?.getZoom?.() || 15);
+      const targetZoom = Math.min(19, Math.round(currentZoom + 1));
+      if (typeof under.zoomTo === "function") {
+        under.zoomTo(targetZoom, { duration: 250 });
+      } else if (typeof under.setZoom === "function") {
+        under.setZoom(targetZoom);
+      }
+    } else if (map && typeof map.setZoom === "function") {
+      const currentZoom = typeof map.getZoom === "function" ? map.getZoom() : 15;
+      map.setZoom(Math.min(19, Math.round(currentZoom + 1)));
+    } else {
+      setRadarScale((prev) => Math.min(3.0, prev * 1.25));
+    }
+  }, []);
+
+  // Zoom Out Handler (clamped to min 4 to prevent resetting to world view)
+  const handleZoomOut = useCallback(() => {
+    userHasPannedRef.current = true;
+    const map = mapRef.current;
+    const under = getUnderlyingMap(map);
+    if (under) {
+      const currentZoom = typeof under.getZoom === "function" ? under.getZoom() : (map?.getZoom?.() || 15);
+      const targetZoom = Math.max(4, Math.round(currentZoom - 1));
+      if (typeof under.zoomTo === "function") {
+        under.zoomTo(targetZoom, { duration: 250 });
+      } else if (typeof under.setZoom === "function") {
+        under.setZoom(targetZoom);
+      }
+    } else if (map && typeof map.setZoom === "function") {
+      const currentZoom = typeof map.getZoom === "function" ? map.getZoom() : 15;
+      map.setZoom(Math.max(4, Math.round(currentZoom - 1)));
+    } else {
+      setRadarScale((prev) => Math.max(0.6, prev / 1.25));
+    }
+  }, []);
+
+  // Reset View / Fit Mission Handler
+  const handleResetView = useCallback(() => {
+    userHasPannedRef.current = false;
+    setRadarScale(1.0);
+    const { center, zoom } = resolveInitialMapState({
+      pageType: effectivePageType,
+      hasLiveDroneLocation,
+      activeLat,
+      activeLng,
+      geofenceCoords,
+      waypoints,
+      customCenter: propInitialCenter,
+      customZoom: propInitialZoom,
+    });
+    const lat = Number(center[0] ?? center.lat ?? FALLBACK_DRONE_LOCATION.latitude);
+    const lng = Number(center[1] ?? center.lng ?? FALLBACK_DRONE_LOCATION.longitude);
+
+    const map = mapRef.current;
+    const under = getUnderlyingMap(map);
+    if (under) {
+      if (typeof under.flyTo === "function") {
+        under.flyTo({ center: [lng, lat], zoom, duration: 600 });
+      } else if (typeof under.setCenter === "function" && typeof under.setZoom === "function") {
+        under.setCenter([lng, lat]);
+        under.setZoom(zoom);
+      }
+    } else if (map) {
+      if (typeof map.setCenter === "function") {
+        map.setCenter({ lat, lng });
+      }
+      if (typeof map.setZoom === "function") {
+        map.setZoom(zoom);
+      }
+    }
+  }, [
+    effectivePageType,
+    hasLiveDroneLocation,
+    activeLat,
+    activeLng,
+    geofenceCoords,
+    waypoints,
+    propInitialCenter,
+    propInitialZoom,
+  ]);
+
+  // Synchronize scroll-to-zoom setting with Mappls / MapLibre map instance
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const under = getUnderlyingMap(map);
+
+    if (scrollZoomEnabled) {
+      if (typeof under?.scrollZoom?.enable === "function") under.scrollZoom.enable();
+      if (typeof map.scrollZoom?.enable === "function") map.scrollZoom.enable();
+    } else {
+      if (typeof under?.scrollZoom?.disable === "function") under.scrollZoom.disable();
+      if (typeof map.scrollZoom?.disable === "function") map.scrollZoom.disable();
+    }
+  }, [scrollZoomEnabled, mapReady]);
+
+  // Non-intrusive Wheel Handler (Ctrl+Wheel zooms map, normal wheel scrolls webpage) & ResizeObserver
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleWheel = (e) => {
+      // If Scroll to Zoom is disabled (the default safe mode):
+      if (!scrollZoomEnabledRef.current) {
+        if (e.ctrlKey || e.metaKey) {
+          // Explicit Ctrl + Wheel: smoothly zoom the map under the pointer without enabling permanent scroll-to-zoom
+          e.preventDefault();
+          e.stopPropagation();
+          const map = mapRef.current;
+          const under = getUnderlyingMap(map);
+          if (under) {
+            const currentZoom = typeof under.getZoom === "function" ? under.getZoom() : 15;
+            const delta = e.deltaY < 0 ? 0.5 : -0.5;
+            const targetZoom = Math.max(4, Math.min(19, currentZoom + delta));
+            if (typeof under.zoomTo === "function") {
+              under.zoomTo(targetZoom, { duration: 100 });
+            } else if (typeof under.setZoom === "function") {
+              under.setZoom(targetZoom);
+            }
+          } else {
+            setRadarScale((prev) => Math.max(0.6, Math.min(3.0, prev + (e.deltaY < 0 ? 0.15 : -0.15))));
+          }
+        }
+        // When Ctrl is NOT pressed: DO NOT preventDefault or stopPropagation!
+        // Allow the event to bubble naturally so the webpage scrolls smoothly without map zoom interference!
+      } else {
+        // When Scroll to Zoom IS enabled:
+        // Prevent simultaneous page scroll jumping while zooming the map
+        e.stopPropagation();
+      }
+    };
+
+    container.addEventListener("wheel", handleWheel, { passive: false });
+
+    // Dimension resize observer to keep map canvas updated without resetting camera
+    let ro = null;
+    if (typeof ResizeObserver !== "undefined") {
+      ro = new ResizeObserver(() => {
+        const map = mapRef.current;
+        if (map) {
+          try {
+            map.resize?.();
+            const under = getUnderlyingMap(map);
+            if (under && under !== map) under.resize?.();
+          } catch {
+            // Safe ignore
+          }
+        }
+      });
+      ro.observe(container);
+    }
+
+    return () => {
+      container.removeEventListener("wheel", handleWheel);
+      if (ro) ro.disconnect();
+    };
+  }, []);
 
   // Geofence Dynamic Synchronization Refs
   const geofenceMarkersRef = useRef(new Map());
@@ -982,16 +1327,17 @@ const MapContainer = ({
               const glow = isSelected
                 ? "0 0 0 3px rgba(53, 224, 255, 0.45), 0 0 16px #35E0FF, 0 0 24px rgba(53, 224, 255, 0.6)"
                 : "0 0 6px rgba(6, 182, 212, 0.6)";
-              const scale = isSelected ? "scale(1.3)" : "scale(1)";
+              const scale = isSelected ? "scale(1.25)" : "scale(1)";
               const zIndex = isSelected ? "999" : "10";
 
               el.innerHTML = `
                 <div class="geofence-vertex-marker ${isSelected ? "selected-vertex" : ""}" data-index="${idx}" style="
+                  position: relative;
                   width: 22px;
                   height: 22px;
                   border-radius: 50%;
                   background: ${bg};
-                  border: 2.5px solid ${borderColor};
+                  border: 2px solid ${borderColor};
                   box-shadow: ${glow};
                   display: flex;
                   align-items: center;
@@ -1002,7 +1348,8 @@ const MapContainer = ({
                   color: #030712;
                   cursor: pointer;
                   user-select: none;
-                  transform: translate(-50%, -50%) ${scale};
+                  transform-origin: 50% 50%;
+                  transform: ${scale};
                   z-index: ${zIndex};
                   transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
                 ">
@@ -1122,6 +1469,19 @@ const MapContainer = ({
     syncCurrentMissionRoute(map, waypoints);
   }, [waypoints, selectedWaypointId, showMissionRoute, mapStyle, mapReady]);
 
+  // Synchronize Official Mappls Airspace / No-Fly Zone Plugin
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+
+    syncAirspaceLayer(map, {
+      visible: Boolean(showAirspace),
+      onStatusChange: (statusInfo) => {
+        onAirspaceStatusChange?.(statusInfo);
+      },
+    });
+  }, [showAirspace, mapReady, onAirspaceStatusChange]);
+
   // Initialize Mappls Map with async SDK readiness polling & unique element ID
   useEffect(() => {
     let cancelled = false;
@@ -1194,11 +1554,20 @@ const MapContainer = ({
           fullscreenControl: false,
           zoomControl: false,
           rotateControl: false,
-          scrollZoom: true,
+          scrollZoom: false, // Default: DISABLED so normal wheel scrolling navigates page
           doubleClickZoom: true,
           touchZoomRotate: true,
           dragPan: true,
         });
+
+        // Ensure scrollZoom is disabled initially on both Mappls and underlying MapLibre
+        if (typeof map.scrollZoom?.disable === "function") {
+          map.scrollZoom.disable();
+        }
+        const initialUnderlying = getUnderlyingMap(map);
+        if (initialUnderlying && typeof initialUnderlying.scrollZoom?.disable === "function") {
+          initialUnderlying.scrollZoom.disable();
+        }
 
         // Ensure renderWorldCopies is strictly disabled on the underlying Mapbox/MapLibre instance
         if (typeof map.setRenderWorldCopies === "function") {
@@ -1275,8 +1644,11 @@ const MapContainer = ({
           syncCurrentWaypointMarkers(map);
           enforceMapLayerOrder(map);
 
-          // Track user map pan/drag to decouple camera centering from live marker updates
+          // Track user map pan/drag and manual zoom to decouple camera centering from live marker updates
           map.on("dragstart", () => {
+            userHasPannedRef.current = true;
+          });
+          map.on("zoomstart", () => {
             userHasPannedRef.current = true;
           });
 
@@ -1299,9 +1671,6 @@ const MapContainer = ({
             }
           };
           map.on("zoom", handleZoom);
-          map.on("zoomend", () => {
-            map.resize?.();
-          });
 
           // Initialize custom top-down drone marker (Live GPS or Hyderabad Fallback)
           if (
@@ -1423,6 +1792,7 @@ const MapContainer = ({
         }
         removeRouteLayers(mapRef.current, directionMarkersRef);
         removeGeofenceLayers(mapRef.current);
+        removeAirspaceLayer(mapRef.current);
         geofenceInsertionMarkerRef.current?.remove?.();
         geofenceInsertionMarkerRef.current = null;
 
@@ -1477,6 +1847,12 @@ const MapContainer = ({
         } catch {
           // Safe ignore
         }
+        try {
+          const underlying = getUnderlyingMap(mapRef.current);
+          underlying?.resize?.();
+        } catch {
+          // Safe ignore
+        }
       }
     };
 
@@ -1499,14 +1875,33 @@ const MapContainer = ({
     };
   }, [mapId]);
 
-  // Smooth project change camera transition
+  // Smooth project change and initial mission geometry camera transition
   const lastCenterProjectRef = useRef(null);
+  const hasFramedMissionRef = useRef(false);
+
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !mapReady || !currentProjectId) return;
+    if (!map || !mapReady) return;
 
-    if (lastCenterProjectRef.current !== currentProjectId) {
+    const hasMissionGeometry =
+      (Array.isArray(waypoints) && waypoints.length > 0) ||
+      (Array.isArray(geofenceCoords) && geofenceCoords.length > 0);
+
+    const projectChanged = Boolean(currentProjectId && lastCenterProjectRef.current !== currentProjectId);
+    const shouldInitialFrameMission =
+      hasMissionGeometry && !hasFramedMissionRef.current && !userHasPannedRef.current;
+
+    if (projectChanged) {
       lastCenterProjectRef.current = currentProjectId;
+      hasFramedMissionRef.current = false;
+      userHasPannedRef.current = false;
+    }
+
+    if (projectChanged || shouldInitialFrameMission) {
+      if (hasMissionGeometry) {
+        hasFramedMissionRef.current = true;
+      }
+
       const { center, zoom } = resolveInitialMapState({
         pageType: effectivePageType,
         hasLiveDroneLocation,
@@ -1543,10 +1938,6 @@ const MapContainer = ({
     mapReady,
     effectivePageType,
     hasLiveDroneLocation,
-    activeLat,
-    activeLng,
-    geofenceCoords,
-    waypoints,
     propInitialCenter,
     propInitialZoom,
   ]);
@@ -1743,6 +2134,26 @@ const MapContainer = ({
         style={{ width: "100%", height: "100%", position: "relative" }}
       />
 
+      {/* Visible Map Zoom Controls (+ / - / Reset View / Scroll to Zoom Toggle / Map Style Toggle) */}
+      {showControls && (
+        <MapControls
+          mapStyle={activeMapStyle}
+          onMapStyleChange={onMapStyleChange ? handleMapStyleSwitch : (showStyleToggle ? handleMapStyleSwitch : undefined)}
+          showStyleToggle={showStyleToggle !== undefined ? showStyleToggle : Boolean(onMapStyleChange)}
+          onZoomIn={handleZoomIn}
+          onZoomOut={handleZoomOut}
+          onResetView={handleResetView}
+          scrollZoomEnabled={scrollZoomEnabled}
+          onToggleScrollZoom={handleToggleScrollZoom}
+          position={controlsPosition}
+          fitMissionTitle={
+            waypoints.length > 0 || (geofenceCoords && geofenceCoords.length > 0)
+              ? "Fit Mission / Reset View"
+              : "Reset View"
+          }
+        />
+      )}
+
       {/* Fallback Tactical Radar View when Mappls CDN is offline */}
       {!sdkAvailable && (
         (() => {
@@ -1807,7 +2218,10 @@ const MapContainer = ({
               />
 
               {/* Concentric Radar Rings */}
-              <div className="relative flex items-center justify-center w-[360px] h-[360px] rounded-full border border-[#1A3344] opacity-80">
+              <div
+                className="relative flex items-center justify-center w-[360px] h-[360px] rounded-full border border-[#1A3344] opacity-80 transition-transform duration-150 ease-out"
+                style={{ transform: `scale(${radarScale})` }}
+              >
                 <div className="w-[260px] h-[260px] rounded-full border border-[#20445C] opacity-60" />
                 <div className="absolute w-[160px] h-[160px] rounded-full border border-[#35E0FF44] opacity-80" />
                 <div className="absolute w-full h-[1px] bg-[#35E0FF22]" />
@@ -1879,6 +2293,25 @@ const MapContainer = ({
                     </g>
                   )}
 
+                  {/* Completed Simulation Route Path */}
+                  {simulatedDrone?.active && Array.isArray(completedCoordinates) && completedCoordinates.length >= 2 && (
+                    <polyline
+                      points={completedCoordinates
+                        .map((pt) => {
+                          const dLatM = (pt.lat - radarRefLat) * 111139;
+                          const dLngM = (pt.lng - radarRefLng) * (111139 * Math.cos((radarRefLat * Math.PI) / 180));
+                          const x = 180 + dLngM * 0.8;
+                          const y = 180 - dLatM * 0.8;
+                          return `${x},${y}`;
+                        })
+                        .join(" ")}
+                      fill="none"
+                      stroke="#C084FC"
+                      strokeWidth="3.8"
+                      strokeLinecap="round"
+                    />
+                  )}
+
                   {/* Route Violations Segments */}
                   {Array.isArray(routeViolations) &&
                     routeViolations.map((seg, idx) => {
@@ -1913,18 +2346,22 @@ const MapContainer = ({
                     const x = 180 + dLngM * 0.8;
                     const y = 180 - dLatM * 0.8;
                     const isSel = pt.id === selectedWaypointId;
+                    const isSimTarget = pt.id === activeSimWaypointId;
                     const wpNum = pt.seq ?? i + 1;
                     return (
                       <g key={pt.id || i} className="cursor-pointer" onClick={(e) => { e.stopPropagation(); onWaypointSelectRef.current?.(pt.id); }}>
                         {isSel && (
                           <circle cx={x} cy={y} r="8.5" fill="none" stroke="#35E0FF" strokeWidth="1.5" className="animate-ping" opacity="0.75" />
                         )}
+                        {isSimTarget && (
+                          <circle cx={x} cy={y} r="10" fill="none" stroke="#C084FC" strokeWidth="2" className="animate-ping" opacity="0.85" />
+                        )}
                         <circle
                           cx={x}
                           cy={y}
-                          r={isSel ? "5.5" : "4.5"}
+                          r={isSel ? "5.5" : isSimTarget ? "5.5" : "4.5"}
                           fill="#080F18"
-                          stroke={isSel ? "#54E4F1" : "#35E0FF"}
+                          stroke={isSel ? "#54E4F1" : isSimTarget ? "#C084FC" : "#35E0FF"}
                           strokeWidth="1.6"
                         />
                         <text
@@ -2077,6 +2514,66 @@ const MapContainer = ({
                     </div>
                   );
                 })()}
+
+                {/* Tactical Simulated Drone Marker (Fallback Radar) */}
+                {simulatedDrone?.active && typeof simulatedDrone.lat === "number" && typeof simulatedDrone.lng === "number" && (
+                  (() => {
+                    const dLatM = (simulatedDrone.lat - radarRefLat) * 111139;
+                    const dLngM = (simulatedDrone.lng - radarRefLng) * (111139 * Math.cos((radarRefLat * Math.PI) / 180));
+                    const radarX = Math.max(-130, Math.min(130, dLngM * 0.8));
+                    const radarY = Math.max(-130, Math.min(130, -dLatM * 0.8));
+                    const simHdg = simulatedDrone.heading || 0;
+                    const simAlt = simulatedDrone.altitude || 50;
+
+                    return (
+                      <div
+                        className="absolute pointer-events-auto"
+                        style={{
+                          transform: `translate(${radarX}px, ${radarY}px) rotate(${simHdg}deg)`,
+                          transition: "transform 0.08s linear",
+                          zIndex: 60,
+                        }}
+                      >
+                        <svg
+                          width="68"
+                          height="68"
+                          viewBox="0 0 100 100"
+                          fill="none"
+                          style={{ filter: "drop-shadow(0 0 14px #C084FC)" }}
+                        >
+                          <circle cx="50" cy="54" r="38" stroke="#C084FC" strokeWidth="1.2" strokeOpacity="0.35" strokeDasharray="4 4" />
+                          <line x1="50" y1="54" x2="22" y2="76" stroke="#05080C" strokeWidth="5" strokeLinecap="round" />
+                          <line x1="50" y1="54" x2="22" y2="76" stroke="#4C1D95" strokeWidth="2.5" strokeLinecap="round" />
+                          <line x1="50" y1="54" x2="78" y2="76" stroke="#05080C" strokeWidth="5" strokeLinecap="round" />
+                          <line x1="50" y1="54" x2="78" y2="76" stroke="#4C1D95" strokeWidth="2.5" strokeLinecap="round" />
+                          <line x1="50" y1="54" x2="20" y2="40" stroke="#05080C" strokeWidth="5" strokeLinecap="round" />
+                          <line x1="50" y1="54" x2="20" y2="40" stroke="#C084FC" strokeWidth="2.5" strokeLinecap="round" />
+                          <line x1="50" y1="54" x2="80" y2="40" stroke="#05080C" strokeWidth="5" strokeLinecap="round" />
+                          <line x1="50" y1="54" x2="80" y2="40" stroke="#C084FC" strokeWidth="2.5" strokeLinecap="round" />
+                          <circle cx="22" cy="76" r="9.5" fill="#0A0F16" stroke="#4C1D95" strokeWidth="2" />
+                          <circle cx="22" cy="76" r="4" fill="#F472B6" fillOpacity="0.9" />
+                          <circle cx="78" cy="76" r="9.5" fill="#0A0F16" stroke="#4C1D95" strokeWidth="2" />
+                          <circle cx="78" cy="76" r="4" fill="#F472B6" fillOpacity="0.9" />
+                          <circle cx="20" cy="40" r="9.5" fill="#0A0F16" stroke="#C084FC" strokeWidth="2" />
+                          <circle cx="20" cy="40" r="4" fill="#E879F9" />
+                          <circle cx="80" cy="40" r="9.5" fill="#0A0F16" stroke="#C084FC" strokeWidth="2" />
+                          <circle cx="80" cy="40" r="4" fill="#E879F9" />
+                          <rect x="38" y="42" width="24" height="26" rx="6" fill="#0E071A" stroke="#7E22CE" strokeWidth="2" />
+                          <circle cx="50" cy="54" r="4" fill="#C084FC" stroke="#0E071A" strokeWidth="1.2" />
+                          <polygon points="50,3 67,35 50,25 33,35" fill="#04070A" stroke="#04070A" strokeWidth="3.5" strokeLinejoin="round" />
+                          <polygon points="50,5 65,33 50,24 35,33" fill="#C084FC" stroke="#C084FC" strokeWidth="1.2" strokeLinejoin="round" />
+                          <polygon points="50,5 65,33 50,24" fill="#9333EA" fillOpacity="0.5" />
+                          <line x1="50" y1="6" x2="50" y2="24" stroke="#FFFFFF" strokeWidth="1.8" strokeLinecap="round" />
+                        </svg>
+                        <div className="absolute top-[70px] left-1/2 -translate-x-1/2 whitespace-nowrap">
+                          <span className="text-[9.5px] font-mono font-bold text-[#F3E8FF] bg-[#160B24F0] border border-[#C084FC] px-1.5 py-0.5 rounded shadow-[0_2px_8px_rgba(0,0,0,0.8)]">
+                            SIMULATION · {Math.round(simAlt)}m
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })()
+                )}
 
                 {/* Status indicator on Radar */}
                 <div className="absolute bottom-6 left-1/2 -translate-x-1/2 whitespace-nowrap pointer-events-none">

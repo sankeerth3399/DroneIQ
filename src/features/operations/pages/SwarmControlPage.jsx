@@ -19,6 +19,9 @@ import {
   Grid,
   CheckCircle2,
   RefreshCw,
+  Plus,
+  Minus,
+  Crosshair,
 } from "lucide-react";
 
 /**
@@ -32,6 +35,7 @@ const SwarmControlPage = () => {
 
   // Selected formation pattern
   const [formationPattern, setFormationPattern] = useState("grid"); // "grid" | "v_formation" | "line" | "orbit"
+  const [diagramZoom, setDiagramZoom] = useState(1.0);
 
   // Live configurable parameters
   const [params, setParams] = useState({
@@ -270,7 +274,44 @@ const SwarmControlPage = () => {
 
               {/* Interactive SVG Formation Diagram */}
               <div className="relative h-56 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] overflow-hidden flex items-center justify-center">
-                <svg className="w-full h-full max-w-lg" viewBox="0 0 380 150">
+                {/* Visible Diagram Zoom Controls */}
+                <div className="absolute top-2 right-2 z-20 flex items-center gap-1 bg-white/95 border border-[#CBD5E1] rounded-md px-1.5 py-0.5 shadow-xs backdrop-blur-xs">
+                  <button
+                    type="button"
+                    onClick={() => setDiagramZoom((z) => Math.min(2.0, Number((z + 0.2).toFixed(1))))}
+                    className="p-1 text-[#475569] hover:text-[#2563EB] transition cursor-pointer"
+                    title="Zoom In"
+                    aria-label="Zoom In"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                  </button>
+                  <div className="w-[1px] h-3.5 bg-[#E2E8F0]" />
+                  <button
+                    type="button"
+                    onClick={() => setDiagramZoom((z) => Math.max(0.6, Number((z - 0.2).toFixed(1))))}
+                    className="p-1 text-[#475569] hover:text-[#2563EB] transition cursor-pointer"
+                    title="Zoom Out"
+                    aria-label="Zoom Out"
+                  >
+                    <Minus className="w-3.5 h-3.5" />
+                  </button>
+                  <div className="w-[1px] h-3.5 bg-[#E2E8F0]" />
+                  <button
+                    type="button"
+                    onClick={() => setDiagramZoom(1.0)}
+                    className="p-1 text-[#475569] hover:text-[#2563EB] transition cursor-pointer"
+                    title="Reset View"
+                    aria-label="Reset View"
+                  >
+                    <Crosshair className="w-3 h-3" />
+                  </button>
+                </div>
+
+                <svg
+                  className="w-full h-full max-w-lg transition-transform duration-150 ease-out origin-center"
+                  viewBox="0 0 380 150"
+                  style={{ transform: `scale(${diagramZoom})` }}
+                >
                   {/* Outer safety boundary perimeter */}
                   <ellipse
                     cx="190"

@@ -7,10 +7,21 @@ import { calculateDistance } from "./distance.js";
  */
 export function normalizeCoord(pt) {
   if (!pt) return null;
-  const lat = typeof pt.lat === "number" ? pt.lat : typeof pt.latitude === "number" ? pt.latitude : null;
-  const lng = typeof pt.lng === "number" ? pt.lng : typeof pt.longitude === "number" ? pt.longitude : null;
-  if (lat === null || lng === null || isNaN(lat) || isNaN(lng)) return null;
-  return { lat, lng };
+  if (Array.isArray(pt) && pt.length >= 2) {
+    const v0 = Number(pt[0]);
+    const v1 = Number(pt[1]);
+    if (isNaN(v0) || isNaN(v1)) return null;
+    if (Math.abs(v0) > Math.abs(v1)) {
+      return { lng: Number(v0.toFixed(6)), lat: Number(v1.toFixed(6)) };
+    }
+    return { lat: Number(v0.toFixed(6)), lng: Number(v1.toFixed(6)) };
+  }
+  const rawLat = pt.lat ?? pt.latitude;
+  const rawLng = pt.lng ?? pt.longitude;
+  const lat = typeof rawLat === "number" ? rawLat : Number(rawLat);
+  const lng = typeof rawLng === "number" ? rawLng : Number(rawLng);
+  if (isNaN(lat) || isNaN(lng) || lat === null || lng === null) return null;
+  return { lat: Number(lat.toFixed(6)), lng: Number(lng.toFixed(6)) };
 }
 
 /**

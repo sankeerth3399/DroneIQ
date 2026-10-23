@@ -230,21 +230,21 @@ const MetricCard = ({ metric, overview }) => {
   const detail = typeof raw === "object" ? firstValue(raw, ["detail", "subtitle", "changeLabel", "comparisonLabel"]) : null
   const value = formatMetric(raw, metric.id)
   const toneClasses = {
-    blue: "bg-[#1768D2]",
+    blue: "bg-[#1B68D2]",
     purple: "bg-[#6952D9]",
-    green: "bg-[#138B32]",
-    navy: "bg-[#173A78]",
-    orange: "bg-[#F0642D]",
+    green: "bg-[#16A34A]",
+    navy: "bg-[#0F284E]",
+    orange: "bg-[#EA580C]",
   }
   return (
-    <article className="analytics-card flex min-h-[86px] min-w-0 items-center gap-3 px-3.5 py-3.5 sm:gap-3.5 sm:px-4">
-      <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-[7px] text-white shadow-sm sm:h-12 sm:w-12 ${toneClasses[metric.tone]}`}>
-        <Icon className="h-5 w-5 sm:h-[22px] sm:w-[22px]" />
+    <article className="analytics-card flex min-h-[92px] min-w-0 items-center gap-3.5 px-4 py-3.5 sm:gap-4 sm:px-4.5 transition hover:border-[#94A3B8]">
+      <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-white shadow-xs sm:h-12 sm:w-12 ${toneClasses[metric.tone]}`}>
+        <Icon className="h-5 w-5 sm:h-6 sm:w-6" />
       </span>
-      <div className="min-w-0">
-        <p className="truncate text-[11px] font-semibold text-[#5D7289]">{metric.label}</p>
-        <p className="mt-0.5 truncate text-[22px] font-bold leading-6 text-[#132F54] sm:text-[24px]">{value}</p>
-        <p className="mt-1 truncate text-[10px] text-[#718197]">{change !== null ? `↑ ${change}% ${detail || "vs. previous period"}` : detail || (raw !== null ? "Period total" : "No comparison reported")}</p>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-[12.5px] font-bold text-[#475569]">{metric.label}</p>
+        <p className="mt-0.5 truncate text-[26px] font-extrabold leading-none text-[#0F284E] sm:text-[28px]">{value}</p>
+        <p className="mt-1.5 truncate text-[12px] font-medium text-[#64748B]">{change !== null ? `↑ ${change}% ${detail || "vs. previous period"}` : detail || (raw !== null ? "Period total" : "No comparison reported")}</p>
       </div>
     </article>
   )
@@ -252,9 +252,9 @@ const MetricCard = ({ metric, overview }) => {
 
 const AnalyticsCard = ({ title, className = "", children, action, onAction }) => (
   <section className={`analytics-card min-w-0 overflow-hidden ${className}`}>
-    <div className="flex min-h-[52px] items-center justify-between gap-2 px-4 pt-2.5 sm:px-5">
-      <h2 className="truncate text-[14px] font-bold text-[#17365F] sm:text-[15px]">{title}</h2>
-      {action && <button type="button" onClick={onAction} className="shrink-0 text-[11px] font-semibold text-[#246FC0] hover:text-[#144E90]">{action}</button>}
+    <div className="flex min-h-[52px] items-center justify-between gap-2 px-4 pt-3 sm:px-5 border-b border-[#E2E8F0] bg-[#FCFDFE]">
+      <h2 className="truncate text-[15px] font-bold text-[#0F284E] sm:text-[16px] tracking-tight">{title}</h2>
+      {action && <button type="button" onClick={onAction} className="shrink-0 text-[13px] font-bold text-[#1B68D2] hover:text-[#124E9D] hover:underline cursor-pointer">{action}</button>}
     </div>
     {children}
   </section>
@@ -514,15 +514,15 @@ export const AnalyticsOverview = ({ onOpenDashboard }) => {
       <div className="mx-auto flex w-full max-w-[1780px] flex-col gap-4">
         <header className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
           <div className="min-w-0">
-            <h1 className="text-[27px] font-bold leading-[1.15] text-[#17365F] sm:text-[30px]">Data &amp; Analytics</h1>
-            <p className="mt-1.5 text-[13px] leading-5 text-[#536B85] sm:text-[14px]">What the fleet flew, what it captured and what it found, across every use case.</p>
+            <h1 className="text-[26px] sm:text-[28px] lg:text-[30px] font-bold leading-tight text-[#0F284E] tracking-tight">Data &amp; Analytics</h1>
+            <p className="mt-1 text-[13px] sm:text-[14px] leading-5 text-[#334155] font-medium">What the fleet flew, what it captured and what it found, across every use case.</p>
           </div>
-          <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
-            {isDemoData && <span className="rounded-[4px] border border-[#E8D5AE] bg-[#FFF8EA] px-2.5 py-1.5 text-[10px] font-semibold text-[#8B641E]">DEMO DATA · BACKEND UNAVAILABLE</span>}
-            {updatedAt && <span className="text-[10px] text-[#7B8DA1]">Updated {updatedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>}
-            <button type="button" onClick={refresh} disabled={isRefreshing} className="flex h-9 w-9 items-center justify-center rounded-[5px] border border-[#D6E0EA] bg-white text-[#54728F] hover:bg-[#F4F8FC] disabled:opacity-50" title="Refresh analytics" aria-label="Refresh analytics"><RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} /></button>
-            <button type="button" onClick={exportOverview} disabled={!overview} className="flex h-9 w-9 items-center justify-center rounded-[5px] border border-[#D6E0EA] bg-white text-[#54728F] hover:bg-[#F4F8FC] disabled:opacity-50" title="Export overview" aria-label="Export analytics overview"><ArrowDownToLine className="h-4 w-4" /></button>
-            <button type="button" onClick={flightsAction} className="hidden h-9 items-center gap-1 rounded-[5px] bg-[#1768D2] px-3 text-[10px] font-semibold text-white hover:bg-[#1157B8] md:inline-flex">Flight details</button>
+          <div className="flex flex-wrap items-center gap-2.5 self-start sm:self-auto">
+            {isDemoData && <span className="rounded-md border border-[#E8D5AE] bg-[#FFF8EA] px-2.5 py-1.5 text-[11px] font-bold text-[#8B641E]">DEMO DATA · BACKEND UNAVAILABLE</span>}
+            {updatedAt && <span className="text-[12px] font-medium text-[#64748B]">Updated {updatedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>}
+            <button type="button" onClick={refresh} disabled={isRefreshing} className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#CBD5E1] bg-white text-[#475569] hover:bg-[#F8FAFC] shadow-2xs transition disabled:opacity-50 cursor-pointer" title="Refresh analytics" aria-label="Refresh analytics"><RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} /></button>
+            <button type="button" onClick={exportOverview} disabled={!overview} className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#CBD5E1] bg-white text-[#475569] hover:bg-[#F8FAFC] shadow-2xs transition disabled:opacity-50 cursor-pointer" title="Export overview" aria-label="Export analytics overview"><ArrowDownToLine className="h-4 w-4" /></button>
+            <button type="button" onClick={flightsAction} className="hidden h-10 items-center gap-1.5 rounded-lg bg-[#1B68D2] px-4 text-[13px] font-bold text-white hover:bg-[#124E9D] shadow-xs transition md:inline-flex cursor-pointer">Flight details</button>
           </div>
         </header>
 

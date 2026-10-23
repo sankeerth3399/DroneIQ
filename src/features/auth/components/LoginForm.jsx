@@ -69,7 +69,7 @@ export const LoginForm = ({ onSuccess, onCancel, showCloseButton = false }) => {
       showAlert({
         type: AlertTypes.SUCCESS,
         title: "Login Successful",
-        message: `Welcome back to DroneIQ GCS, ${identifier}.`,
+        message: `Welcome back to AeroNexus, ${identifier}.`,
         category: AlertCategories.SECURITY,
         key: "AUTH_STATUS",
       })
@@ -242,7 +242,7 @@ export const LoginForm = ({ onSuccess, onCancel, showCloseButton = false }) => {
 
         {/* Non-sensitive Build Identifier Footer */}
         <div className="text-center text-[9px] text-[var(--gcs-text-muted)] font-mono mt-5 pt-3 border-t border-[var(--gcs-border-subtle)] opacity-70 select-none">
-          AeroNexus RBAC v{APP_VERSION} - DroneIQ GCS
+          AeroNexus Platform v{APP_VERSION}
         </div>
       </form>
     </div>

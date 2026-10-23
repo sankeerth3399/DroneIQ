@@ -3,6 +3,70 @@
    ========================================================================== */
 
 :root {
+  /* ==========================================================================
+     AeroNexus Enterprise Aerospace Design Tokens
+     ========================================================================== */
+  
+  /* Backgrounds & Surfaces */
+  --an-bg-canvas: #EEF3F8;
+  --an-bg-surface: #FFFFFF;
+  --an-bg-subtle: #F8FAFC;
+  --an-bg-muted: #F1F5F9;
+  
+  /* Aerospace Navy & Slate Typography Palette */
+  --an-navy-deep: #081B33;
+  --an-navy-heading: #0F284E;
+  --an-slate-text: #1E293B;
+  --an-slate-body: #334155;
+  --an-slate-muted: #64748B;
+  --an-slate-subtle: #94A3B8;
+
+  /* Primary & Accent Colors */
+  --an-primary-blue: #1B68D2;
+  --an-primary-hover: #1557B0;
+  --an-accent-cyan: #0284C7;
+  --an-accent-glow: #35E0FF;
+
+  /* Borders & Dividers */
+  --an-border-subtle: #E2E8F0;
+  --an-border-default: #CBD5E1;
+  --an-border-strong: #94A3B8;
+
+  /* Semantic Status Indicators */
+  --an-status-success: #16A34A;
+  --an-status-success-bg: #DCFCE7;
+  --an-status-success-border: #86EFAC;
+  --an-status-warning: #D97706;
+  --an-status-warning-bg: #FEF3C7;
+  --an-status-warning-border: #FCD34D;
+  --an-status-danger: #DC2626;
+  --an-status-danger-bg: #FEE2E2;
+  --an-status-danger-border: #FCA5A5;
+  --an-status-info: #0284C7;
+  --an-status-info-bg: #E0F2FE;
+  --an-status-info-border: #7DD3FC;
+
+  /* Standardized Typography Scale */
+  --an-font-title: clamp(26px, 2.5vw, 32px);
+  --an-font-section: clamp(18px, 1.8vw, 20px);
+  --an-font-card-title: 16px;
+  --an-font-kpi: clamp(24px, 2.2vw, 30px);
+  --an-font-body: 14px;
+  --an-font-label: 13px;
+  --an-font-support: 12px;
+
+  /* Control Sizing Tokens */
+  --an-btn-h-sm: 32px;
+  --an-btn-h-md: 38px;
+  --an-btn-h-lg: 44px;
+  --an-input-h: 38px;
+  --an-radius-sm: 6px;
+  --an-radius-md: 8px;
+  --an-radius-lg: 12px;
+  --an-shadow-card: 0 1px 3px 0 rgba(15, 40, 78, 0.05), 0 1px 2px -1px rgba(15, 40, 78, 0.05);
+  --an-shadow-elevated: 0 4px 6px -1px rgba(15, 40, 78, 0.07), 0 2px 4px -2px rgba(15, 40, 78, 0.05);
+
+  /* Legacy GCS Design Tokens compatibility */
   --gcs-bg-main: #EEF3F8;
   --gcs-bg-card: #FFFFFF;
   --gcs-bg-input: #F7F9FC;
@@ -15,14 +79,14 @@
   --gcs-text-muted: #64768C;
   --gcs-text-label: #52667D;
   --gcs-text-white: #FFFFFF;
-  --command-navy: #0E2646;
+  --command-navy: #0F284E;
   --command-navy-deep: #081B33;
-  --command-blue: #1E64D4;
-  --command-canvas: #F0F4F9;
+  --command-blue: #1B68D2;
+  --command-canvas: #EEF3F8;
   --command-surface: #FFFFFF;
-  --command-border: #D0DCEB;
-  --command-text: #0E2646;
-  --command-muted: #556980;
+  --command-border: #CBD5E1;
+  --command-text: #0F284E;
+  --command-muted: #475569;
 
   /* Responsive Layout System Tokens */
   --header-height: 56px;
@@ -228,8 +292,23 @@
 
 .command-page [class*="text-[#EEF4F8]"],
 .command-page [class*="text-[#F1F5F9]"],
-.command-page [class~="text-white"] {
+.command-page span[class~="text-white"]:not([class*="bg-"]):not([class*="badge"]),
+.command-page p[class~="text-white"]:not([class*="bg-"]),
+.command-page h1[class~="text-white"],
+.command-page h2[class~="text-white"],
+.command-page h3[class~="text-white"],
+.command-page h4[class~="text-white"],
+.command-page div[class~="text-white"]:not([class*="bg-"]):not([class*="btn"]):not([role="button"]) {
   color: var(--command-text) !important;
+}
+
+/* Ensure buttons, badges, chips and pills with text-white retain crisp white text on colored backgrounds */
+.command-page button[class~="text-white"],
+.command-page [role="button"][class~="text-white"],
+.command-page [class*="bg-"][class~="text-white"],
+.command-page .badge,
+.command-page [class*="badge"] {
+  color: #FFFFFF !important;
 }
 
 .command-page [class*="text-[#8E9EAA]"],
@@ -561,4 +640,63 @@
 .scrollbar-thin::-webkit-scrollbar-thumb:hover {
   background: #35E0FF66;
 }
+
+/* Mission Planning Controls Light Custom Scrollbar */
+.mission-controls-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #94A3B8 #F1F5F9;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  scroll-behavior: smooth;
+}
+
+.mission-controls-scrollbar::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+.mission-controls-scrollbar::-webkit-scrollbar-track {
+  background: #F1F5F9;
+  border-radius: 9999px;
+}
+
+.mission-controls-scrollbar::-webkit-scrollbar-thumb {
+  background: #94A3B8;
+  border-radius: 9999px;
+  border: 1px solid #F1F5F9;
+}
+
+.mission-controls-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #64748B;
+}
+
+.mission-controls-scrollbar::-webkit-scrollbar-thumb:active {
+  background: #475569;
+}
+
+/* Mission Planning Main Page Smooth Vertical Scrollbar */
+.mission-main-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #CBD5E1 #F8FAFC;
+  -webkit-overflow-scrolling: touch;
+}
+
+.mission-main-scrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.mission-main-scrollbar::-webkit-scrollbar-track {
+  background: #F8FAFC;
+}
+
+.mission-main-scrollbar::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 9999px;
+  border: 2px solid #F8FAFC;
+}
+
+.mission-main-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+}
+
 

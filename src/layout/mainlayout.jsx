@@ -18,16 +18,14 @@ const MainLayout = () => {
 
   useEffect(() => {
     const handleResize = () => {
-      const isBelow = window.innerWidth < LAPTOP_BREAKPOINT
+      const w = window.innerWidth
+      const isBelow = w < LAPTOP_BREAKPOINT
       // Only close mobile drawer when transitioning UP to desktop size
       if (!isBelow && wasBelowBreakpoint.current) {
         setMobileOpen(false)
       }
-
-      if (isBelow !== wasBelowBreakpoint.current) {
-        setCollapsed(window.innerWidth < 1280)
-        wasBelowBreakpoint.current = isBelow
-      }
+      wasBelowBreakpoint.current = isBelow
+      setCollapsed(w < 1280)
     }
 
     window.addEventListener("resize", handleResize)
@@ -40,7 +38,7 @@ const MainLayout = () => {
       <FlightToast />
 
       {/* Top Header Bar (Full-width edge-to-edge, 48-56px height) */}
-      <header className="command-topbar shrink-0 bg-[#08182B] border-b border-[#162A44] px-3 sm:px-4 z-30 h-13 sm:h-14 flex items-center">
+      <header className="command-topbar relative shrink-0 bg-[#08182B] border-b border-[#162A44] px-3 sm:px-4 z-40 h-13 sm:h-14 flex items-center">
         <Header
           sidebarCollapsed={collapsed}
           onToggleSidebar={() => setCollapsed((prev) => !prev)}

@@ -221,6 +221,12 @@ export function removeRouteLayers(mapInstance, directionMarkersMapRef) {
   if (!map) return;
 
   try {
+    if (map.getLayer?.(SIM_COMPLETED_ROUTE_LAYER_ID)) {
+      map.removeLayer(SIM_COMPLETED_ROUTE_LAYER_ID);
+    }
+    if (map.getSource?.(SIM_COMPLETED_ROUTE_SOURCE_ID)) {
+      map.removeSource(SIM_COMPLETED_ROUTE_SOURCE_ID);
+    }
     if (map.getLayer?.(ROUTE_LINE_LAYER_ID)) {
       map.removeLayer(ROUTE_LINE_LAYER_ID);
     }
@@ -232,5 +238,77 @@ export function removeRouteLayers(mapInstance, directionMarkersMapRef) {
     }
   } catch (err) {
     console.debug("[routeLayerHelper] Layer removal note:", err.message);
+  }
+}
+
+export const SIM_COMPLETED_ROUTE_SOURCE_ID = "aeronexus-sim-completed-route-source";
+export const SIM_COMPLETED_ROUTE_LAYER_ID = "aeronexus-sim-completed-route-layer";
+
+/**
+ * Synchronizes the completed segment of a simulated flight route on the map
+ */
+export function syncCompletedRoute(mapInstance, completedCoordinates = []) {
+  const map = getUnderlyingMap(mapInstance);
+  if (!map || typeof map.getSource !== "function" || typeof map.addSource !== "function") return;
+
+  const validCoords = (completedCoordinates || []).filter(
+    (c) => c && typeof c.lat === "number" && typeof c.lng === "number" && !isNaN(c.lat) && !isNaN(c.lng)
+  );
+
+  const routeData =
+    validCoords.length >= 2
+      ? {
+          type: "FeatureCollection",
+          features: [
+            {
+              type: "Feature",
+              properties: { routeType: "completed-simulation" },
+              geometry: {
+                type: "LineString",
+                coordinates: validCoords.map((c) => [c.lng, c.lat]),
+              },
+            },
+          ],
+        }
+      : { type: "FeatureCollection", features: [] };
+
+  try {
+    if (routeData.features.length === 0) {
+      if (map.getLayer?.(SIM_COMPLETED_ROUTE_LAYER_ID)) {
+        map.removeLayer(SIM_COMPLETED_ROUTE_LAYER_ID);
+      }
+      if (map.getSource?.(SIM_COMPLETED_ROUTE_SOURCE_ID)) {
+        map.removeSource(SIM_COMPLETED_ROUTE_SOURCE_ID);
+      }
+      return;
+    }
+
+    if (!map.getSource(SIM_COMPLETED_ROUTE_SOURCE_ID)) {
+      map.addSource(SIM_COMPLETED_ROUTE_SOURCE_ID, {
+        type: "geojson",
+        data: routeData,
+      });
+    } else {
+      map.getSource(SIM_COMPLETED_ROUTE_SOURCE_ID).setData(routeData);
+    }
+
+    if (!map.getLayer(SIM_COMPLETED_ROUTE_LAYER_ID) && map.getSource(SIM_COMPLETED_ROUTE_SOURCE_ID)) {
+      map.addLayer({
+        id: SIM_COMPLETED_ROUTE_LAYER_ID,
+        type: "line",
+        source: SIM_COMPLETED_ROUTE_SOURCE_ID,
+        layout: {
+          "line-join": "round",
+          "line-cap": "round",
+        },
+        paint: {
+          "line-color": "#C084FC", // Bright vivid purple/violet for completed flight simulation
+          "line-width": 5.0,
+          "line-opacity": 0.95,
+        },
+      });
+    }
+  } catch (err) {
+    console.debug("[routeLayerHelper] Completed route sync note:", err.message);
   }
 }

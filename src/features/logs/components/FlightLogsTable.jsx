@@ -20,7 +20,7 @@ export const FlightLogsTable = ({
 
       {/* Desktop View: Full Table */}
       <div className="overflow-x-auto">
-        <table className="w-full text-left text-xs font-sans border-collapse">
+        <table className="w-full min-w-[850px] text-left text-xs font-sans border-collapse">
           <thead className="bg-[#F8FAFC] text-[#64748B] border-b border-[#E2E8F0] uppercase text-[11px] font-bold tracking-wider">
             <tr>
               <th className="px-4 py-3.5 w-[140px]">Flight Sortie</th>

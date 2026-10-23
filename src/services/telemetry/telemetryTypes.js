@@ -16,30 +16,29 @@ export const DEFAULT_FLIGHT_MODE = "GUIDED"
 export const DEFAULT_ARMED_STATE = false
 export const DEFAULT_SHOW_JOYSTICKS = false
 
-// Neutral global/world center and maximum practical zoomed-out view for initial load
-export const GLOBAL_DEFAULT_CENTER = {
-  latitude: 20,
-  longitude: 0,
-}
-export const GLOBAL_DEFAULT_ZOOM = 2
-
-export const DEFAULT_MAP_CENTER = [GLOBAL_DEFAULT_CENTER.latitude, GLOBAL_DEFAULT_CENTER.longitude]
-export const DEFAULT_MAP_ZOOM = GLOBAL_DEFAULT_ZOOM
-export const OPERATIONAL_MAP_ZOOM = 15
-export const TELEMETRY_STALE_THRESHOLD_MS = 6000
-
-// Centralized temporary fallback location for development (EASY TO REMOVE LATER)
+// Centralized fallback location for development (Hyderabad operational center)
 export const FALLBACK_DRONE_LOCATION = {
   latitude: 17.385000,
   longitude: 78.486700,
 }
 
-export const FALLBACK_MAP_ZOOM = GLOBAL_DEFAULT_ZOOM
+export const OPERATIONAL_MAP_ZOOM = 15
+export const GLOBAL_DEFAULT_CENTER = {
+  latitude: FALLBACK_DRONE_LOCATION.latitude,
+  longitude: FALLBACK_DRONE_LOCATION.longitude,
+}
+export const GLOBAL_DEFAULT_ZOOM = OPERATIONAL_MAP_ZOOM
+
+export const DEFAULT_MAP_CENTER = [FALLBACK_DRONE_LOCATION.latitude, FALLBACK_DRONE_LOCATION.longitude]
+export const DEFAULT_MAP_ZOOM = OPERATIONAL_MAP_ZOOM
+export const TELEMETRY_STALE_THRESHOLD_MS = 6000
+
+export const FALLBACK_MAP_ZOOM = OPERATIONAL_MAP_ZOOM
 
 export const MAP_CONFIG = {
   fly: {
-    defaultCenter: [GLOBAL_DEFAULT_CENTER.latitude, GLOBAL_DEFAULT_CENTER.longitude],
-    defaultZoom: GLOBAL_DEFAULT_ZOOM,
+    defaultCenter: [FALLBACK_DRONE_LOCATION.latitude, FALLBACK_DRONE_LOCATION.longitude],
+    defaultZoom: OPERATIONAL_MAP_ZOOM,
     operationalZoom: OPERATIONAL_MAP_ZOOM,
   },
   geofence: {

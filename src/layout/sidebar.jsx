@@ -4,8 +4,6 @@ import {
     X,
     ChevronDown,
     FileText,
-    MapPin,
-    ShieldAlert,
     Users as UsersIcon,
     BarChart3,
     AlertTriangle,
@@ -33,8 +31,6 @@ const ALL_TABS = [
     { label: "Command Center", value: "/dashboard", img: Dashboard },
     { label: "Mission Planning", value: "/mission-planning", icon: Compass },
     { label: "Missions", value: "/missions", requiredPermission: Permissions.VIEW_MISSIONS, img: Target },
-    { label: "Geofence", value: "/geofence", icon: ShieldAlert },
-    { label: "Waypoint Planning", value: "/waypoint-planning", icon: MapPin },
     { label: "Fly", value: "/fly", img: Fly },
     { label: "Live Operations", value: "/live-operations", icon: Activity },
     { label: "Remote Pilot", value: "/remote-pilot", icon: Radio },
@@ -76,56 +72,57 @@ const Sidebar = ({ collapsed = false, onToggle, mobileOpen = false, onCloseMobil
                 collapsed ? "lg:w-[72px]" : "lg:w-[200px] xl:w-[220px]"
             }`}
         >
-            <div
-                className={`flex items-center shrink-0 bg-[#0B1F3D] h-14 xl:h-16 px-3 border-b border-[#203D64] ${
-                    collapsed ? "lg:justify-center lg:px-2" : "justify-between"
-                }`}
-            >
-                <div className="flex items-center gap-3 min-w-0">
-                    <AeroLogo className="w-7 h-7 text-[#35E0FF] shrink-0" size={28} />
-                    <h1
-                        className={`text-[17px] xl:text-[18px] text-[#FFFFFF] font-bold tracking-tight truncate ${
-                            collapsed ? "lg:hidden" : "block"
-                        }`}
-                    >
+            {/* Mobile Drawer Header (< lg): Shows AeroNexus Branding & Close Button */}
+            <div className="flex lg:hidden items-center justify-between shrink-0 bg-[#0B1F3D] h-13 px-3 border-b border-[#203D64]">
+                <div className="flex items-center gap-2.5 min-w-0">
+                    <AeroLogo className="w-6 h-6 text-[#35E0FF] shrink-0" size={24} />
+                    <h1 className="text-[16px] text-white font-bold tracking-tight">
                         AeroNexus
                     </h1>
                 </div>
+                <button
+                    type="button"
+                    onClick={onCloseMobile}
+                    className="flex items-center justify-center w-8 h-8 rounded-md text-[#A0AEC0] hover:bg-[#FFFFFF1A] hover:text-white transition cursor-pointer"
+                    aria-label="Close sidebar"
+                >
+                    <X className="w-4 h-4" />
+                </button>
+            </div>
 
-                <div className="flex items-center gap-1">
-                    {/* Close Button on Mobile */}
+            {/* Desktop Sidebar Compact Control Strip (>= lg): No duplicate logo; compact height */}
+            <div
+                className={`hidden lg:flex items-center shrink-0 bg-[#0B1F3D]/80 h-10 border-b border-[#203D64]/60 ${
+                    collapsed ? "justify-center px-1" : "justify-between px-3"
+                }`}
+            >
+                {!collapsed && (
+                    <span className="text-[10px] font-bold tracking-wider uppercase text-[#6B8BAF] select-none">
+                        Navigation
+                    </span>
+                )}
+
+                {onToggle && (
                     <button
                         type="button"
-                        onClick={onCloseMobile}
-                        className="flex lg:hidden items-center justify-center w-9 h-9 rounded-md text-[#A0AEC0] hover:bg-[#FFFFFF1A] hover:text-white transition cursor-pointer"
-                        aria-label="Close sidebar"
+                        onClick={onToggle}
+                        className={`flex items-center justify-center w-7 h-7 rounded-md text-[#CCCCCC] hover:bg-[#FFFFFF0A] hover:text-white transition cursor-pointer ${
+                            collapsed ? "w-8 h-8" : ""
+                        }`}
+                        aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+                        title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
                     >
-                        <X className="w-5 h-5" />
+                        {!collapsed ? (
+                            <div className="w-[18px] h-[18px] rounded-full border border-[#35E0FF] flex items-center justify-center">
+                                <div className="w-[6px] h-[6px] rounded-full bg-[#35E0FF]" />
+                            </div>
+                        ) : (
+                            <div className="w-[18px] h-[18px] rounded-full border border-[#35E0FF4D] flex items-center justify-center hover:border-[#35E0FF]">
+                                <div className="w-[6px] h-[6px] rounded-full bg-[#35E0FF]" />
+                            </div>
+                        )}
                     </button>
-
-                    {/* Desktop Collapse Toggle */}
-                    {onToggle && (
-                        <button
-                            type="button"
-                            onClick={onToggle}
-                            className={`hidden lg:flex items-center justify-center w-8 h-8 rounded-md text-[#CCCCCC] hover:bg-[#FFFFFF0A] hover:text-white transition ${
-                                collapsed ? "w-9 h-9" : ""
-                            }`}
-                            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-                            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-                        >
-                            {!collapsed ? (
-                                <div className="w-[22px] h-[22px] rounded-full border border-[#35E0FF] flex items-center justify-center">
-                                    <div className="w-[8px] h-[8px] rounded-full bg-[#35E0FF]" />
-                                </div>
-                            ) : (
-                                <div className="w-[22px] h-[22px] rounded-full border border-[#35E0FF4D] flex items-center justify-center hover:border-[#35E0FF]">
-                                    <div className="w-[8px] h-[8px] rounded-full bg-[#35E0FF]" />
-                                </div>
-                            )}
-                        </button>
-                    )}
-                </div>
+                )}
             </div>
 
             <nav
@@ -143,19 +140,17 @@ const Sidebar = ({ collapsed = false, onToggle, mobileOpen = false, onCloseMobil
                         (tab.value === "/mission-planning" &&
                             (location.pathname === "/mission-planning" ||
                                 location.pathname === "/missions/planning" ||
-                                location.pathname === "/plan")) ||
+                                location.pathname === "/plan" ||
+                                location.pathname === "/geofence" ||
+                                location.pathname === "/missions/geofence" ||
+                                location.pathname === "/waypoint-planning" ||
+                                location.pathname === "/missions/waypoints" ||
+                                location.pathname === "/waypoints" ||
+                                location.pathname === "/waypts")) ||
                         (tab.value === "/missions" &&
                             (location.pathname === "/missions" ||
                                 location.pathname === "/missions/details" ||
                                 location.pathname === "/mission")) ||
-                        (tab.value === "/geofence" &&
-                            (location.pathname === "/geofence" ||
-                                location.pathname === "/missions/geofence")) ||
-                        (tab.value === "/waypoint-planning" &&
-                            (location.pathname === "/waypoint-planning" ||
-                                location.pathname === "/missions/waypoints" ||
-                                location.pathname === "/waypoints" ||
-                                location.pathname === "/waypts")) ||
                         (tab.value === "/fly" &&
                             (location.pathname === "/fly" ||
                                 location.pathname.startsWith("/fly/"))) ||
@@ -252,7 +247,7 @@ const Sidebar = ({ collapsed = false, onToggle, mobileOpen = false, onCloseMobil
 
             {/* IMMERSIVE AERIAL DRONE LANDSCAPE VISUAL SECTION */}
             {!collapsed && (
-                <div className="relative shrink-0 w-full overflow-hidden select-none mt-auto">
+                <div className="hidden lg:block relative shrink-0 w-full overflow-hidden select-none mt-auto">
                     <div className="relative w-full h-[180px] xl:h-[210px]">
                         {/* Aerial Drone Landscape Photography */}
                         <img

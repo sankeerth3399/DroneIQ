@@ -815,7 +815,7 @@ export const AdministrationPage = ({ initialTab = "users" }) => {
             <div className="pt-2 flex flex-col">
               {/* Users & Roles Overview Table */}
               <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
+                <table className="w-full min-w-[650px] text-left border-collapse">
                   <thead>
                     <tr className="border-b border-[#E2E8F0] text-xs font-bold text-[#64748B] uppercase tracking-wider">
                       <th className="py-3 px-3 w-[220px]">Role</th>
@@ -957,7 +957,7 @@ export const AdministrationPage = ({ initialTab = "users" }) => {
 
                   {/* Users Table */}
                   <div className="overflow-x-auto rounded-xl border border-[#E2E8F0]">
-                    <table className="w-full text-left border-collapse text-xs">
+                    <table className="w-full min-w-[580px] text-left border-collapse text-xs">
                       <thead className="bg-[#F8FAFC] border-b border-[#E2E8F0] text-[#64748B] uppercase font-bold">
                         <tr>
                           <th className="py-2.5 px-3">Operator</th>

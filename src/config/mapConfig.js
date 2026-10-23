@@ -1,25 +1,26 @@
 import {
-  GLOBAL_DEFAULT_CENTER,
-  GLOBAL_DEFAULT_ZOOM,
-  OPERATIONAL_MAP_ZOOM,
   FALLBACK_DRONE_LOCATION,
+  OPERATIONAL_MAP_ZOOM,
 } from "../services/telemetry/telemetryTypes.js";
 
 /**
  * Page-Specific Map Configuration Matrix
- * Isolates zoom levels and default centers so that global zoom-out ONLY applies to the Fly page.
+ * Establishes consistent operational zoom levels (14-16) and prevents automatic global zoom-out
+ * across all DroneIQ pages (Fly, Geofence, Waypoints, Mission Planning, Analytics, Dashboard).
  *
- * Requirements:
- * - Fly Page: Global/world overview (Zoom ~2, Center [20, 0]), with Hyderabad marker visible.
+ * Operational Standards:
+ * - Fly Page: Operational view (Zoom 14-16, Default 15, Center: Mission Geometry -> Live Drone -> Hyderabad fallback).
  * - Create Geofence: Operational editing zoom (Zoom 14-16, Default 15).
  * - Waypoint Planning: Operational editing zoom (Zoom 14-16, Default 15).
+ * - Mission Planning: Operational view (Zoom 14-16, Default 15).
  * - Analytics: Operational overview zoom (Zoom 14).
+ * - Dashboard / Command Center: Operational overview zoom (Zoom 15).
  */
 export const MAP_CONFIG = {
   fly: {
     name: "fly",
-    defaultCenter: [GLOBAL_DEFAULT_CENTER.latitude, GLOBAL_DEFAULT_CENTER.longitude], // [20, 0]
-    defaultZoom: GLOBAL_DEFAULT_ZOOM, // 2 (Global / World View)
+    defaultCenter: [FALLBACK_DRONE_LOCATION.latitude, FALLBACK_DRONE_LOCATION.longitude], // [17.3850, 78.4867]
+    defaultZoom: OPERATIONAL_MAP_ZOOM, // 15
     operationalZoom: OPERATIONAL_MAP_ZOOM, // 15
     followDroneOnLiveFix: true,
   },
@@ -27,7 +28,7 @@ export const MAP_CONFIG = {
   geofence: {
     name: "geofence",
     defaultCenter: [FALLBACK_DRONE_LOCATION.latitude, FALLBACK_DRONE_LOCATION.longitude], // [17.3850, 78.4867]
-    defaultZoom: OPERATIONAL_MAP_ZOOM, // 15 (Practical Operational Editing Zoom: 14-16)
+    defaultZoom: OPERATIONAL_MAP_ZOOM, // 15
     operationalZoom: OPERATIONAL_MAP_ZOOM, // 15
     followDroneOnLiveFix: false,
   },
@@ -35,7 +36,15 @@ export const MAP_CONFIG = {
   waypoints: {
     name: "waypoints",
     defaultCenter: [FALLBACK_DRONE_LOCATION.latitude, FALLBACK_DRONE_LOCATION.longitude], // [17.3850, 78.4867]
-    defaultZoom: OPERATIONAL_MAP_ZOOM, // 15 (Practical Operational Editing Zoom: 14-16)
+    defaultZoom: OPERATIONAL_MAP_ZOOM, // 15
+    operationalZoom: OPERATIONAL_MAP_ZOOM, // 15
+    followDroneOnLiveFix: false,
+  },
+
+  planning: {
+    name: "planning",
+    defaultCenter: [FALLBACK_DRONE_LOCATION.latitude, FALLBACK_DRONE_LOCATION.longitude], // [17.3850, 78.4867]
+    defaultZoom: OPERATIONAL_MAP_ZOOM, // 15
     operationalZoom: OPERATIONAL_MAP_ZOOM, // 15
     followDroneOnLiveFix: false,
   },
@@ -91,9 +100,95 @@ export function getCoordinatesCentroid(
 }
 
 /**
- * Resolves page-aware initial center and zoom
+ * Calculates the bounding box center and fitted operational zoom level for a set of points.
+ * Ensures the map opens at a useful operational zoom level (clamped between 11 and 16, typically 14-15)
+ * without ever zooming out to a global / world view.
+ * @param {Array} points - Array of points ({lat, lng} or [lat, lng])
+ * @param {Array} fallbackCenter - [lat, lng]
+ * @param {number} fallbackZoom - Default zoom level (15)
+ * @returns {{ center: [number, number], zoom: number }}
+ */
+export function getBoundsCenterAndZoom(
+  points,
+  fallbackCenter = [FALLBACK_DRONE_LOCATION.latitude, FALLBACK_DRONE_LOCATION.longitude],
+  fallbackZoom = OPERATIONAL_MAP_ZOOM
+) {
+  if (!Array.isArray(points) || points.length === 0) {
+    return { center: fallbackCenter, zoom: fallbackZoom };
+  }
+
+  let minLat = Infinity;
+  let maxLat = -Infinity;
+  let minLng = Infinity;
+  let maxLng = -Infinity;
+  let validCount = 0;
+
+  for (const pt of points) {
+    const lat = Number(pt?.lat ?? pt?.latitude ?? (Array.isArray(pt) ? pt[0] : null));
+    const lng = Number(pt?.lng ?? pt?.longitude ?? (Array.isArray(pt) ? pt[1] : null));
+    if (
+      Number.isFinite(lat) &&
+      Number.isFinite(lng) &&
+      (Math.abs(lat) > 0.0001 || Math.abs(lng) > 0.0001)
+    ) {
+      if (lat < minLat) minLat = lat;
+      if (lat > maxLat) maxLat = lat;
+      if (lng < minLng) minLng = lng;
+      if (lng > maxLng) maxLng = lng;
+      validCount++;
+    }
+  }
+
+  if (validCount === 0) {
+    return { center: fallbackCenter, zoom: fallbackZoom };
+  }
+
+  const centerLat = Number(((minLat + maxLat) / 2).toFixed(6));
+  const centerLng = Number(((minLng + maxLng) / 2).toFixed(6));
+
+  const dLat = Math.abs(maxLat - minLat);
+  const dLng = Math.abs(maxLng - minLng);
+  const maxSpan = Math.max(dLat, dLng);
+
+  // Determine operational zoom level with appropriate padding:
+  // Tight area (< 350m): zoom 16
+  // Small field (< 1km): zoom 15
+  // Medium operational zone (< 3km): zoom 14
+  // Regional area (< 8km): zoom 13
+  // Extended corridor (< 20km): zoom 12
+  // Large mission bounds: clamp to 11 (never global / world view)
+  let zoom = 15;
+  if (maxSpan < 0.003) {
+    zoom = 16;
+  } else if (maxSpan < 0.01) {
+    zoom = 15;
+  } else if (maxSpan < 0.03) {
+    zoom = 14;
+  } else if (maxSpan < 0.08) {
+    zoom = 13;
+  } else if (maxSpan < 0.2) {
+    zoom = 12;
+  } else {
+    zoom = 11;
+  }
+
+  return {
+    center: [centerLat, centerLng],
+    zoom,
+  };
+}
+
+/**
+ * Resolves page-aware initial center and zoom.
+ * Guarantees that:
+ * 1. Saved mission with geofence / waypoints opens positioned at the operational area (bounding box fit).
+ * 2. Active live drone with valid GPS opens centered on drone at operational zoom (15).
+ * 3. Default fallback uses Hyderabad location at local operational zoom (15).
+ * 4. Never uses browser/IP/device location.
+ * 5. Never defaults to global/world zoom (zoom 2, [20, 0]).
+ *
  * @param {Object} params
- * @param {string} [params.pageType="fly"] - "fly" | "geofence" | "waypoints" | "analytics"
+ * @param {string} [params.pageType="fly"] - "fly" | "geofence" | "waypoints" | "planning" | "analytics" | "dashboard"
  * @param {boolean} [params.hasLiveDroneLocation=false] - true if real drone connected with valid GPS
  * @param {number} [params.activeLat] - active drone latitude
  * @param {number} [params.activeLng] - active drone longitude
@@ -121,72 +216,39 @@ export function resolveInitialMapState({
   const effectivePage = (pageType || "fly").toLowerCase().trim();
   const config = MAP_CONFIG[effectivePage] || MAP_CONFIG.fly;
 
-  // 2. FLY PAGE: Operational zoom on live drone if active; or operational zoom on active mission waypoints/geofence if present; else global world overview
-  if (effectivePage === "fly") {
-    if (hasLiveDroneLocation) {
-      return {
-        center: customCenter || [activeLat, activeLng],
-        zoom: customZoom ?? config.operationalZoom,
-      };
-    }
-    if (Array.isArray(waypoints) && waypoints.length > 0) {
-      return {
-        center: customCenter || getCoordinatesCentroid(waypoints, [activeLat, activeLng]),
-        zoom: customZoom ?? config.operationalZoom,
-      };
-    }
-    if (Array.isArray(geofenceCoords) && geofenceCoords.length > 0) {
-      return {
-        center: customCenter || getCoordinatesCentroid(geofenceCoords, [activeLat, activeLng]),
-        zoom: customZoom ?? config.operationalZoom,
-      };
-    }
+  // Gather mission geometry (waypoints & geofence polygon vertices)
+  const allMissionPoints = [
+    ...(Array.isArray(waypoints) ? waypoints : []),
+    ...(Array.isArray(geofenceCoords) ? geofenceCoords : []),
+  ];
+
+  // 2. If mission geometry (geofence or waypoints) exists:
+  // Position the map to show the selected mission's operational area clearly with fitted bounding box
+  if (allMissionPoints.length > 0) {
+    const { center: missionCenter, zoom: missionZoom } = getBoundsCenterAndZoom(
+      allMissionPoints,
+      [activeLat, activeLng],
+      config.operationalZoom || OPERATIONAL_MAP_ZOOM
+    );
     return {
-      center: customCenter || config.defaultCenter, // [20, 0]
-      zoom: customZoom ?? config.defaultZoom, // 2
+      center: customCenter || missionCenter,
+      zoom: customZoom ?? missionZoom,
     };
   }
 
-  // 3. GEOFENCE PAGE: Operational editing zoom (15).
-  // Centered on existing geofence vertices if present, otherwise Hyderabad fallback [17.3850, 78.4867]
-  if (effectivePage === "geofence") {
-    const center = customCenter || getCoordinatesCentroid(geofenceCoords, config.defaultCenter);
-    const zoom = customZoom ?? config.defaultZoom; // 15
-    return { center, zoom };
+  // 3. If a live real drone is connected with valid GPS, center on drone at operational zoom
+  if (hasLiveDroneLocation) {
+    return {
+      center: customCenter || [activeLat, activeLng],
+      zoom: customZoom ?? (config.operationalZoom || OPERATIONAL_MAP_ZOOM),
+    };
   }
 
-  // 4. WAYPOINT PLANNING & COMMAND CENTER DASHBOARD: Operational zoom (15).
-  // Centered on existing waypoints, geofence, live drone, or Hyderabad fallback
-  if (effectivePage === "waypoints" || effectivePage === "dashboard") {
-    let center = customCenter;
-    if (!center) {
-      if (Array.isArray(waypoints) && waypoints.length > 0) {
-        center = getCoordinatesCentroid(waypoints, config.defaultCenter);
-      } else if (Array.isArray(geofenceCoords) && geofenceCoords.length > 0) {
-        center = getCoordinatesCentroid(geofenceCoords, config.defaultCenter);
-      } else if (hasLiveDroneLocation) {
-        center = [activeLat, activeLng];
-      } else {
-        center = config.defaultCenter;
-      }
-    }
-    const zoom = customZoom ?? config.defaultZoom; // 15
-    return { center, zoom };
-  }
-
-  // 5. ANALYTICS / OTHER
-  let center = customCenter;
-  if (!center) {
-    if (Array.isArray(waypoints) && waypoints.length > 0) {
-      center = getCoordinatesCentroid(waypoints, config.defaultCenter);
-    } else if (Array.isArray(geofenceCoords) && geofenceCoords.length > 0) {
-      center = getCoordinatesCentroid(geofenceCoords, config.defaultCenter);
-    } else {
-      center = config.defaultCenter;
-    }
-  }
-  const zoom = customZoom ?? config.defaultZoom;
-  return { center, zoom };
+  // 4. Fallback to Hyderabad location at local operational zoom level (never global zoom)
+  return {
+    center: customCenter || config.defaultCenter, // [17.3850, 78.4867]
+    zoom: customZoom ?? config.defaultZoom, // 15
+  };
 }
 
 export default MAP_CONFIG;
