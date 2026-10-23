@@ -88,6 +88,8 @@ const MapContainer = ({
   activeSimWaypointId = null,
   showAirspace = false,
   onAirspaceStatusChange = null,
+  showAirspaceToggle = false,
+  onAirspaceToggle = null,
   showControls = true,
   controlsPosition = "top-right",
 }) => {
@@ -2134,12 +2136,15 @@ const MapContainer = ({
         style={{ width: "100%", height: "100%", position: "relative" }}
       />
 
-      {/* Visible Map Zoom Controls (+ / - / Reset View / Scroll to Zoom Toggle / Map Style Toggle) */}
+      {/* Visible Map Zoom Controls (+ / - / Reset View / Scroll to Zoom Toggle / Map Style Toggle / Airspace Toggle) */}
       {showControls && (
         <MapControls
           mapStyle={activeMapStyle}
           onMapStyleChange={onMapStyleChange ? handleMapStyleSwitch : (showStyleToggle ? handleMapStyleSwitch : undefined)}
           showStyleToggle={showStyleToggle !== undefined ? showStyleToggle : Boolean(onMapStyleChange)}
+          showAirspaceToggle={showAirspaceToggle}
+          airspaceEnabled={Boolean(showAirspace)}
+          onToggleAirspace={onAirspaceToggle}
           onZoomIn={handleZoomIn}
           onZoomOut={handleZoomOut}
           onResetView={handleResetView}

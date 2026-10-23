@@ -1,13 +1,14 @@
 import { memo } from "react";
-import { Plus, Minus, Crosshair, MousePointer } from "lucide-react";
+import { Plus, Minus, Crosshair, MousePointer, Shield } from "lucide-react";
 import MapStyleToggle from "./MapStyleToggle.jsx";
 
 /**
  * MapControls Component
  * Provides a clean, responsive control group in the top-right corner of the map:
  * 1. Horizontal segmented toggle for Normal / Satellite map style
- * 2. Explicit zoom controls (+ / - / Reset View / Fit Mission) directly below
- * 3. Compact Scroll to Zoom option in a separate row below zoom controls
+ * 2. Optional Airspace (NFZ) toggle directly below map style
+ * 3. Explicit zoom controls (+ / - / Reset View / Fit Mission) directly below
+ * 4. Compact Scroll to Zoom option in a separate row below zoom controls
  *
  * @param {Object} props
  * @param {Function} props.onZoomIn - Zoom in callback
@@ -22,6 +23,9 @@ import MapStyleToggle from "./MapStyleToggle.jsx";
  * @param {"normal" | "satellite"} [props.mapStyle="normal"] - Currently selected map style
  * @param {Function} [props.onMapStyleChange] - Callback when user switches map style
  * @param {boolean} [props.showStyleToggle=false] - Whether to show the map style toggle
+ * @param {boolean} [props.showAirspaceToggle=false] - Whether to show the Airspace (NFZ) toggle
+ * @param {boolean} [props.airspaceEnabled=false] - Current active state of airspace layer
+ * @param {Function} [props.onToggleAirspace] - Callback when user toggles airspace
  */
 export const MapControls = memo(function MapControls({
   onZoomIn,
@@ -36,6 +40,9 @@ export const MapControls = memo(function MapControls({
   mapStyle = "normal",
   onMapStyleChange,
   showStyleToggle = false,
+  showAirspaceToggle = false,
+  airspaceEnabled = false,
+  onToggleAirspace,
 }) {
   const positionClasses = {
     "top-right": "top-3 right-3",
@@ -61,7 +68,34 @@ export const MapControls = memo(function MapControls({
         />
       )}
 
-      {/* 2. Zoom In / Zoom Out / Reset View Button Group directly below style toggle */}
+      {/* 2. Airspace (NFZ) Toggle Button directly below map style toggle */}
+      {showAirspaceToggle && typeof onToggleAirspace === "function" && (
+        <button
+          type="button"
+          onClick={onToggleAirspace}
+          aria-pressed={airspaceEnabled}
+          title={
+            airspaceEnabled
+              ? "Airspace (NFZ) is ON — Click to hide Mappls No-Fly Zones"
+              : "Airspace (NFZ) is OFF — Click to show Mappls No-Fly Zones"
+          }
+          className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg border text-[11px] sm:text-xs font-mono font-bold backdrop-blur-md transition-all cursor-pointer active:scale-95 shadow-md focus:outline-none focus:ring-1 focus:ring-[#38BDF8] ${
+            airspaceEnabled
+              ? "bg-[#E11D48] text-white border-rose-400 shadow-[0_0_10px_rgba(225,29,72,0.4)]"
+              : "bg-[#07101CEE] border-[#1C2C42] text-[#94A3B8] hover:text-white hover:border-[#38BDF8]/40 hover:bg-[#142338]"
+          }`}
+        >
+          <Shield className={`w-3.5 h-3.5 shrink-0 ${airspaceEnabled ? "text-white" : "text-[#64748B]"}`} />
+          <span>Airspace (NFZ)</span>
+          <span
+            className={`w-2 h-2 rounded-full ${
+              airspaceEnabled ? "bg-white animate-pulse" : "bg-slate-500"
+            }`}
+          />
+        </button>
+      )}
+
+      {/* 3. Zoom In / Zoom Out / Reset View Button Group directly below style and airspace */}
       <div className="flex flex-col bg-[#07101CEE] border border-[#1C2C42] rounded-lg shadow-xl backdrop-blur-md overflow-hidden transition-all">
         {/* Zoom In Button */}
         <button

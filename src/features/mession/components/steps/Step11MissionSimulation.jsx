@@ -434,7 +434,11 @@ export const Step11MissionSimulation = ({
           <div className="relative flex-1 min-h-0 w-full h-full">
             <MapLoad
               mapStyle={mapStyle}
+              onMapStyleChange={handleMapStyleChange}
+              showStyleToggle={true}
               showAirspace={showAirspace}
+              showAirspaceToggle={true}
+              onAirspaceToggle={handleToggleAirspace}
               waypoints={canonicalWaypoints}
               showMissionRoute={true}
               geofence={canonicalGeofence}
@@ -447,44 +451,6 @@ export const Step11MissionSimulation = ({
               selectedWaypointId={selectedWaypointId}
               onWaypointSelect={setSelectedWaypointId}
             />
-
-            {/* Map Style & Layer Selector (Top-Right) */}
-            <div className="absolute top-3 right-3 z-10 flex items-center bg-[#08121DEB] border border-[#1E2E42] backdrop-blur-md rounded-lg p-1 shadow-lg gap-1 select-none">
-              <button
-                type="button"
-                onClick={() => handleMapStyleChange("normal")}
-                className={`px-2.5 py-1 rounded text-xs font-mono font-bold transition cursor-pointer ${
-                  mapStyle === "normal"
-                    ? "bg-[#1B68D2] text-white shadow-2xs"
-                    : "text-slate-300 hover:text-white"
-                }`}
-              >
-                Normal
-              </button>
-              <button
-                type="button"
-                onClick={() => handleMapStyleChange("satellite")}
-                className={`px-2.5 py-1 rounded text-xs font-mono font-bold transition cursor-pointer ${
-                  mapStyle === "satellite"
-                    ? "bg-[#1B68D2] text-white shadow-2xs"
-                    : "text-slate-300 hover:text-white"
-                }`}
-              >
-                Satellite
-              </button>
-              <button
-                type="button"
-                onClick={handleToggleAirspace}
-                className={`px-2.5 py-1 rounded text-xs font-mono font-bold transition cursor-pointer ${
-                  showAirspace
-                    ? "bg-rose-600 text-white shadow-2xs"
-                    : "text-slate-300 hover:text-white"
-                }`}
-                title="Toggle Mappls Airspace / No-Fly Zones"
-              >
-                Airspace (NFZ)
-              </button>
-            </div>
 
             {/* Simulation Status Watermark (Top-Left) */}
             <div className="absolute top-3 left-3 z-10 flex flex-col gap-1.5 select-none pointer-events-auto">
