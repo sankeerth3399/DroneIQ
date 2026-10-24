@@ -43,6 +43,7 @@ export const Step1AreaFlight = ({
   const [activeAreaTool, setActiveAreaTool] = useState("draw")
   const [flightPattern, setFlightPattern] = useState("grid")
   const [previewCoverage, setPreviewCoverage] = useState(true)
+  const [previewTab, setPreviewTab] = useState("2d")
   const [selectedWaypointId, setSelectedWaypointId] = useState(null)
   const [mapStyle, setMapStyle] = useState(() => {
     try {
@@ -507,27 +508,99 @@ export const Step1AreaFlight = ({
         <div className="bg-white rounded-xl border border-[#CBD5E1] p-4 shadow-xs space-y-3">
           <div className="flex items-center justify-between">
             <h4 className="text-xs sm:text-sm font-bold text-[#0F284E] uppercase tracking-wider">Mission Preview</h4>
-            <div className="flex items-center gap-1 text-xs font-bold text-[#334155] bg-slate-100 p-0.5 rounded-lg border border-slate-200">
-              <span className="bg-white px-2 py-0.5 rounded shadow-2xs text-[#1B68D2]">2D Map</span>
-              <span className="px-2 py-0.5">3D View</span>
-              <span className="px-2 py-0.5">Coverage</span>
-            </div>
-          </div>
-
-          <div className="h-36 rounded-lg bg-slate-900 overflow-hidden relative">
-            <img src={sampleImg} alt="Preview" className="w-full h-full object-cover opacity-80" />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />
-            <div className="absolute bottom-2.5 left-3 right-3 flex items-center justify-between text-white text-xs">
-              <span className="font-mono font-bold">00:00 / 5:00</span>
+            <div className="inline-flex items-center text-xs font-bold bg-slate-100 p-0.5 rounded-lg border border-slate-200">
               <button
                 type="button"
-                onClick={() => onStepChange?.(11)}
-                className="font-bold text-[#38BDF8] hover:underline cursor-pointer"
+                onClick={() => setPreviewTab("2d")}
+                className={`px-3 py-1 rounded-md text-xs font-semibold transition cursor-pointer ${
+                  previewTab === "2d"
+                    ? "bg-white text-[#1B68D2] shadow-2xs font-bold"
+                    : "text-[#475569] hover:text-[#0F284E]"
+                }`}
+                aria-pressed={previewTab === "2d"}
               >
-                Open full simulation &rarr;
+                2D Map
+              </button>
+              <button
+                type="button"
+                onClick={() => setPreviewTab("coverage")}
+                className={`px-3 py-1 rounded-md text-xs font-semibold transition cursor-pointer ${
+                  previewTab === "coverage"
+                    ? "bg-white text-[#1B68D2] shadow-2xs font-bold"
+                    : "text-[#475569] hover:text-[#0F284E]"
+                }`}
+                aria-pressed={previewTab === "coverage"}
+              >
+                Coverage
               </button>
             </div>
           </div>
+
+          {previewTab === "2d" ? (
+            <div className="h-36 rounded-lg bg-slate-900 overflow-hidden relative">
+              <img src={sampleImg} alt="2D Mission Preview" className="w-full h-full object-cover opacity-80" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />
+              <div className="absolute top-2.5 left-3 flex items-center gap-1.5 text-[11px] font-mono text-cyan-300 font-semibold bg-black/60 px-2 py-0.5 rounded border border-cyan-500/30">
+                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+                <span>2D Flight Path · {mapWaypoints.length || localWaypoints.length || 7} WPs</span>
+              </div>
+              <div className="absolute bottom-2.5 left-3 right-3 flex items-center justify-between text-white text-xs">
+                <span className="font-mono font-bold">00:00 / 05:00</span>
+                <button
+                  type="button"
+                  onClick={() => onStepChange?.(11)}
+                  className="font-bold text-[#38BDF8] hover:underline cursor-pointer flex items-center gap-1"
+                >
+                  <span>Open full simulation</span>
+                  <span>&rarr;</span>
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="h-36 rounded-lg bg-slate-950 border border-[#1E2E42] p-3 flex flex-col justify-between text-white relative overflow-hidden">
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-blue-900/20 via-slate-950 to-slate-950 pointer-events-none" />
+
+              {/* Coverage Header Summary */}
+              <div className="relative z-10 flex items-center justify-between text-xs border-b border-[#1E2E42]/80 pb-2">
+                <div className="flex items-center gap-1.5 text-emerald-400 font-mono font-bold text-[11px]">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <span>SURVEY COVERAGE: 100%</span>
+                </div>
+                <span className="text-[11px] font-mono font-bold text-slate-300">
+                  {areaMetrics.areaFormatted || "0.1 km²"}
+                </span>
+              </div>
+
+              {/* Coverage Metrics Grid */}
+              <div className="relative z-10 grid grid-cols-3 gap-2 text-center font-mono py-1">
+                <div className="bg-[#0B1728] p-1.5 rounded border border-[#1E3A5F]">
+                  <span className="text-[10px] text-slate-400 block font-sans font-medium">Ground GSD</span>
+                  <span className="text-xs font-bold text-[#38BDF8]">{computedGsd || "2.4 cm/px"}</span>
+                </div>
+                <div className="bg-[#0B1728] p-1.5 rounded border border-[#1E3A5F]">
+                  <span className="text-[10px] text-slate-400 block font-sans font-medium">Flight Alt</span>
+                  <span className="text-xs font-bold text-slate-200">{formData.flightAltitude || 120} m</span>
+                </div>
+                <div className="bg-[#0B1728] p-1.5 rounded border border-[#1E3A5F]">
+                  <span className="text-[10px] text-slate-400 block font-sans font-medium">Overlap</span>
+                  <span className="text-xs font-bold text-emerald-400">75% / 60%</span>
+                </div>
+              </div>
+
+              {/* Bottom Actions */}
+              <div className="relative z-10 flex items-center justify-between text-xs pt-1 border-t border-[#1E2E42]/80">
+                <span className="font-mono text-[11px] text-slate-400">Grid Pattern: Lawn-Mower</span>
+                <button
+                  type="button"
+                  onClick={() => onStepChange?.(11)}
+                  className="font-bold text-[#38BDF8] hover:underline cursor-pointer flex items-center gap-1"
+                >
+                  <span>Open full simulation</span>
+                  <span>&rarr;</span>
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Card 2: Waypoints Table */}
