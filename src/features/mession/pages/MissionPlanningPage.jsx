@@ -32,6 +32,8 @@ import Step11MissionSimulation from "../components/steps/Step11MissionSimulation
 import Step12MissionReadiness from "../components/steps/Step12MissionReadiness.jsx"
 import Step13SummaryLaunch from "../components/steps/Step13SummaryLaunch.jsx"
 import MissionFooterBar from "../components/steps/MissionFooterBar.jsx"
+import MissionErrorBoundary from "../components/MissionErrorBoundary.jsx"
+import MissionLoadingFallback from "../components/MissionLoadingFallback.jsx"
 
 import {
   Check,
@@ -42,7 +44,7 @@ import {
   Compass,
 } from "lucide-react"
 
-export const MissionPlanningPage = () => {
+export const MissionPlanningPageContent = () => {
   const navigate = useNavigate()
   const location = useLocation()
   const { user } = useAuth()
@@ -56,6 +58,13 @@ export const MissionPlanningPage = () => {
     saveGeofence,
     updateProject,
   } = useMission()
+
+  // Graceful loading fallback if projects store is still initializing
+  if (projects === undefined || projects === null) {
+    return <MissionLoadingFallback message="Synchronizing AeroNexus mission projects, geofence boundaries, and telemetry streams..." />
+  }
+
+  const safeProjects = Array.isArray(projects) ? projects : []
 
   // 13-Step Workflow Linear Index (1 to 13)
   const [currentStep, setCurrentStep] = useState(1)
@@ -173,9 +182,9 @@ export const MissionPlanningPage = () => {
     return []
   }, [currentProject?.geofence])
 
-  // Geometric area metrics
+  // Geometric area metrics (defensive against NaN and objects)
   const areaMetrics = useMemo(() => {
-    if (geofenceCoords.length < 3) {
+    if (!Array.isArray(geofenceCoords) || geofenceCoords.length < 3) {
       return {
         areaKm2: 0.1,
         areaFormatted: "0.1 km²",
@@ -185,22 +194,25 @@ export const MissionPlanningPage = () => {
     }
     const a = calculatePolygonArea(geofenceCoords)
     const p = calculatePolygonPerimeter(geofenceCoords)
+    const sqM = typeof a === "object" && a !== null ? (a.sqMeters ?? 0) : Number(a) || 0
+    const sqKm = typeof a === "object" && a !== null && typeof a.sqKm === "number" ? a.sqKm : Number((sqM / 1000000).toFixed(3))
+    const pM = typeof p === "number" ? p : Number(p) || 0
     return {
-      areaKm2: a / 1000000,
+      areaKm2: sqKm,
       areaFormatted: formatArea(a),
-      perimeterKm: p / 1000,
+      perimeterKm: Number((pM / 1000).toFixed(2)),
       perimeterFormatted: formatDistance(p),
     }
   }, [geofenceCoords])
 
   // Computed GSD
   const computedGsd = useMemo(() => {
-    const alt = formData.flightAltitude || 120
+    const alt = Number(formData?.flightAltitude) || 120
     const sensorPitchUm = 4.5
     const focalLengthMm = 35.0
     const gsdCm = (alt * sensorPitchUm * 100) / (focalLengthMm * 1000)
     return `${gsdCm.toFixed(1)} cm/px`
-  }, [formData.flightAltitude])
+  }, [formData?.flightAltitude])
 
   // Canonical Waypoints list from active project mission
   const localWaypoints = useMemo(() => {
@@ -315,11 +327,15 @@ export const MissionPlanningPage = () => {
                   }}
                   className="bg-transparent text-[13px] sm:text-[14px] font-bold text-[#0F284E] outline-none cursor-pointer truncate max-w-[190px]"
                 >
-                  {projects.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.projectName || p.name || p.id} - Infrastructure
-                    </option>
-                  ))}
+                  {safeProjects.length > 0 ? (
+                    safeProjects.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.projectName || p.name || p.id} - {p.useCase || "Infrastructure"}
+                      </option>
+                    ))
+                  ) : (
+                    <option value="">No Active Projects</option>
+                  )}
                 </select>
               </div>
             </div>
@@ -564,6 +580,17 @@ export const MissionPlanningPage = () => {
         saveToast={saveToast}
       />
     </div>
+  )
+}
+
+/**
+ * Main Mission Planning Page exported with AeroNexus MissionErrorBoundary wrapper
+ */
+export const MissionPlanningPage = (props) => {
+  return (
+    <MissionErrorBoundary>
+      <MissionPlanningPageContent {...props} />
+    </MissionErrorBoundary>
   )
 }
 
