@@ -73,7 +73,7 @@ export const MISSION_WORKFLOW_STEPS = [
     subStep: "ai_detection",
     label: "AI Detection",
     num: "9",
-    subtitle: "Edge AI detection models, confidence thresholds, and real-time alert routing.",
+    subtitle: "What the mission looks for, how sure it must be, and what counts as an alert.",
   },
   {
     step: 10,

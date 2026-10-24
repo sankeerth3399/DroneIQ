@@ -503,6 +503,8 @@ export const MissionPlanningPage = () => {
           <Step9AiDetection
             formData={formData}
             setFormData={setFormData}
+            currentProject={currentProject}
+            registeredDrones={registeredDrones}
             triggerToast={triggerToast}
           />
         )}
