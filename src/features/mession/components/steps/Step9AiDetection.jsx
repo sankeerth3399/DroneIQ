@@ -17,10 +17,14 @@ import {
   Zap,
   Clock,
   Video,
+  VideoOff,
+  RotateCw,
+  Wifi,
   AlertTriangle,
 } from "lucide-react"
-import alertThermalImg from "@/assets/images/dashboard/alert_thermal.jpg"
-import { SEEDED_ACTIVE_ALERTS } from "@/services/api/incidentService.js"
+import LiveDroneFeed from "@/components/video/LiveDroneFeed.jsx"
+import { droneService } from "@/services/api/droneService.js"
+import { incidentService } from "@/services/api/incidentService.js"
 
 /**
  * 9 Standard AI Detectors Supported in AeroNexus DroneIQ
@@ -217,20 +221,132 @@ export const Step9AiDetection = ({
     return "Operations shift in charge"
   }, [currentProject, formData])
 
-  // Retrieve genuine recorded detection event from incident records
-  const latestRecordedDetection = useMemo(() => {
-    const alert = SEEDED_ACTIVE_ALERTS?.[0]
-    return {
-      title: alert?.detectionTag || "Thermal anomaly - 93%",
-      tag: "Thermal anomaly - 93%",
-      confidence: "93%",
-      evidenceType: alert?.evidenceType || "thermal",
-      timestamp: alert?.detectedTime || "08:37 AM",
-      droneId: alert?.droneId || "DR-003",
-      location: alert?.location || "Process Unit 3, distillation column",
-      hasDetection: true,
+  // 1. Available fleet drones
+  const availableDrones = useMemo(() => {
+    if (Array.isArray(registeredDrones) && registeredDrones.length > 0) {
+      return registeredDrones
+    }
+    return droneService.getStoredDrones()
+  }, [registeredDrones])
+
+  // 2. Resolve initial assigned drone from mission / formData
+  const initialDroneId = useMemo(() => {
+    if (formData?.assignedDroneId) return formData.assignedDroneId
+    if (formData?.droneId) return formData.droneId
+    if (formData?.selectedDroneAssign) {
+      const lower = String(formData.selectedDroneAssign).toLowerCase()
+      if (lower.includes("drone 1") || lower.includes("dr-001")) return "DR-001"
+      if (lower.includes("drone 2") || lower.includes("dr-002")) return "DR-002"
+      if (lower.includes("drone 3") || lower.includes("dr-003")) return "DR-003"
+      if (lower.includes("drone 4") || lower.includes("dr-004")) return "DR-004"
+    }
+    if (currentProject?.mission?.assignedDroneId) return currentProject.mission.assignedDroneId
+    if (currentProject?.assignedDroneId) return currentProject.assignedDroneId
+    return availableDrones[0]?.id || "DR-001"
+  }, [formData?.assignedDroneId, formData?.droneId, formData?.selectedDroneAssign, currentProject, availableDrones])
+
+  // Active selected drone state
+  const [selectedDroneId, setSelectedDroneId] = useState(initialDroneId)
+
+  // Synchronize when assigned drone changes externally
+  useEffect(() => {
+    if (initialDroneId && initialDroneId !== selectedDroneId) {
+      setSelectedDroneId(initialDroneId)
+    }
+  }, [initialDroneId])
+
+  // 3. Resolve configured payload & camera type
+  const configuredPayload = useMemo(() => {
+    return String(
+      formData?.selectedPayload ||
+      formData?.payload ||
+      currentProject?.mission?.payload ||
+      ""
+    ).toLowerCase()
+  }, [formData?.selectedPayload, formData?.payload, currentProject])
+
+  const defaultCameraType = useMemo(() => {
+    if (configuredPayload.includes("thermal")) return "thermal"
+    if (configuredPayload.includes("zoom")) return "zoom"
+    if (configuredPayload.includes("multispectral")) return "multispectral"
+    if (configuredPayload.includes("fpv")) return "fpv"
+    return "main"
+  }, [configuredPayload])
+
+  const [cameraType, setCameraType] = useState(defaultCameraType)
+
+  useEffect(() => {
+    setCameraType(defaultCameraType)
+  }, [defaultCameraType])
+
+  // 4. Live Stream Player Status State
+  const [feedStatus, setFeedStatus] = useState({
+    isPlaying: false,
+    isLoading: true,
+    error: null,
+    connectionState: "idle",
+    statusLabel: "CONNECTING...",
+    statusKey: "connecting",
+    retry: null,
+  })
+
+  // 5. Query active incidents to check for genuine model detections
+  const [activeAlerts, setActiveAlerts] = useState([])
+
+  useEffect(() => {
+    let isMounted = true
+    incidentService
+      .getActiveAlerts()
+      .then((alerts) => {
+        if (isMounted && Array.isArray(alerts)) {
+          setActiveAlerts(alerts)
+        }
+      })
+      .catch(() => {
+        if (isMounted) setActiveAlerts([])
+      })
+    return () => {
+      isMounted = false
     }
   }, [])
+
+  // Find genuine active alert for selected drone
+  const activeDroneAlert = useMemo(() => {
+    return (
+      activeAlerts.find(
+        (a) => a.droneId === selectedDroneId || a.droneId?.replace(/^DR-/, "DRONE-") === selectedDroneId
+      ) || null
+    )
+  }, [activeAlerts, selectedDroneId])
+
+  // Only render genuine detections if model output includes explicit bounding box coordinates
+  const hasGenuineDetections = useMemo(() => {
+    return Boolean(
+      activeDroneAlert &&
+      activeDroneAlert.boundingBox &&
+      (activeDroneAlert.boundingBox.width || activeDroneAlert.boundingBox.w)
+    )
+  }, [activeDroneAlert])
+
+  // Active drone profile record
+  const currentDroneRecord = useMemo(() => {
+    return (
+      availableDrones.find(
+        (d) => d.id === selectedDroneId || d.droneId === selectedDroneId
+      ) || availableDrones[0]
+    )
+  }, [availableDrones, selectedDroneId])
+
+  // Handler for drone selection change
+  const handleDroneChange = (newDroneId) => {
+    setSelectedDroneId(newDroneId)
+    if (typeof setFormData === "function") {
+      setFormData((prev) => ({
+        ...prev,
+        assignedDroneId: newDroneId,
+      }))
+    }
+  }
 
   return (
     <div className="p-3 sm:p-5 max-w-[1720px] w-full mx-auto space-y-4 font-sans">
@@ -379,41 +495,181 @@ export const Step9AiDetection = ({
         <div className="lg:col-span-4 space-y-4">
           {/* Card 1: Sample Detection */}
           <div className="bg-white rounded-xl border border-[#CBD5E1] p-4 shadow-xs space-y-3">
-            <h3 className="text-sm sm:text-base font-bold text-[#0F284E]">
-              Sample detection
-            </h3>
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div>
+                <h3 className="text-sm sm:text-base font-bold text-[#0F284E] leading-tight">
+                  Sample detection
+                </h3>
+                <div className="text-[11px] text-[#64748B] font-medium flex items-center gap-1.5 mt-0.5">
+                  <span className="font-semibold text-[#0F284E]">{currentDroneRecord?.name || selectedDroneId}</span>
+                  <span>·</span>
+                  <span className="capitalize">{cameraType === "main" ? "Primary Optical" : `${cameraType} Camera`}</span>
+                </div>
+              </div>
 
-            {/* Video / Recorded Frame Canvas */}
-            <div className="h-56 sm:h-64 rounded-xl bg-slate-950 overflow-hidden relative border border-[#CBD5E1] flex items-center justify-center">
-              {latestRecordedDetection.hasDetection ? (
-                <>
-                  <img
-                    src={alertThermalImg}
-                    alt="Sample Thermal Anomaly Detection"
-                    className="w-full h-full object-cover"
-                  />
+              {/* Drone & Camera Switcher Controls */}
+              <div className="flex items-center gap-1.5">
+                {/* Drone Selector */}
+                <select
+                  value={selectedDroneId}
+                  onChange={(e) => handleDroneChange(e.target.value)}
+                  aria-label="Select active drone"
+                  className="text-[11px] font-mono font-bold bg-[#F8FAFC] border border-[#CBD5E1] rounded-lg px-2.5 py-1 text-[#0F284E] focus:border-[#1B68D2] outline-none cursor-pointer shadow-2xs hover:bg-slate-50 transition"
+                >
+                  {availableDrones.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.id} · {d.name} {d.role ? `(${d.role})` : ""}
+                    </option>
+                  ))}
+                </select>
 
-                  {/* Top-Left Footage Badge */}
-                  <div className="absolute top-2.5 left-2.5 bg-black/75 backdrop-blur-xs text-white text-[11px] font-mono px-2 py-0.5 rounded font-bold border border-white/20 select-none">
-                    Preview on last flight's footage
+                {/* Camera Mode Selector */}
+                <select
+                  value={cameraType}
+                  onChange={(e) => setCameraType(e.target.value)}
+                  aria-label="Select camera type"
+                  className="text-[11px] font-mono font-bold bg-[#F8FAFC] border border-[#CBD5E1] rounded-lg px-2.5 py-1 text-[#0F284E] focus:border-[#1B68D2] outline-none cursor-pointer shadow-2xs hover:bg-slate-50 transition"
+                >
+                  <option value="main">Main Cam</option>
+                  <option value="thermal">Thermal</option>
+                  <option value="fpv">FPV Cam</option>
+                  <option value="zoom">Zoom</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Video / Genuine Stream Canvas */}
+            <div className="h-56 sm:h-64 rounded-xl bg-[#04070B] overflow-hidden relative border border-[#CBD5E1] shadow-inner flex items-center justify-center">
+              <LiveDroneFeed
+                key={`${selectedDroneId}-${cameraType}`}
+                droneId={selectedDroneId}
+                cameraType={cameraType}
+                videoFit="contain"
+                showHudBar={false}
+                onStatusChange={setFeedStatus}
+                className="h-full w-full"
+              >
+                {/* Visual gradient overlay for HUD readability when playing */}
+                {feedStatus.isPlaying && (
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/50 pointer-events-none z-10" />
+                )}
+
+                {/* TOP HUD OVERLAY: Honest Stream Status & AI Detection Status */}
+                <div className="absolute top-2.5 left-2.5 right-2.5 z-30 flex items-center justify-between gap-1.5 pointer-events-none">
+                  {/* Left: Stream Status + AI Detection Status */}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {/* Camera Stream Status Badge */}
+                    {feedStatus.isPlaying && feedStatus.connectionState === "connected" ? (
+                      <div className="flex items-center gap-1 px-2 py-0.5 rounded-full border border-[#2FE08940] bg-[#08120ECC] backdrop-blur-md text-[#2FE089] text-[9px] font-mono font-bold shadow-[0_0_8px_rgba(46,224,137,0.25)]">
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#2FE089] shadow-[0_0_8px_#2FE089] animate-pulse" />
+                        <span>LIVE</span>
+                      </div>
+                    ) : feedStatus.isLoading || feedStatus.connectionState === "connecting" || feedStatus.connectionState === "reconnecting" ? (
+                      <div className="flex items-center gap-1 px-2 py-0.5 rounded-full border border-[#F59E0B40] bg-[#140F08CC] backdrop-blur-md text-[#F59E0B] text-[9px] font-mono font-bold">
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#F59E0B] animate-ping" />
+                        <span>CONNECTING</span>
+                      </div>
+                    ) : feedStatus.statusKey === "no-camera" || feedStatus.statusKey === "stream-unavailable" ? (
+                      <div className="flex items-center gap-1 px-2 py-0.5 rounded-full border border-[#334155] bg-[#0F172ACC] backdrop-blur-md text-[#CBD5E1] text-[9px] font-mono font-bold">
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#94A3B8]" />
+                        <span>STREAM UNAVAILABLE</span>
+                      </div>
+                    ) : feedStatus.statusKey === "failed" ? (
+                      <div className="flex items-center gap-1 px-2 py-0.5 rounded-full border border-[#5E2222] bg-[#140808CC] backdrop-blur-md text-[#FF8585] text-[9px] font-mono font-bold">
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#FF4D4D]" />
+                        <span>CONNECTION FAILED</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1 px-2 py-0.5 rounded-full border border-[#5E2222] bg-[#140808CC] backdrop-blur-md text-[#FF8585] text-[9px] font-mono font-bold">
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#FF4D4D]" />
+                        <span>CAMERA OFFLINE</span>
+                      </div>
+                    )}
+
+                    {/* AI Detection Service Status Badge */}
+                    {feedStatus.isPlaying ? (
+                      hasGenuineDetections ? (
+                        <div className="flex items-center gap-1 px-2 py-0.5 rounded-full border border-cyan-500/40 bg-cyan-950/80 backdrop-blur-md text-cyan-300 text-[9px] font-mono font-bold">
+                          <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+                          <span>AI DETECTION ACTIVE</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1 px-2 py-0.5 rounded-full border border-slate-700 bg-slate-900/80 backdrop-blur-md text-slate-300 text-[9px] font-mono font-bold">
+                          <span className="w-1.5 h-1.5 rounded-full bg-slate-500" />
+                          <span>AI DETECTION UNAVAILABLE</span>
+                        </div>
+                      )
+                    ) : null}
                   </div>
 
-                  {/* Genuine Model Detection Bounding Box on Column */}
+                  {/* Right: Drone & Camera Stream Tag + Retry button */}
+                  <div className="flex items-center gap-1.5 pointer-events-auto">
+                    <span className="px-1.5 py-0.5 rounded bg-[#07101CEE] border border-[#1C2C42] text-[8.5px] font-mono text-[#CBD5E1] backdrop-blur-sm">
+                      {selectedDroneId} · {cameraType.toUpperCase()}
+                    </span>
+                    {!feedStatus.isPlaying && feedStatus.retry && (
+                      <button
+                        type="button"
+                        onClick={feedStatus.retry}
+                        className="p-1 rounded bg-[#07101CEE] border border-[#1C2C42] text-[#8E9EAA] hover:text-[#38BDF8] hover:bg-[#1C2C42] transition cursor-pointer"
+                        title="Retry camera stream"
+                        aria-label="Retry video stream"
+                      >
+                        <RotateCw className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Genuine Model Detection Bounding Box (Only if genuine model bounding box is provided) */}
+                {feedStatus.isPlaying && hasGenuineDetections && activeDroneAlert?.boundingBox && (
                   <div
-                    className="absolute border-2 border-red-500 rounded-xs shadow-sm"
-                    style={{ top: "14%", left: "54%", width: "18%", height: "68%" }}
+                    className="absolute border-2 border-red-500 rounded-xs pointer-events-none z-20"
+                    style={{
+                      top: activeDroneAlert.boundingBox.top || `${activeDroneAlert.boundingBox.y}%`,
+                      left: activeDroneAlert.boundingBox.left || `${activeDroneAlert.boundingBox.x}%`,
+                      width: activeDroneAlert.boundingBox.width || `${activeDroneAlert.boundingBox.w}%`,
+                      height: activeDroneAlert.boundingBox.height || `${activeDroneAlert.boundingBox.h}%`,
+                    }}
                   >
-                    <div className="absolute -top-5.5 left-0 bg-[#DC2626] text-white font-mono text-[10px] font-bold px-1.5 py-0.5 rounded-t whitespace-nowrap shadow-xs">
-                      {latestRecordedDetection.tag}
+                    <div className="absolute -top-5 left-0 bg-[#DC2626] text-white font-mono text-[9px] font-bold px-1.5 py-0.5 rounded-t whitespace-nowrap shadow-xs flex items-center gap-1">
+                      <span>{activeDroneAlert.title}</span>
+                      {activeDroneAlert.confidence && <span>· {activeDroneAlert.confidence}</span>}
+                      {activeDroneAlert.thermalValue && <span>· {activeDroneAlert.thermalValue}</span>}
                     </div>
                   </div>
-                </>
-              ) : (
-                <div className="p-6 text-center text-slate-400 space-y-2">
-                  <Video className="w-8 h-8 mx-auto text-slate-500" />
-                  <p className="text-xs font-medium">No recorded detection telemetry available for this mission.</p>
-                </div>
-              )}
+                )}
+
+                {/* Bottom-left Stream Protocol Pill (When playing) */}
+                {feedStatus.isPlaying && (
+                  <div className="absolute bottom-2 left-2 z-20 pointer-events-none flex items-center gap-1.5 px-2 py-0.5 rounded bg-[#06090ECC] border border-[#16222F] backdrop-blur-sm text-[8px] font-mono text-[#8E9EAA]">
+                    <div className="flex items-center gap-1 text-[#2FE089]">
+                      <Wifi className="w-2.5 h-2.5" />
+                      <span className="font-semibold">WHEP</span>
+                    </div>
+                    <span className="text-[#334155]">•</span>
+                    <span className="text-[#38BDF8] font-semibold">{currentDroneRecord?.name || selectedDroneId}</span>
+                  </div>
+                )}
+              </LiveDroneFeed>
+            </div>
+
+            {/* Honest Status & Stream Caption */}
+            <div className="text-xs text-[#64748B] font-medium flex items-center justify-between pt-0.5">
+              <span className="truncate">
+                {feedStatus.isPlaying
+                  ? (hasGenuineDetections
+                      ? `Live feed connected · Showing genuine model detections from ${selectedDroneId}`
+                      : "Live feed connected · AI inference pipeline idle on this stream")
+                  : (feedStatus.isLoading
+                      ? "Establishing camera stream connection..."
+                      : (feedStatus.statusKey === "no-camera" || feedStatus.statusKey === "stream-unavailable"
+                          ? "Stream unavailable · No stream configured for this payload."
+                          : "Camera offline · Real-time feed activates when drone camera powers up."))}
+              </span>
+              <span className="font-mono text-[10px] text-slate-400 shrink-0 ml-1.5 uppercase">
+                {selectedDroneId}
+              </span>
             </div>
           </div>
 

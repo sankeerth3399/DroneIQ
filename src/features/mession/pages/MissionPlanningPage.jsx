@@ -246,6 +246,9 @@ export const MissionPlanningPage = () => {
           droneCount: formData.droneCount,
           rthAltitude: formData.rthAltitude,
           geofenceBreachAction: formData.geofenceBreachAction,
+          assignedDroneId: formData.assignedDroneId,
+          selectedPayload: formData.selectedPayload,
+          aiDetection: formData.aiDetection,
         },
       })
       triggerToast("Mission parameters saved successfully.")

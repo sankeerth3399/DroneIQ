@@ -354,8 +354,10 @@ export const Step2PayloadConfig = ({
   triggerToast,
 }) => {
   const [activeCatalogFilter, setActiveCatalogFilter] = useState("All")
-  const [selectedPayloadId, setSelectedPayloadId] = useState("rgb")
-  const [selectedDroneAssign, setSelectedDroneAssign] = useState("Drone 1 - RGB Camera")
+  const [selectedPayloadId, setSelectedPayloadId] = useState(() => formData?.selectedPayload || "rgb")
+  const [selectedDroneAssign, setSelectedDroneAssign] = useState(
+    () => formData?.selectedDroneAssign || "Drone 1 - RGB Camera"
+  )
   const [showSampleModal, setShowSampleModal] = useState(false)
 
   // Resolve canonical drone ID from drone assignment or registered drones
@@ -391,6 +393,27 @@ export const Step2PayloadConfig = ({
 
   // Imaging sensors vs non-video sensors
   const isVideoPayload = ["rgb", "thermal", "zoom", "multispectral"].includes(selectedPayloadId)
+
+  // Synchronize payload and drone assignment to parent formData
+  useEffect(() => {
+    if (typeof setFormData === "function") {
+      setFormData((prev) => {
+        if (
+          prev?.selectedPayload === selectedPayloadId &&
+          prev?.selectedDroneAssign === selectedDroneAssign &&
+          prev?.assignedDroneId === activeDroneId
+        ) {
+          return prev
+        }
+        return {
+          ...prev,
+          selectedPayload: selectedPayloadId,
+          selectedDroneAssign,
+          assignedDroneId: activeDroneId,
+        }
+      })
+    }
+  }, [selectedPayloadId, selectedDroneAssign, activeDroneId, setFormData])
 
   // Sync dropdown when changing assigned drone
   const handleDroneAssignChange = (e) => {
