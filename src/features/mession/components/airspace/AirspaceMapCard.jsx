@@ -1,5 +1,4 @@
 import React, { useState, useMemo } from "react"
-import { Layers, ChevronDown, Plus, Minus, RotateCcw, AlertTriangle, ShieldAlert, Crosshair } from "lucide-react"
 import MapContainer from "@/components/Map/mapContainer.jsx"
 import { useTelemetry } from "@/hooks/useTelemetry.js"
 
@@ -12,25 +11,24 @@ export const AirspaceMapCard = ({
 }) => {
   const { isLive, isDroneConnected } = useTelemetry()
 
-  // Map layer toggle states matching the reference screenshot
+  // Map layer toggle states
   const [layers, setLayers] = useState({
     noFlyAndRestricted: true,
-    safeCorridors: true,
-    emergencyLandingZones: true,
-    obstacles: true,
+    safeCorridors: false,
+    emergencyLandingZones: false,
+    obstacles: false,
     missionAreas: true,
     plannedRoutes: false,
   })
 
   const [mapStyle, setMapStyle] = useState("normal")
   const [airspaceStatus, setAirspaceStatus] = useState(null)
-  const [viewMode, setViewMode] = useState("mappls") // 'mappls' or 'schematic'
 
   const toggleLayer = (layerKey) => {
     setLayers((prev) => ({ ...prev, [layerKey]: !prev[layerKey] }))
   }
 
-  // Derive waypoints and geofence from active project
+  // Derive genuine waypoints and geofence from active project
   const waypoints = useMemo(() => {
     if (!layers.plannedRoutes) return []
     return currentProject?.mission?.waypoints || currentProject?.mission?.items || []
@@ -73,7 +71,7 @@ export const AirspaceMapCard = ({
         </div>
       </div>
 
-      {/* Main Map Viewport with Overlays */}
+      {/* Main Map Viewport with Genuine Overlays Only */}
       <div className="relative flex-1 w-full min-h-0 bg-[#0B1522] overflow-hidden select-none">
         {/* Real Mappls Vector Map */}
         <div className="w-full h-full relative z-0">
@@ -92,7 +90,7 @@ export const AirspaceMapCard = ({
         </div>
 
         {/* ========================================================================= */}
-        {/* FLOATING MAP LAYERS PANEL (Matches reference screenshot exactly)          */}
+        {/* FLOATING MAP LAYERS PANEL                                                 */}
         {/* ========================================================================= */}
         <div className="absolute top-4 left-4 z-20 bg-[#0A1628]/92 backdrop-blur-md border border-[#1E2E44] text-white rounded-xl p-3 shadow-xl max-w-[210px] w-full text-xs">
           <div className="text-[11px] font-bold uppercase tracking-wider text-slate-300 pb-1.5 border-b border-slate-700/60 mb-2">
@@ -159,146 +157,6 @@ export const AirspaceMapCard = ({
               />
               <span className="text-[11.5px]">Planned routes</span>
             </label>
-          </div>
-        </div>
-
-        {/* ========================================================================= */}
-        {/* TACTICAL INDUSTRIAL AIRSPACE OVERLAY (Refinery / Site Schematic Details)   */}
-        {/* ========================================================================= */}
-        <div className="absolute inset-0 pointer-events-none z-10 overflow-hidden">
-          {/* 1. Tank Farm (Restricted Area) */}
-          {layers.noFlyAndRestricted && (
-            <div
-              className="absolute pointer-events-auto transition-opacity duration-200"
-              style={{ top: "12%", left: "18%", width: "22%", height: "34%" }}
-            >
-              <div className="w-full h-full border-2 border-dashed border-[#F59E0B] bg-[#F59E0B]/10 rounded-xl relative p-2 shadow-[0_0_15px_rgba(245,158,11,0.15)]">
-                <span className="absolute -top-5 left-1 text-[10px] font-bold text-[#FBBF24] whitespace-nowrap bg-black/60 px-1.5 py-0.5 rounded">
-                  Restricted - tank farm, no overflight below 40 m
-                </span>
-                <span className="text-[11px] font-bold text-slate-300 block">Tank Farm</span>
-                {/* 6 Tanks Grid */}
-                <div className="grid grid-cols-3 gap-2 mt-1.5 h-[70%] items-center justify-items-center">
-                  {[...Array(6)].map((_, i) => (
-                    <div
-                      key={i}
-                      className="w-7 h-7 sm:w-9 sm:h-9 rounded-full bg-[#E2E8F0]/30 border border-[#E2E8F0]/50 shadow-inner flex items-center justify-center"
-                    />
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* 2. Process Unit 3 - CDU (Mission Area) */}
-          {layers.missionAreas && (
-            <div
-              className="absolute pointer-events-auto transition-opacity duration-200"
-              style={{ top: "12%", left: "43%", width: "32%", height: "54%" }}
-            >
-              <div className="w-full h-full border-2 border-[#38BDF8] bg-[#0284C7]/15 rounded-xl relative p-2 shadow-[0_0_20px_rgba(56,189,248,0.2)]">
-                <span className="text-[11px] font-bold text-[#38BDF8] block">Process Unit 3 - CDU</span>
-                <div className="w-full h-[1px] bg-[#F59E0B]/70 absolute top-[44%] left-0" />
-                <span className="absolute top-[41%] right-2 text-[9px] font-mono text-slate-400 bg-black/60 px-1 rounded">
-                  Pipe rack - 14 m
-                </span>
-                <span className="absolute bottom-2 right-2 text-[9px] font-mono text-slate-400">Utilities</span>
-              </div>
-            </div>
-          )}
-
-          {/* 3. Obstacle: Column C-301 - 62 m */}
-          {layers.obstacles && (
-            <div
-              className="absolute pointer-events-auto"
-              style={{ top: "32%", left: "55%" }}
-            >
-              <div className="flex items-center gap-1.5 bg-[#0F172A]/90 border border-[#F97316] text-[#F97316] px-2 py-0.5 rounded-full text-[10px] font-bold shadow-lg">
-                <AlertTriangle className="w-3 h-3 text-[#F97316]" />
-                <span>Column C-301 - 62 m</span>
-              </div>
-            </div>
-          )}
-
-          {/* 4. No-Fly Zone: Flare - 95 m */}
-          {layers.noFlyAndRestricted && (
-            <div
-              className="absolute pointer-events-auto"
-              style={{ top: "12%", left: "78%", width: "16%", height: "28%" }}
-            >
-              <div className="w-full h-full border-2 border-[#EF4444] bg-[#EF4444]/15 rounded-xl relative p-2 shadow-[0_0_15px_rgba(239,68,68,0.2)] flex items-center justify-center">
-                <div className="flex items-center gap-1 text-[10px] font-bold text-[#EF4444] bg-black/70 px-1.5 py-0.5 rounded">
-                  <AlertTriangle className="w-3 h-3 text-[#EF4444]" />
-                  <span>Flare - 95 m</span>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* 5. Process Unit 1 Box */}
-          {layers.missionAreas && (
-            <div
-              className="absolute pointer-events-auto"
-              style={{ top: "52%", left: "20%", width: "18%", height: "22%" }}
-            >
-              <div className="w-full h-full border border-slate-700 bg-slate-800/40 rounded-lg p-1.5">
-                <span className="text-[10px] text-slate-400 font-medium">Process Unit 1</span>
-              </div>
-            </div>
-          )}
-
-          {/* 6. Emergency Landing Zone: ELZ-1 - dock & pad */}
-          {layers.emergencyLandingZones && (
-            <div
-              className="absolute pointer-events-auto"
-              style={{ top: "67%", left: "16%" }}
-            >
-              <div className="flex items-center gap-1.5 bg-[#0A1628]/90 border border-[#22C55E] text-[#22C55E] px-2 py-0.5 rounded-full text-[10px] font-bold shadow-lg">
-                <div className="w-2.5 h-2.5 rounded-full bg-[#22C55E] animate-ping" />
-                <span>ELZ-1 - dock & pad</span>
-              </div>
-            </div>
-          )}
-
-          {/* 7. Safe Corridors (Green Glowing Polyline) */}
-          {layers.safeCorridors && (
-            <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ zIndex: 12 }}>
-              <line
-                x1="12%"
-                y1="76%"
-                x2="17%"
-                y2="69%"
-                stroke="#22C55E"
-                strokeWidth="2.5"
-                strokeDasharray="4 3"
-                opacity="0.9"
-              />
-              <line
-                x1="17%"
-                y1="69%"
-                x2="44%"
-                y2="54%"
-                stroke="#22C55E"
-                strokeWidth="2.5"
-                strokeDasharray="4 3"
-                opacity="0.9"
-              />
-              <line
-                x1="44%"
-                y1="54%"
-                x2="44%"
-                y2="66%"
-                stroke="#22C55E"
-                strokeWidth="2.5"
-                strokeDasharray="4 3"
-                opacity="0.9"
-              />
-            </svg>
-          )}
-
-          {/* Schematic Illustrative Watermark matching reference */}
-          <div className="absolute bottom-3 right-4 text-[10px] font-mono text-slate-500 bg-black/60 px-2 py-0.5 rounded">
-            Schematic · illustrative
           </div>
         </div>
       </div>
