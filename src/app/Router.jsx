@@ -28,6 +28,7 @@ import RemotePilotPage from "@/features/operations/pages/RemotePilotPage.jsx";
 import SwarmControlPage from "@/features/operations/pages/SwarmControlPage.jsx";
 import DroneFleetPage from "@/features/operations/pages/DroneFleetPage.jsx";
 import PayloadsSensorsPage from "@/features/operations/pages/PayloadsSensorsPage.jsx";
+import GeofencingAirspacePage from "@/features/mession/pages/GeofencingAirspacePage.jsx";
 
 const Routing = () => {
   return (
@@ -86,6 +87,10 @@ const Routing = () => {
         <Route path="/payloads-sensors" element={<PayloadsSensorsPage />} />
         <Route path="/payloads" element={<Navigate to="/payloads-sensors" replace />} />
         <Route path="/sensors" element={<Navigate to="/payloads-sensors" replace />} />
+
+        {/* Dedicated Geofencing & Airspace Route */}
+        <Route path="/geofencing-airspace" element={<GeofencingAirspacePage />} />
+        <Route path="/airspace" element={<Navigate to="/geofencing-airspace" replace />} />
 
         {/* Logs Route (Protected by VIEW_LOGS) */}
         <Route

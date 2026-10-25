@@ -13,6 +13,7 @@ import {
     Share2,
     Plane,
     Camera,
+    Shield,
 } from "lucide-react"
 import Fly from "../assets/images/drone.svg"
 import Settings from "../assets/images/settings.svg"
@@ -37,6 +38,7 @@ const ALL_TABS = [
     { label: "Swarm Control", value: "/swarm-control", icon: Share2 },
     { label: "Drone Fleet", value: "/drone-fleet", icon: Plane },
     { label: "Payloads & Sensors", value: "/payloads-sensors", icon: Camera },
+    { label: "Geofencing & Airspace", value: "/geofencing-airspace", icon: Shield },
     { label: "Incidents & Alerts", value: "/incidents", requiredPermission: Permissions.VIEW_INCIDENTS, icon: AlertTriangle, badge: 3 },
     { label: "Data & Analytics", value: "/analytics", icon: BarChart3 },
     { label: "Reports", value: "/reports", icon: FileText },
