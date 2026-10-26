@@ -218,20 +218,20 @@ const Header = ({
           </button>
         )}
 
-        {/* Sole Primary AeroNexus Branding */}
+        {/* Sole Primary AeroNexus Branding: Logo + Name (Always Visible at Far-Left) */}
         <Link
           to="/dashboard"
-          className="flex items-center gap-1.5 sm:gap-2 text-left group shrink-0"
+          className="flex items-center gap-2 text-left group shrink-0"
           title="AeroNexus Command Center"
         >
-          <AeroLogo className="w-5.5 h-5.5 sm:w-6 sm:h-6 text-[#35E0FF] shrink-0" size={24} />
-          <span className="hidden xs:inline text-xs sm:text-sm lg:text-base font-bold text-white tracking-tight group-hover:text-[#38BDF8] transition-colors">
+          <AeroLogo className="w-6 h-6 text-[#35E0FF] shrink-0" size={24} />
+          <span className="text-sm sm:text-base font-bold text-white tracking-tight group-hover:text-[#38BDF8] transition-colors whitespace-nowrap">
             AeroNexus
           </span>
         </Link>
 
         {/* Subtle Vertical Divider */}
-        <div className="hidden sm:block h-6 sm:h-7 w-[1px] bg-[#1E3A5F]/80 shrink-0 ml-0.5 sm:ml-1 mr-0.5 sm:mr-1" />
+        <div className="h-6 sm:h-7 w-[1px] bg-[#1E3A5F]/80 shrink-0 mx-1 sm:mx-1.5" />
 
         {/* Workflow Navigation Section: ALWAYS INLINE, NEVER IN A DROPDOWN */}
         <div className="flex flex-col justify-center min-w-0 shrink-0">
