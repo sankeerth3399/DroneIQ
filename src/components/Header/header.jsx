@@ -38,7 +38,12 @@ const WORKFLOW_STAGES = [
  * AeroNexus Branding → Workflow Navigation → Global Search → Project Selector → Date/Status Information → Emergency Deck → INFO → Notifications → User Profile
  * Responsive to all zoom levels (80% - 200%) and screen sizes (320px - 1920px).
  */
-const Header = ({ onToggleMobile, mobileOpen }) => {
+const Header = ({
+  sidebarCollapsed = false,
+  onToggleSidebar,
+  onToggleMobile,
+  mobileOpen = false,
+}) => {
   const location = useLocation()
   const navigate = useNavigate()
   const { telemetry, connectionState, isLive } = useTelemetry()
@@ -168,6 +173,19 @@ const Header = ({ onToggleMobile, mobileOpen }) => {
         >
           <Menu className="w-4 h-4" />
         </button>
+
+        {/* Desktop Sidebar Toggle Button (>= lg) */}
+        {onToggleSidebar && (
+          <button
+            type="button"
+            onClick={onToggleSidebar}
+            className="hidden lg:flex items-center justify-center w-8 h-8 rounded-md bg-[#0F223A] hover:bg-[#162E4E] border border-[#1E3A5F] text-[#8EA3BE] hover:text-[#38BDF8] transition cursor-pointer shrink-0"
+            aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            <Menu className="w-4 h-4" />
+          </button>
+        )}
 
         {/* Sole Primary AeroNexus Branding (Zero DroneOps IQ, Minimal Horizontal Footprint) */}
         <Link
