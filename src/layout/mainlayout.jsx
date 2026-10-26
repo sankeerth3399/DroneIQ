@@ -76,7 +76,7 @@ const MainLayout = () => {
       <FlightToast />
 
       {/* Top Header Bar (Full-width edge-to-edge, responsive height) */}
-      <header className="command-topbar relative shrink-0 bg-[#08182B] border-b border-[#162A44] px-3 sm:px-4 z-40 h-13 sm:h-14 flex items-center">
+      <header className="command-topbar relative shrink-0 bg-[#08182B] border-b border-[#162A44] px-2 sm:px-4 z-40 h-14 sm:h-[58px] flex items-center">
         <Header
           sidebarCollapsed={collapsed}
           onToggleSidebar={handleToggleSidebar}

@@ -8,7 +8,6 @@ import {
   ChevronDown,
   Check,
   Sun,
-  GitBranch,
   MoreHorizontal,
   Info,
   Clock,
@@ -115,23 +114,6 @@ const Header = ({
     return WORKFLOW_STAGES.find((s) => s.id === activeWorkflowStage) || WORKFLOW_STAGES[0]
   }, [activeWorkflowStage])
 
-  // Responsive Workflow Dropdown state (for viewports < 1400px and zoom levels >= 125%)
-  const [workflowDropdownOpen, setWorkflowDropdownOpen] = useState(false)
-  const workflowDropdownRef = useRef(null)
-
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (workflowDropdownRef.current && !workflowDropdownRef.current.contains(e.target)) {
-        setWorkflowDropdownOpen(false)
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside)
-    return () => document.removeEventListener("mousedown", handleClickOutside)
-  }, [])
-
-  useEffect(() => {
-    setWorkflowDropdownOpen(false)
-  }, [location.pathname])
 
   // Global Search Modal State and Keyboard Shortcuts (/ and Ctrl+K / Cmd+K)
   const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false)
@@ -236,104 +218,64 @@ const Header = ({
           </button>
         )}
 
-        {/* Sole Primary AeroNexus Branding (Zero DroneOps IQ, Minimal Horizontal Footprint) */}
+        {/* Sole Primary AeroNexus Branding */}
         <Link
           to="/dashboard"
-          className="flex items-center gap-2 text-left group shrink-0"
+          className="flex items-center gap-1.5 sm:gap-2 text-left group shrink-0"
           title="AeroNexus Command Center"
         >
-          <AeroLogo className="w-6 h-6 text-[#35E0FF] shrink-0" size={24} />
-          <span className="text-sm sm:text-base font-bold text-white tracking-tight group-hover:text-[#38BDF8] transition-colors">
+          <AeroLogo className="w-5.5 h-5.5 sm:w-6 sm:h-6 text-[#35E0FF] shrink-0" size={24} />
+          <span className="hidden xs:inline text-xs sm:text-sm lg:text-base font-bold text-white tracking-tight group-hover:text-[#38BDF8] transition-colors">
             AeroNexus
           </span>
         </Link>
 
         {/* Subtle Vertical Divider */}
-        <div className="hidden 2xl:block h-5 w-[1px] bg-[#1E3A5F]/80 shrink-0 ml-1" />
+        <div className="hidden sm:block h-6 sm:h-7 w-[1px] bg-[#1E3A5F]/80 shrink-0 ml-0.5 sm:ml-1 mr-0.5 sm:mr-1" />
 
-        {/* Workflow Navigation Section */}
-        {/* Option A: Full Horizontal Flow (Visible on 2xl displays >= 1400px) */}
-        <nav
-          aria-label="Operational Workflow"
-          className="hidden 2xl:flex items-center gap-0.5 text-xs tracking-tight shrink-0"
-        >
-          {WORKFLOW_STAGES.map((stage, idx) => {
-            const isActive = activeWorkflowStage === stage.id
-            return (
-              <div key={stage.id} className="flex items-center">
-                <Link
-                  to={stage.path}
-                  className={`font-semibold transition-all px-1.5 py-0.5 rounded text-[11px] ${
-                    isActive
-                      ? "text-[#38BDF8] bg-[#38BDF8]/15 drop-shadow-[0_0_8px_rgba(56,189,248,0.35)] font-bold"
-                      : "text-[#8EA3BE] hover:text-white hover:bg-white/5"
-                  }`}
-                >
-                  {stage.label}
-                </Link>
-                {idx < WORKFLOW_STAGES.length - 1 && (
-                  <span className="text-[#3A5373] text-[10px] select-none mx-0.5">→</span>
-                )}
-              </div>
-            )
-          })}
-        </nav>
-
-        {/* Option B: Responsive Compact Workflow Selector (Visible on tablet/laptop sm to xl) */}
-        <div ref={workflowDropdownRef} className="relative hidden sm:flex 2xl:hidden items-center shrink-0">
-          <button
-            type="button"
-            onClick={() => setWorkflowDropdownOpen((prev) => !prev)}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#0F223A] hover:bg-[#162E4E] border border-[#1E3A5F] hover:border-[#38BDF8]/60 text-xs font-semibold text-[#38BDF8] transition cursor-pointer select-none"
-            aria-label="Select operational workflow stage"
-            aria-expanded={workflowDropdownOpen}
-            title="Operational Workflow Stage"
+        {/* Workflow Navigation Section: ALWAYS INLINE, NEVER IN A DROPDOWN */}
+        <div className="flex flex-col justify-center min-w-0 shrink-0">
+          {/* Top Line: All Six Workflow Items Inline with Arrows */}
+          <nav
+            aria-label="Operational Workflow"
+            className="flex items-center flex-nowrap whitespace-nowrap gap-0.5 sm:gap-1 text-[10px] sm:text-[11.5px] lg:text-[13px] tracking-tight shrink-0 select-none"
           >
-            <GitBranch className="w-3.5 h-3.5 text-[#38BDF8] shrink-0" />
-            <span className="font-bold">{currentWorkflowStageObj.label}</span>
-            <ChevronDown className={`w-3 h-3 text-[#8EA3BE] shrink-0 transition-transform ${workflowDropdownOpen ? "rotate-180" : ""}`} />
-          </button>
+            {WORKFLOW_STAGES.map((stage, idx) => {
+              const isActive = activeWorkflowStage === stage.id
+              return (
+                <div key={stage.id} className="flex items-center shrink-0">
+                  <Link
+                    to={stage.path}
+                    className={`font-semibold sm:font-bold transition-all px-1 sm:px-1.5 py-0.5 rounded text-[10px] sm:text-[11px] lg:text-[12.5px] leading-tight ${
+                      isActive
+                        ? "text-[#38BDF8] bg-[#38BDF8]/15 drop-shadow-[0_0_8px_rgba(56,189,248,0.35)] font-bold"
+                        : "text-white hover:text-[#38BDF8] hover:bg-white/5"
+                    }`}
+                  >
+                    {stage.label}
+                  </Link>
+                  {idx < WORKFLOW_STAGES.length - 1 && (
+                    <span className="text-[#38BDF8]/70 text-[9.5px] sm:text-xs select-none mx-0.5 sm:mx-1 font-bold">
+                      →
+                    </span>
+                  )}
+                </div>
+              )
+            })}
+          </nav>
 
-          {/* Workflow Dropdown Menu */}
-          {workflowDropdownOpen && (
-            <div className="absolute top-[calc(100%+6px)] left-0 z-50 w-56 rounded-xl border border-[#1E3A5F] bg-[#0A1626FA] shadow-[0_16px_36px_rgba(0,0,0,0.85)] backdrop-blur-md overflow-hidden py-1 animate-in fade-in slide-in-from-top-1 font-mono text-xs">
-              <div className="px-3 py-1.5 text-[10px] font-bold text-[#5A7391] uppercase tracking-wider border-b border-[#162A44] flex items-center justify-between">
-                <span>Workflow Stages</span>
-                <span className="text-[#38BDF8]">6 Steps</span>
-              </div>
-              <div className="divide-y divide-[#162A44]/40">
-                {WORKFLOW_STAGES.map((stage, idx) => {
-                  const isActive = activeWorkflowStage === stage.id
-                  return (
-                    <Link
-                      key={stage.id}
-                      to={stage.path}
-                      onClick={() => setWorkflowDropdownOpen(false)}
-                      className={`flex items-center justify-between px-3 py-2 transition ${
-                        isActive
-                          ? "bg-[#1B68D2]/25 text-[#38BDF8] font-bold"
-                          : "text-[#CAD5E2] hover:bg-[#142944] hover:text-white"
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] text-[#5A7391] font-mono">{idx + 1}.</span>
-                        <span>{stage.label}</span>
-                      </div>
-                      {isActive && <Check className="w-3.5 h-3.5 text-[#38BDF8] shrink-0" />}
-                    </Link>
-                  )
-                })}
-              </div>
-            </div>
-          )}
+          {/* Bottom Line: Subtitle */}
+          <span className="hidden sm:block text-[9px] sm:text-[9.5px] lg:text-[10px] text-[#8EA3BE] font-normal tracking-tight select-none truncate leading-none mt-0.5">
+            Smarter missions. Safer operations. Greater impact.
+          </span>
         </div>
       </div>
 
       {/* ========================================================
           2. CENTER: GLOBAL SEARCH → PROJECT SELECTOR
           ======================================================== */}
-      <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 justify-center flex-1 max-w-sm xl:max-w-md px-1">
-        {/* Global Search Field (Desktop lg+) */}
+      <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 justify-center flex-1 max-w-xs xl:max-w-md px-1">
+        {/* Global Search Field (Desktop xl+) */}
         <div
           role="button"
           tabIndex={0}
@@ -344,7 +286,7 @@ const Header = ({
               setIsGlobalSearchOpen(true)
             }
           }}
-          className="relative hidden lg:flex items-center bg-[#0C1B2E] hover:bg-[#0F223A] border border-[#1E3A5F] hover:border-[#38BDF8]/60 focus:border-[#38BDF8] focus:ring-1 focus:ring-[#38BDF8]/30 rounded-full px-2.5 xl:px-3 py-1 shadow-inner transition cursor-pointer w-full min-w-[120px] max-w-[190px] xl:max-w-[230px] shrink group select-none"
+          className="relative hidden xl:flex items-center bg-[#0C1B2E] hover:bg-[#0F223A] border border-[#1E3A5F] hover:border-[#38BDF8]/60 focus:border-[#38BDF8] focus:ring-1 focus:ring-[#38BDF8]/30 rounded-full px-2.5 xl:px-3 py-1 shadow-inner transition cursor-pointer w-full min-w-[120px] max-w-[170px] 2xl:max-w-[220px] shrink group select-none"
           title="Search missions, drones, locations (Press / or Ctrl+K)"
         >
           <Search className="w-3.5 h-3.5 text-[#7E95B1] group-hover:text-[#38BDF8] mr-1.5 shrink-0 transition-colors" />
@@ -356,19 +298,19 @@ const Header = ({
           </kbd>
         </div>
 
-        {/* Compact Search Button (< lg) */}
+        {/* Compact Search Button (< xl / high zoom) */}
         <button
           type="button"
           onClick={() => setIsGlobalSearchOpen(true)}
-          className="lg:hidden flex items-center justify-center w-7.5 h-7.5 rounded-full bg-[#0C1B2E] hover:bg-[#12263F] border border-[#1E3A5F] hover:border-[#38BDF8] text-[#7E95B1] hover:text-[#38BDF8] transition shrink-0 cursor-pointer shadow-inner"
+          className="xl:hidden flex items-center justify-center w-7.5 h-7.5 rounded-full bg-[#0C1B2E] hover:bg-[#12263F] border border-[#1E3A5F] hover:border-[#38BDF8] text-[#7E95B1] hover:text-[#38BDF8] transition shrink-0 cursor-pointer shadow-inner"
           aria-label="Open search"
           title="Search missions, drones, locations (/)"
         >
           <Search className="w-3.5 h-3.5" />
         </button>
 
-        {/* Project Selector (Hidden on mobile < sm, accessible via Mobile Overflow Menu) */}
-        <div ref={projectDropdownRef} className="relative hidden sm:flex items-center gap-1.5 shrink-0">
+        {/* Project Selector (Directly visible on md+, accessible in Overflow Menu on < md) */}
+        <div ref={projectDropdownRef} className="relative hidden md:flex items-center gap-1.5 shrink-0">
           <span className="text-[10px] font-bold tracking-wider uppercase text-[#7E95B1] shrink-0 hidden 2xl:inline">
             PROJECT
           </span>
@@ -377,7 +319,7 @@ const Header = ({
           <button
             type="button"
             onClick={() => setProjectDropdownOpen((prev) => !prev)}
-            className="bg-[#1B68D2] hover:bg-[#2074e6] text-white px-2.5 sm:px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1.5 shadow-sm transition shrink-0 cursor-pointer max-w-[120px] sm:max-w-[150px] md:max-w-[170px]"
+            className="bg-[#1B68D2] hover:bg-[#2074e6] text-white px-2.5 sm:px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1.5 shadow-sm transition shrink-0 cursor-pointer max-w-[110px] lg:max-w-[140px] 2xl:max-w-[170px]"
             aria-label="Select active project"
             aria-expanded={projectDropdownOpen}
           >
@@ -412,7 +354,7 @@ const Header = ({
                       }`}
                     >
                       <div className="min-w-0 pr-2">
-                        <p className="truncate">{name}</p>
+                        <p className="truncate font-semibold">{name}</p>
                         <p className="text-[10px] text-[#7E95B1] truncate">{p.location || "Operational Site"}</p>
                       </div>
                       {isSelected && <Check className="w-3.5 h-3.5 text-[#38BDF8] shrink-0" />}
@@ -426,7 +368,7 @@ const Header = ({
       </div>
 
       {/* ========================================================
-          3. RIGHT: DATE/STATUS → EMERGENCY DECK → INFO → NOTIFICATIONS → USER PROFILE
+          3. RIGHT: STATUS/TIME → EMERGENCY DECK → INFO → NOTIFICATIONS → PROFILE → OVERFLOW MENU
           ======================================================== */}
       <div className="flex items-center gap-1.5 sm:gap-2 lg:gap-2.5 shrink-0 justify-end">
         {/* Telemetry Ambient Temperature */}
@@ -456,7 +398,7 @@ const Header = ({
 
         {/* Live Telemetry Status Dot with Tooltip */}
         <div
-          className="hidden sm:flex items-center px-0.5 cursor-help"
+          className="hidden md:flex items-center px-0.5 cursor-help"
           title={`Telemetry: ${connectionState} · Time: ${formattedTime}`}
         >
           <div className={`w-2 h-2 rounded-full ${connectionDotClass}`} />
@@ -465,8 +407,8 @@ const Header = ({
         {/* Preserved Emergency Override Deck */}
         {(canOverrideFlight || canExecuteFlight) && <EmergencyOverrideDeck />}
 
-        {/* Preserved Global Backend Info Console Button (Visible directly on sm+, in Overflow on mobile) */}
-        <div className="hidden sm:block shrink-0">
+        {/* Preserved Global Backend Info Console Button (Visible directly on md+, in Overflow on < md) */}
+        <div className="hidden md:block shrink-0">
           <GlobalInfoButton />
         </div>
 
@@ -476,7 +418,7 @@ const Header = ({
             id="notification-bell-btn"
             type="button"
             onClick={() => setIsHistoryOpen((prev) => !prev)}
-            className="relative flex justify-center items-center w-8 h-8 rounded-full hover:bg-white/5 text-[#8EA3BE] hover:text-[#38BDF8] transition cursor-pointer"
+            className="relative flex justify-center items-center w-7.5 h-7.5 sm:w-8 sm:h-8 rounded-full hover:bg-white/5 text-[#8EA3BE] hover:text-[#38BDF8] transition cursor-pointer"
             title="Alerts & Notifications"
             aria-label="Toggle Notification Center"
             aria-expanded={isHistoryOpen}
@@ -494,15 +436,15 @@ const Header = ({
         {/* User Profile and Fast Role Switcher */}
         <ProfileDetails />
 
-        {/* Mobile Overflow Menu Trigger (< sm: 320px - 639px) */}
-        <div ref={overflowRef} className="relative sm:hidden shrink-0">
+        {/* Secondary Overflow Menu Trigger (< md: 320px - 767px) */}
+        <div ref={overflowRef} className="relative md:hidden shrink-0">
           <button
             type="button"
             onClick={() => setOverflowOpen((prev) => !prev)}
             className="relative flex items-center justify-center w-7.5 h-7.5 rounded-full bg-[#0C1B2E] hover:bg-[#12263F] border border-[#1E3A5F] hover:border-[#38BDF8] text-[#7E95B1] hover:text-[#38BDF8] transition cursor-pointer shadow-inner"
-            aria-label="More navigation and controls"
+            aria-label="More options"
             aria-expanded={overflowOpen}
-            title="Workflow, Projects, Info & Status"
+            title="Projects, Info & Status"
           >
             <MoreHorizontal className="w-4 h-4" />
             {backendInfoEventCount > 0 && (
@@ -512,43 +454,14 @@ const Header = ({
             )}
           </button>
 
-          {/* Mobile Overflow Dropdown Panel */}
+          {/* Secondary Overflow Dropdown Panel (NO WORKFLOW ITEMS HERE, ONLY SECONDARY CONTROLS) */}
           {overflowOpen && (
             <div
-              className="absolute top-[calc(100%+8px)] right-0 z-50 w-72 max-w-[calc(100vw-24px)] rounded-xl border border-[#1E3A5F] bg-[#080D16FA] shadow-[0_16px_40px_rgba(0,0,0,0.95)] backdrop-blur-md overflow-hidden animate-in fade-in slide-in-from-top-1 font-mono text-xs divide-y divide-[#162A44]"
+              className="absolute top-[calc(100%+8px)] right-0 z-50 w-64 max-w-[calc(100vw-24px)] rounded-xl border border-[#1E3A5F] bg-[#080D16FA] shadow-[0_16px_40px_rgba(0,0,0,0.95)] backdrop-blur-md overflow-hidden animate-in fade-in slide-in-from-top-1 font-mono text-xs divide-y divide-[#162A44]"
               role="menu"
               aria-label="Quick Navigation and Settings"
             >
-              {/* 1. Operational Workflow Stages */}
-              <div className="py-2">
-                <div className="px-3 pb-1 text-[10px] font-bold text-[#5A7391] uppercase tracking-wider flex items-center justify-between">
-                  <span>Operational Workflow</span>
-                  <span className="text-[#38BDF8] font-bold">{currentWorkflowStageObj.label}</span>
-                </div>
-                <div className="grid grid-cols-2 gap-1 px-2 pt-1">
-                  {WORKFLOW_STAGES.map((stage, idx) => {
-                    const isActive = activeWorkflowStage === stage.id
-                    return (
-                      <Link
-                        key={stage.id}
-                        to={stage.path}
-                        onClick={() => setOverflowOpen(false)}
-                        className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs transition ${
-                          isActive
-                            ? "bg-[#1B68D2]/25 text-[#38BDF8] font-bold border border-[#38BDF8]/40"
-                            : "text-[#CAD5E2] hover:bg-[#142944] hover:text-white"
-                        }`}
-                      >
-                        <span className="text-[10px] text-[#5A7391]">{idx + 1}.</span>
-                        <span className="truncate">{stage.label}</span>
-                        {isActive && <Check className="w-3 h-3 text-[#38BDF8] ml-auto shrink-0" />}
-                      </Link>
-                    )
-                  })}
-                </div>
-              </div>
-
-              {/* 2. Active Project Selector */}
+              {/* 1. Active Project Selector */}
               <div className="py-2">
                 <div className="px-3 pb-1 text-[10px] font-bold text-[#5A7391] uppercase tracking-wider flex items-center justify-between">
                   <span>Active Project</span>
@@ -583,7 +496,7 @@ const Header = ({
                 </div>
               </div>
 
-              {/* 3. Global INFO Console Trigger */}
+              {/* 2. Global INFO Console Trigger */}
               <div className="p-2">
                 <button
                   type="button"
@@ -607,7 +520,7 @@ const Header = ({
                 </button>
               </div>
 
-              {/* 4. Date, Time & Telemetry Status Summary */}
+              {/* 3. Date, Time & Telemetry Status Summary */}
               <div className="px-3 py-2 bg-[#060A12] flex items-center justify-between text-[11px] text-[#8EA3BE]">
                 <div className="flex items-center gap-1.5">
                   <div className={`w-2 h-2 rounded-full ${connectionDotClass}`} />
