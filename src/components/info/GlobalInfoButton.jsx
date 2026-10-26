@@ -16,7 +16,7 @@ export const GlobalInfoButton = () => {
         id="global-backend-info-btn"
         type="button"
         onClick={toggleOpen}
-        className={`inline-flex h-8 sm:h-9 items-center gap-1.5 rounded-[4px] border px-2 sm:px-2.5 text-[10px] sm:text-[11px] font-bold tracking-wide transition cursor-pointer select-none active:scale-95 ${
+        className={`inline-flex items-center gap-1.5 rounded-[4px] border px-2 sm:px-2.5 py-1 text-[10px] sm:text-[11px] font-bold tracking-wide transition cursor-pointer select-none active:scale-95 ${
           isOpen
             ? "border-[#35E0FF] bg-[#10242B] text-[#B7F3FF] shadow-[0_0_12px_rgba(53,224,255,0.28)]"
             : "border-[#24424C] bg-[#101920] text-[#69DDF1] hover:border-[#35E0FF] hover:bg-[#14252C] hover:text-[#B7F3FF]"
@@ -26,7 +26,7 @@ export const GlobalInfoButton = () => {
         aria-expanded={isOpen}
       >
         <Info className="h-3.5 w-3.5 shrink-0" />
-        <span>INFO</span>
+        <span className="hidden xl:inline">INFO</span>
         {eventCount > 0 && (
           <span
             className="ml-0.5 inline-flex items-center justify-center rounded-full bg-[#183647] border border-[#2E586E] px-1.5 py-0.5 text-[9px] font-mono font-semibold text-[#35E0FF]"

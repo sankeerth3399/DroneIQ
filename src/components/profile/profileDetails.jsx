@@ -66,7 +66,7 @@ const ProfileDropdown = () => {
             <button
                 type="button"
                 onClick={() => setOpen((prev) => !prev)}
-                className={`flex items-center gap-2 px-2.5 py-1 rounded-full transition-all duration-150 cursor-pointer select-none border ${
+                className={`flex items-center gap-2 p-0.5 xl:px-2.5 xl:py-1 rounded-full transition-all duration-150 cursor-pointer select-none border ${
                     open
                         ? "bg-[#10223A] border-[#38BDF8] ring-1 ring-[#38BDF8]/40 shadow-[0_0_12px_rgba(56,189,248,0.25)]"
                         : "border-[#1E3A5F] bg-[#0A182B]/60 hover:bg-[#10223A] hover:border-[#38BDF8]/60"
@@ -75,7 +75,7 @@ const ProfileDropdown = () => {
                 aria-expanded={open}
                 aria-haspopup="true"
             >
-                <div className="flex justify-center items-center w-7 h-7 sm:w-8 sm:h-8 shrink-0 rounded-full bg-[#1B68D2] text-white text-[12px] font-bold shadow-sm ring-1 ring-white/10">
+                <div className="flex justify-center items-center w-7 h-7 sm:w-7.5 sm:h-7.5 shrink-0 rounded-full bg-[#1B68D2] text-white text-[12px] font-bold shadow-sm ring-1 ring-white/10">
                     {initials}
                 </div>
                 <div className="hidden xl:flex flex-col text-left leading-tight min-w-0 max-w-[130px]">

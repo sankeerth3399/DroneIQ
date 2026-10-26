@@ -341,10 +341,10 @@ export const EmergencyOverrideDeck = () => {
         >
           <div className="w-[5px] h-[5px] sm:w-[6px] sm:h-[6px] rounded-full bg-[#FF4141] shadow-[0px_0px_5px_0px_#FF4141] animate-pulse shrink-0" />
           <AlertOctagon className="w-3.5 h-3.5 text-[#FF4141] shrink-0" />
-          <span className="hidden md:inline text-[10px] sm:text-[11px] font-semibold whitespace-nowrap font-mono tracking-wide text-[#FFB3B3]">
+          <span className="hidden 2xl:inline text-[10px] sm:text-[11px] font-semibold whitespace-nowrap font-mono tracking-wide text-[#FFB3B3]">
             EMERGENCY DECK
           </span>
-          <span className="hidden sm:inline md:hidden text-[10px] font-semibold whitespace-nowrap font-mono tracking-wide text-[#FFB3B3]">
+          <span className="hidden xl:inline 2xl:hidden text-[10px] font-semibold whitespace-nowrap font-mono tracking-wide text-[#FFB3B3]">
             EMERGENCY
           </span>
         </button>

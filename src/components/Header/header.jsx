@@ -8,6 +8,10 @@ import {
   ChevronDown,
   Check,
   Sun,
+  GitBranch,
+  MoreHorizontal,
+  Info,
+  Clock,
 } from "lucide-react"
 import AeroLogo from "@/components/AeroLogo.jsx"
 import ProfileDetails from "@/components/profile/profileDetails.jsx"
@@ -15,6 +19,7 @@ import { useTelemetry } from "@/hooks/useTelemetry.js"
 import { useAuth } from "@/hooks/useAuth.js"
 import { useNotification } from "@/hooks/useNotification.js"
 import { useMission } from "@/hooks/useMission.js"
+import { useBackendInfo } from "@/hooks/useBackendInfo.js"
 import { ConnectionState } from "@/services/telemetry/telemetryTypes.js"
 import { Permissions } from "@/auth/permissions.js"
 import EmergencyOverrideDeck from "@/features/fly/components/EmergencyOverrideDeck.jsx"
@@ -22,7 +27,7 @@ import GlobalInfoButton from "@/components/info/GlobalInfoButton.jsx"
 import NotificationCenterModal from "@/components/notification/NotificationCenterModal.jsx"
 import GlobalSearchModal from "@/components/search/GlobalSearchModal.jsx"
 
-// 6 Core Operational Workflow Stages matching reference
+// 6 Core Operational Workflow Stages matching AeroNexus operational sequence
 const WORKFLOW_STAGES = [
   { id: "plan", label: "Plan", path: "/mission-planning" },
   { id: "orchestrate", label: "Orchestrate", path: "/missions" },
@@ -36,7 +41,7 @@ const WORKFLOW_STAGES = [
  * Header - AeroNexus Unified Command Center Header
  * Layout Order:
  * AeroNexus Branding → Workflow Navigation → Global Search → Project Selector → Date/Status Information → Emergency Deck → INFO → Notifications → User Profile
- * Responsive to all zoom levels (80% - 200%) and screen sizes (320px - 1920px).
+ * Responsive to all zoom levels (80% - 200%) and screen sizes (320px - 3840px).
  */
 const Header = ({
   sidebarCollapsed = false,
@@ -50,6 +55,7 @@ const Header = ({
   const { hasPermission } = useAuth()
   const { unreadCount, isHistoryOpen, setIsHistoryOpen } = useNotification()
   const { projects = [], currentProject, selectProject } = useMission()
+  const { toggleOpen: toggleBackendInfo, eventCount: backendInfoEventCount } = useBackendInfo()
 
   // Permissions for flight overrides
   const canOverrideFlight = typeof hasPermission === "function" ? hasPermission(Permissions.OVERRIDE_FLIGHT_COMMANDS) : false
@@ -81,7 +87,7 @@ const Header = ({
     })
   }, [currentDate])
 
-  // Active workflow stage based on route
+  // Active workflow stage based on current route
   const activeWorkflowStage = useMemo(() => {
     const path = location.pathname.toLowerCase()
     if (path === "/mission-planning" || path === "/plan" || path === "/waypoint-planning" || path === "/geofence") {
@@ -99,10 +105,32 @@ const Header = ({
     if (path.startsWith("/analytics") || path.startsWith("/reports") || path.startsWith("/logs")) {
       return "analyze"
     }
-    if (path.startsWith("/incidents") || path.startsWith("/alerts") || path.startsWith("/admin") || path.startsWith("/drone-fleet") || path.startsWith("/payloads-sensors") || path.startsWith("/users")) {
+    if (path.startsWith("/incidents") || path.startsWith("/alerts") || path.startsWith("/admin") || path.startsWith("/drone-fleet") || path.startsWith("/payloads-sensors") || path.startsWith("/users") || path.startsWith("/geofencing-airspace")) {
       return "act"
     }
-    return null
+    return "monitor"
+  }, [location.pathname])
+
+  const currentWorkflowStageObj = useMemo(() => {
+    return WORKFLOW_STAGES.find((s) => s.id === activeWorkflowStage) || WORKFLOW_STAGES[0]
+  }, [activeWorkflowStage])
+
+  // Responsive Workflow Dropdown state (for viewports < 1400px and zoom levels >= 125%)
+  const [workflowDropdownOpen, setWorkflowDropdownOpen] = useState(false)
+  const workflowDropdownRef = useRef(null)
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (workflowDropdownRef.current && !workflowDropdownRef.current.contains(e.target)) {
+        setWorkflowDropdownOpen(false)
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [])
+
+  useEffect(() => {
+    setWorkflowDropdownOpen(false)
   }, [location.pathname])
 
   // Global Search Modal State and Keyboard Shortcuts (/ and Ctrl+K / Cmd+K)
@@ -110,7 +138,6 @@ const Header = ({
 
   useEffect(() => {
     const handleKeyDown = (e) => {
-      // '/' key or 'Ctrl+K' / 'Cmd+K' opens global command palette
       if (
         (e.key === "/" &&
           document.activeElement?.tagName !== "INPUT" &&
@@ -140,6 +167,28 @@ const Header = ({
     return () => document.removeEventListener("mousedown", handleClickOutside)
   }, [])
 
+  useEffect(() => {
+    setProjectDropdownOpen(false)
+  }, [location.pathname])
+
+  // Mobile Overflow Menu State (< 640px)
+  const [overflowOpen, setOverflowOpen] = useState(false)
+  const overflowRef = useRef(null)
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (overflowRef.current && !overflowRef.current.contains(e.target)) {
+        setOverflowOpen(false)
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [])
+
+  useEffect(() => {
+    setOverflowOpen(false)
+  }, [location.pathname])
+
   // Authentic weather check (only show when genuine temperature exists in telemetry)
   const genuineWeather = typeof telemetry?.temperature === "number" ? Math.round(telemetry.temperature) : null
 
@@ -158,11 +207,11 @@ const Header = ({
   }, [isLive, connectionState])
 
   return (
-    <div className="flex items-center justify-between w-full h-full min-w-0 select-none gap-2 sm:gap-3">
+    <div className="flex items-center justify-between w-full h-full min-w-0 select-none gap-1.5 sm:gap-2.5 lg:gap-3">
       {/* ========================================================
           1. LEFT: AERONEXUS BRANDING → WORKFLOW NAVIGATION
           ======================================================== */}
-      <div className="flex items-center min-w-0 gap-2 sm:gap-3 lg:gap-3.5 shrink-0">
+      <div className="flex items-center min-w-0 gap-1.5 sm:gap-2 lg:gap-2.5 shrink-0">
         {/* Mobile Hamburger Drawer Button (< lg) */}
         <button
           type="button"
@@ -200,12 +249,13 @@ const Header = ({
         </Link>
 
         {/* Subtle Vertical Divider */}
-        <div className="hidden lg:block h-5 w-[1px] bg-[#1E3A5F]/80 shrink-0" />
+        <div className="hidden 2xl:block h-5 w-[1px] bg-[#1E3A5F]/80 shrink-0 ml-1" />
 
-        {/* Workflow Navigation: Plan → Orchestrate → Fly → Monitor → Analyze → Act */}
+        {/* Workflow Navigation Section */}
+        {/* Option A: Full Horizontal Flow (Visible on 2xl displays >= 1400px) */}
         <nav
           aria-label="Operational Workflow"
-          className="hidden lg:flex items-center gap-0.5 text-xs tracking-tight shrink-0"
+          className="hidden 2xl:flex items-center gap-0.5 text-xs tracking-tight shrink-0"
         >
           {WORKFLOW_STAGES.map((stage, idx) => {
             const isActive = activeWorkflowStage === stage.id
@@ -213,7 +263,7 @@ const Header = ({
               <div key={stage.id} className="flex items-center">
                 <Link
                   to={stage.path}
-                  className={`font-semibold transition-all px-1.5 py-0.5 rounded text-[11px] xl:text-xs ${
+                  className={`font-semibold transition-all px-1.5 py-0.5 rounded text-[11px] ${
                     isActive
                       ? "text-[#38BDF8] bg-[#38BDF8]/15 drop-shadow-[0_0_8px_rgba(56,189,248,0.35)] font-bold"
                       : "text-[#8EA3BE] hover:text-white hover:bg-white/5"
@@ -228,24 +278,62 @@ const Header = ({
             )
           })}
         </nav>
+
+        {/* Option B: Responsive Compact Workflow Selector (Visible on tablet/laptop sm to xl) */}
+        <div ref={workflowDropdownRef} className="relative hidden sm:flex 2xl:hidden items-center shrink-0">
+          <button
+            type="button"
+            onClick={() => setWorkflowDropdownOpen((prev) => !prev)}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#0F223A] hover:bg-[#162E4E] border border-[#1E3A5F] hover:border-[#38BDF8]/60 text-xs font-semibold text-[#38BDF8] transition cursor-pointer select-none"
+            aria-label="Select operational workflow stage"
+            aria-expanded={workflowDropdownOpen}
+            title="Operational Workflow Stage"
+          >
+            <GitBranch className="w-3.5 h-3.5 text-[#38BDF8] shrink-0" />
+            <span className="font-bold">{currentWorkflowStageObj.label}</span>
+            <ChevronDown className={`w-3 h-3 text-[#8EA3BE] shrink-0 transition-transform ${workflowDropdownOpen ? "rotate-180" : ""}`} />
+          </button>
+
+          {/* Workflow Dropdown Menu */}
+          {workflowDropdownOpen && (
+            <div className="absolute top-[calc(100%+6px)] left-0 z-50 w-56 rounded-xl border border-[#1E3A5F] bg-[#0A1626FA] shadow-[0_16px_36px_rgba(0,0,0,0.85)] backdrop-blur-md overflow-hidden py-1 animate-in fade-in slide-in-from-top-1 font-mono text-xs">
+              <div className="px-3 py-1.5 text-[10px] font-bold text-[#5A7391] uppercase tracking-wider border-b border-[#162A44] flex items-center justify-between">
+                <span>Workflow Stages</span>
+                <span className="text-[#38BDF8]">6 Steps</span>
+              </div>
+              <div className="divide-y divide-[#162A44]/40">
+                {WORKFLOW_STAGES.map((stage, idx) => {
+                  const isActive = activeWorkflowStage === stage.id
+                  return (
+                    <Link
+                      key={stage.id}
+                      to={stage.path}
+                      onClick={() => setWorkflowDropdownOpen(false)}
+                      className={`flex items-center justify-between px-3 py-2 transition ${
+                        isActive
+                          ? "bg-[#1B68D2]/25 text-[#38BDF8] font-bold"
+                          : "text-[#CAD5E2] hover:bg-[#142944] hover:text-white"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-[#5A7391] font-mono">{idx + 1}.</span>
+                        <span>{stage.label}</span>
+                      </div>
+                      {isActive && <Check className="w-3.5 h-3.5 text-[#38BDF8] shrink-0" />}
+                    </Link>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ========================================================
           2. CENTER: GLOBAL SEARCH → PROJECT SELECTOR
           ======================================================== */}
-      <div className="flex items-center gap-2 min-w-0 justify-center flex-1 max-w-xl px-1 sm:px-2">
-        {/* Mobile Search Button (< sm) */}
-        <button
-          type="button"
-          onClick={() => setIsGlobalSearchOpen(true)}
-          className="sm:hidden flex items-center justify-center w-8 h-8 rounded-full bg-[#0C1B2E] hover:bg-[#12263F] border border-[#1E3A5F] hover:border-[#38BDF8] text-[#7E95B1] hover:text-[#38BDF8] transition shrink-0 cursor-pointer shadow-inner"
-          aria-label="Open search"
-          title="Search missions, drones, locations (/)"
-        >
-          <Search className="w-4 h-4" />
-        </button>
-
-        {/* Global Search Field (Fluid Resizing for Zoom Adaptability) */}
+      <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 justify-center flex-1 max-w-sm xl:max-w-md px-1">
+        {/* Global Search Field (Desktop lg+) */}
         <div
           role="button"
           tabIndex={0}
@@ -256,21 +344,32 @@ const Header = ({
               setIsGlobalSearchOpen(true)
             }
           }}
-          className="relative hidden sm:flex items-center bg-[#0C1B2E] hover:bg-[#0F223A] border border-[#1E3A5F] hover:border-[#38BDF8]/60 focus:border-[#38BDF8] focus:ring-1 focus:ring-[#38BDF8]/30 rounded-full px-3 py-1 sm:py-1.5 shadow-inner transition cursor-pointer w-full min-w-[110px] max-w-[260px] md:max-w-[290px] shrink group select-none"
+          className="relative hidden lg:flex items-center bg-[#0C1B2E] hover:bg-[#0F223A] border border-[#1E3A5F] hover:border-[#38BDF8]/60 focus:border-[#38BDF8] focus:ring-1 focus:ring-[#38BDF8]/30 rounded-full px-2.5 xl:px-3 py-1 shadow-inner transition cursor-pointer w-full min-w-[120px] max-w-[190px] xl:max-w-[230px] shrink group select-none"
           title="Search missions, drones, locations (Press / or Ctrl+K)"
         >
-          <Search className="w-3.5 h-3.5 text-[#7E95B1] group-hover:text-[#38BDF8] mr-2 shrink-0 transition-colors" />
+          <Search className="w-3.5 h-3.5 text-[#7E95B1] group-hover:text-[#38BDF8] mr-1.5 shrink-0 transition-colors" />
           <span className="text-xs text-[#5A7391] group-hover:text-[#8EA3BE] truncate flex-1 transition-colors">
-            Search missions, drones…
+            Search…
           </span>
-          <kbd className="inline-flex items-center justify-center h-4 min-w-[16px] px-1 text-[9.5px] font-mono font-semibold text-[#7E95B1] bg-[#10243B] border border-[#1E3A5F] rounded select-none shrink-0 ml-1.5 shadow-2xs">
+          <kbd className="inline-flex items-center justify-center h-4 min-w-[16px] px-1 text-[9.5px] font-mono font-semibold text-[#7E95B1] bg-[#10243B] border border-[#1E3A5F] rounded select-none shrink-0 ml-1 shadow-2xs">
             /
           </kbd>
         </div>
 
-        {/* Project Selector (Fluid Dropdown, Never Overlapping) */}
-        <div ref={projectDropdownRef} className="relative hidden md:flex items-center gap-1.5 shrink-0">
-          <span className="text-[10px] font-bold tracking-wider uppercase text-[#7E95B1] shrink-0">
+        {/* Compact Search Button (< lg) */}
+        <button
+          type="button"
+          onClick={() => setIsGlobalSearchOpen(true)}
+          className="lg:hidden flex items-center justify-center w-7.5 h-7.5 rounded-full bg-[#0C1B2E] hover:bg-[#12263F] border border-[#1E3A5F] hover:border-[#38BDF8] text-[#7E95B1] hover:text-[#38BDF8] transition shrink-0 cursor-pointer shadow-inner"
+          aria-label="Open search"
+          title="Search missions, drones, locations (/)"
+        >
+          <Search className="w-3.5 h-3.5" />
+        </button>
+
+        {/* Project Selector (Hidden on mobile < sm, accessible via Mobile Overflow Menu) */}
+        <div ref={projectDropdownRef} className="relative hidden sm:flex items-center gap-1.5 shrink-0">
+          <span className="text-[10px] font-bold tracking-wider uppercase text-[#7E95B1] shrink-0 hidden 2xl:inline">
             PROJECT
           </span>
 
@@ -278,7 +377,7 @@ const Header = ({
           <button
             type="button"
             onClick={() => setProjectDropdownOpen((prev) => !prev)}
-            className="bg-[#1B68D2] hover:bg-[#2074e6] text-white px-2.5 sm:px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1.5 shadow-sm transition shrink-0 cursor-pointer max-w-[140px] lg:max-w-[180px]"
+            className="bg-[#1B68D2] hover:bg-[#2074e6] text-white px-2.5 sm:px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1.5 shadow-sm transition shrink-0 cursor-pointer max-w-[120px] sm:max-w-[150px] md:max-w-[170px]"
             aria-label="Select active project"
             aria-expanded={projectDropdownOpen}
           >
@@ -291,7 +390,7 @@ const Header = ({
 
           {/* Project Selection Dropdown */}
           {projectDropdownOpen && (
-            <div className="absolute top-[calc(100%+6px)] right-0 z-50 w-64 rounded-xl border border-[#1E3A5F] bg-[#0A1626FA] shadow-[0_16px_36px_rgba(0,0,0,0.85)] backdrop-blur-md overflow-hidden py-1 animate-in fade-in slide-in-from-top-1 font-mono">
+            <div className="absolute top-[calc(100%+6px)] right-0 z-50 w-64 max-w-[calc(100vw-32px)] rounded-xl border border-[#1E3A5F] bg-[#0A1626FA] shadow-[0_16px_36px_rgba(0,0,0,0.85)] backdrop-blur-md overflow-hidden py-1 animate-in fade-in slide-in-from-top-1 font-mono">
               <div className="px-3 py-1.5 text-[10px] font-bold text-[#5A7391] uppercase tracking-wider border-b border-[#162A44] flex items-center justify-between">
                 <span>Available Projects</span>
                 <span className="text-[#38BDF8]">{projects.length}</span>
@@ -329,8 +428,8 @@ const Header = ({
       {/* ========================================================
           3. RIGHT: DATE/STATUS → EMERGENCY DECK → INFO → NOTIFICATIONS → USER PROFILE
           ======================================================== */}
-      <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0 justify-end">
-        {/* Telemetry Ambient Temperature (if telemetry has temperature) */}
+      <div className="flex items-center gap-1.5 sm:gap-2 lg:gap-2.5 shrink-0 justify-end">
+        {/* Telemetry Ambient Temperature */}
         {genuineWeather !== null && (
           <>
             <div className="hidden 2xl:flex items-center gap-1.5 text-xs text-[#E2E8F0] font-medium" title="Telemetry Ambient Temperature">
@@ -341,30 +440,35 @@ const Header = ({
           </>
         )}
 
-        {/* Live Date: "Tue, 16 Sep 2026" */}
+        {/* Live Date */}
         <span className="hidden 2xl:inline text-xs text-[#8EA3BE] font-medium whitespace-nowrap">
           {formattedDate}
         </span>
 
         <span className="hidden 2xl:inline text-[#1E3A5F] select-none">|</span>
 
-        {/* Live Clock: "08:42 AM" */}
-        <span className="hidden md:inline text-xs text-white font-mono font-semibold whitespace-nowrap">
+        {/* Live Clock: only on xl+ (>= 1280px) to prevent overlap with project selector */}
+        <span className="hidden xl:inline text-xs text-white font-mono font-semibold whitespace-nowrap">
           {formattedTime}
         </span>
 
-        {/* Live Telemetry Status Dot */}
-        <div className="flex items-center px-0.5" title={`Telemetry Connection: ${connectionState}`}>
+        <span className="hidden xl:inline text-[#1E3A5F] select-none">|</span>
+
+        {/* Live Telemetry Status Dot with Tooltip */}
+        <div
+          className="hidden sm:flex items-center px-0.5 cursor-help"
+          title={`Telemetry: ${connectionState} · Time: ${formattedTime}`}
+        >
           <div className={`w-2 h-2 rounded-full ${connectionDotClass}`} />
         </div>
 
-        <span className="hidden sm:inline text-[#1E3A5F] select-none">|</span>
-
-        {/* Preserved Emergency Override Deck (Strictly for authorized operators) */}
+        {/* Preserved Emergency Override Deck */}
         {(canOverrideFlight || canExecuteFlight) && <EmergencyOverrideDeck />}
 
-        {/* Preserved Global Backend Info Console Button */}
-        <GlobalInfoButton />
+        {/* Preserved Global Backend Info Console Button (Visible directly on sm+, in Overflow on mobile) */}
+        <div className="hidden sm:block shrink-0">
+          <GlobalInfoButton />
+        </div>
 
         {/* Notification Bell with Dynamic Unread Badge */}
         <div className="relative shrink-0">
@@ -389,6 +493,134 @@ const Header = ({
 
         {/* User Profile and Fast Role Switcher */}
         <ProfileDetails />
+
+        {/* Mobile Overflow Menu Trigger (< sm: 320px - 639px) */}
+        <div ref={overflowRef} className="relative sm:hidden shrink-0">
+          <button
+            type="button"
+            onClick={() => setOverflowOpen((prev) => !prev)}
+            className="relative flex items-center justify-center w-7.5 h-7.5 rounded-full bg-[#0C1B2E] hover:bg-[#12263F] border border-[#1E3A5F] hover:border-[#38BDF8] text-[#7E95B1] hover:text-[#38BDF8] transition cursor-pointer shadow-inner"
+            aria-label="More navigation and controls"
+            aria-expanded={overflowOpen}
+            title="Workflow, Projects, Info & Status"
+          >
+            <MoreHorizontal className="w-4 h-4" />
+            {backendInfoEventCount > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 flex h-3.5 min-w-[14px] px-0.5 items-center justify-center rounded-full bg-[#0284C7] text-[8.5px] font-bold text-white shadow-[0_0_6px_#38BDF8]">
+                {backendInfoEventCount > 9 ? "9+" : backendInfoEventCount}
+              </span>
+            )}
+          </button>
+
+          {/* Mobile Overflow Dropdown Panel */}
+          {overflowOpen && (
+            <div
+              className="absolute top-[calc(100%+8px)] right-0 z-50 w-72 max-w-[calc(100vw-24px)] rounded-xl border border-[#1E3A5F] bg-[#080D16FA] shadow-[0_16px_40px_rgba(0,0,0,0.95)] backdrop-blur-md overflow-hidden animate-in fade-in slide-in-from-top-1 font-mono text-xs divide-y divide-[#162A44]"
+              role="menu"
+              aria-label="Quick Navigation and Settings"
+            >
+              {/* 1. Operational Workflow Stages */}
+              <div className="py-2">
+                <div className="px-3 pb-1 text-[10px] font-bold text-[#5A7391] uppercase tracking-wider flex items-center justify-between">
+                  <span>Operational Workflow</span>
+                  <span className="text-[#38BDF8] font-bold">{currentWorkflowStageObj.label}</span>
+                </div>
+                <div className="grid grid-cols-2 gap-1 px-2 pt-1">
+                  {WORKFLOW_STAGES.map((stage, idx) => {
+                    const isActive = activeWorkflowStage === stage.id
+                    return (
+                      <Link
+                        key={stage.id}
+                        to={stage.path}
+                        onClick={() => setOverflowOpen(false)}
+                        className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs transition ${
+                          isActive
+                            ? "bg-[#1B68D2]/25 text-[#38BDF8] font-bold border border-[#38BDF8]/40"
+                            : "text-[#CAD5E2] hover:bg-[#142944] hover:text-white"
+                        }`}
+                      >
+                        <span className="text-[10px] text-[#5A7391]">{idx + 1}.</span>
+                        <span className="truncate">{stage.label}</span>
+                        {isActive && <Check className="w-3 h-3 text-[#38BDF8] ml-auto shrink-0" />}
+                      </Link>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* 2. Active Project Selector */}
+              <div className="py-2">
+                <div className="px-3 pb-1 text-[10px] font-bold text-[#5A7391] uppercase tracking-wider flex items-center justify-between">
+                  <span>Active Project</span>
+                  <span className="text-[#38BDF8]">{projects.length} available</span>
+                </div>
+                <div className="max-h-36 overflow-y-auto px-1 space-y-0.5">
+                  {projects.map((p) => {
+                    const isSelected = p.id === currentProject?.id
+                    const name = p.projectName || p.name || p.id
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => {
+                          selectProject(p.id)
+                          setOverflowOpen(false)
+                        }}
+                        className={`w-full text-left px-2.5 py-1.5 rounded-md flex items-center justify-between text-xs transition cursor-pointer ${
+                          isSelected
+                            ? "bg-[#1B68D2]/20 text-[#38BDF8] font-bold"
+                            : "text-[#CAD5E2] hover:bg-[#142944] hover:text-white"
+                        }`}
+                      >
+                        <div className="min-w-0 pr-2">
+                          <p className="truncate font-semibold">{name}</p>
+                          <p className="text-[10px] text-[#7E95B1] truncate">{p.location || "Operational Site"}</p>
+                        </div>
+                        {isSelected && <Check className="w-3.5 h-3.5 text-[#38BDF8] shrink-0" />}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* 3. Global INFO Console Trigger */}
+              <div className="p-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    toggleBackendInfo()
+                    setOverflowOpen(false)
+                  }}
+                  className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-[#0E1D2D] hover:bg-[#142944] border border-[#1E3A5F] text-[#69DDF1] transition cursor-pointer"
+                >
+                  <div className="flex items-center gap-2">
+                    <Info className="w-4 h-4 text-[#35E0FF] shrink-0" />
+                    <span className="font-semibold text-xs">Backend INFO Console</span>
+                  </div>
+                  {backendInfoEventCount > 0 ? (
+                    <span className="inline-flex items-center justify-center rounded-full bg-[#183647] border border-[#2E586E] px-2 py-0.5 text-[10px] font-mono font-bold text-[#35E0FF]">
+                      {backendInfoEventCount} events
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-[#5A7391]">Live</span>
+                  )}
+                </button>
+              </div>
+
+              {/* 4. Date, Time & Telemetry Status Summary */}
+              <div className="px-3 py-2 bg-[#060A12] flex items-center justify-between text-[11px] text-[#8EA3BE]">
+                <div className="flex items-center gap-1.5">
+                  <div className={`w-2 h-2 rounded-full ${connectionDotClass}`} />
+                  <span className="font-semibold">{connectionState}</span>
+                </div>
+                <div className="flex items-center gap-1.5 font-mono text-white">
+                  <Clock className="w-3 h-3 text-[#7E95B1]" />
+                  <span>{formattedTime}</span>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Global Search Command Palette Modal */}
@@ -401,3 +633,4 @@ const Header = ({
 }
 
 export default Header
+
