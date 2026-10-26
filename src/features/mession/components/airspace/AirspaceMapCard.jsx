@@ -8,6 +8,7 @@ export const AirspaceMapCard = ({
   onSelectProject,
   activeSiteName = "Refinery",
   zones = [],
+  onAirspaceStatusChange: propOnAirspaceStatusChange,
 }) => {
   const { isLive, isDroneConnected } = useTelemetry()
 
@@ -23,6 +24,13 @@ export const AirspaceMapCard = ({
 
   const [mapStyle, setMapStyle] = useState("normal")
   const [airspaceStatus, setAirspaceStatus] = useState(null)
+
+  const handleAirspaceStatus = (statusInfo) => {
+    setAirspaceStatus(statusInfo)
+    if (typeof propOnAirspaceStatusChange === "function") {
+      propOnAirspaceStatusChange(statusInfo)
+    }
+  }
 
   const toggleLayer = (layerKey) => {
     setLayers((prev) => ({ ...prev, [layerKey]: !prev[layerKey] }))
@@ -47,9 +55,26 @@ export const AirspaceMapCard = ({
           <h3 className="text-base font-bold text-[#0F284E] tracking-tight">
             Airspace map · <span className="text-[#1B68D2]">{activeSiteName}</span>
           </h3>
+
+          {/* Honest Mappls Airspace Status Indicators */}
           {airspaceStatus?.status === "ACTIVE" && (
             <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
               DGCA Airspace Online
+            </span>
+          )}
+          {airspaceStatus?.status === "LOADING" && (
+            <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded bg-cyan-50 text-cyan-700 border border-cyan-200 animate-pulse">
+              Connecting Airspace...
+            </span>
+          )}
+          {airspaceStatus?.status === "AUTH_REQUIRED" && (
+            <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">
+              License Required
+            </span>
+          )}
+          {airspaceStatus?.status === "UNAVAILABLE" && (
+            <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
+              Airspace Offline
             </span>
           )}
         </div>
@@ -79,7 +104,7 @@ export const AirspaceMapCard = ({
             mapStyle={mapStyle}
             onMapStyleChange={setMapStyle}
             showAirspace={layers.noFlyAndRestricted}
-            onAirspaceStatusChange={setAirspaceStatus}
+            onAirspaceStatusChange={handleAirspaceStatus}
             waypoints={waypoints}
             geofence={geofence}
             showMissionRoute={layers.plannedRoutes}

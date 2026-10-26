@@ -1,12 +1,27 @@
 import React, { useState, useMemo } from "react"
-import { Plus, UploadCloud, Search, ShieldAlert, AlertTriangle } from "lucide-react"
+import { Plus, UploadCloud, Search, ShieldAlert, AlertTriangle, Layers } from "lucide-react"
 
 export const ZoneRegisterCard = ({
   zones = [],
+  fenceEvents = null,
   onOpenAddZone,
   onOpenImport,
 }) => {
   const [searchTerm, setSearchTerm] = useState("")
+
+  // Calculate genuine breach counts per zone strictly from actual 30-day recorded events
+  const breachCountsByZone = useMemo(() => {
+    const map = {}
+    if (fenceEvents?.events && Array.isArray(fenceEvents.events)) {
+      fenceEvents.events.forEach((ev) => {
+        if (ev.type === "BREACH") {
+          if (ev.zoneId) map[ev.zoneId] = (map[ev.zoneId] || 0) + 1
+          if (ev.zoneName) map[ev.zoneName] = (map[ev.zoneName] || 0) + 1
+        }
+      })
+    }
+    return map
+  }, [fenceEvents])
 
   const filteredZones = useMemo(() => {
     if (!searchTerm.trim()) return zones
@@ -16,7 +31,8 @@ export const ZoneRegisterCard = ({
         z.name.toLowerCase().includes(term) ||
         z.type.toLowerCase().includes(term) ||
         (z.rule || "").toLowerCase().includes(term) ||
-        (z.site || "").toLowerCase().includes(term)
+        (z.site || "").toLowerCase().includes(term) ||
+        (z.source || "").toLowerCase().includes(term)
     )
   }, [zones, searchTerm])
 
@@ -25,7 +41,12 @@ export const ZoneRegisterCard = ({
       <div className="space-y-3.5">
         {/* Header with Search */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-          <h3 className="text-base font-bold text-[#0F284E] tracking-tight">Zone register</h3>
+          <div className="flex items-center gap-2">
+            <h3 className="text-base font-bold text-[#0F284E] tracking-tight">Zone register</h3>
+            <span className="text-[11px] font-mono font-medium text-slate-500">
+              ({filteredZones.length} {filteredZones.length === 1 ? "zone" : "zones"})
+            </span>
+          </div>
 
           <div className="relative min-w-[200px]">
             <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
@@ -53,10 +74,20 @@ export const ZoneRegisterCard = ({
             <tbody className="divide-y divide-[#F1F5F9] font-medium text-slate-700">
               {filteredZones.map((z) => {
                 const isNoFly = (z.type || "").toLowerCase().includes("no-fly")
+                const breachCount = breachCountsByZone[z.id] ?? breachCountsByZone[z.name] ?? 0
+                const isMappls = z.source === "DGCA / Mappls" || z.isMappls
+
                 return (
                   <tr key={z.id} className="hover:bg-[#F8FAFC] transition-colors">
                     <td className="py-2.5 pr-4 font-bold text-[#0F284E] whitespace-nowrap">
-                      {z.name}
+                      <div className="flex items-center gap-1.5">
+                        <span>{z.name}</span>
+                        {isMappls && (
+                          <span className="text-[9.5px] font-mono px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 border border-slate-200">
+                            Mappls
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="py-2.5 px-3 whitespace-nowrap">
                       <span
@@ -66,7 +97,11 @@ export const ZoneRegisterCard = ({
                             : "bg-amber-50 text-amber-700 border border-amber-200"
                         }`}
                       >
-                        {isNoFly ? <ShieldAlert className="w-3 h-3 text-red-600" /> : <AlertTriangle className="w-3 h-3 text-amber-600" />}
+                        {isNoFly ? (
+                          <ShieldAlert className="w-3 h-3 text-red-600" />
+                        ) : (
+                          <AlertTriangle className="w-3 h-3 text-amber-600" />
+                        )}
                         <span>{z.type}</span>
                       </span>
                     </td>
@@ -74,7 +109,7 @@ export const ZoneRegisterCard = ({
                       {z.rule}
                     </td>
                     <td className="py-2.5 pl-3 text-right font-mono font-bold text-[#0F284E] whitespace-nowrap pr-2">
-                      {z.breaches30d || 0}
+                      {breachCount}
                     </td>
                   </tr>
                 )
@@ -83,7 +118,9 @@ export const ZoneRegisterCard = ({
               {filteredZones.length === 0 && (
                 <tr>
                   <td colSpan={4} className="py-6 text-center text-xs text-slate-400 font-medium">
-                    No matching zones found. Use "+ Add Zone" or "Import KML / GeoJSON" to register.
+                    {searchTerm
+                      ? `No zones matching "${searchTerm}".`
+                      : "No registered zones found. Use \"+ Add Zone\" or \"Import KML / GeoJSON\" to register boundaries."}
                   </td>
                 </tr>
               )}
@@ -117,3 +154,4 @@ export const ZoneRegisterCard = ({
 }
 
 export default ZoneRegisterCard
+

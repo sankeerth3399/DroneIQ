@@ -1,12 +1,13 @@
 import React from "react"
 import { Ban, AlertTriangle, Route, ShieldCheck, AlertCircle } from "lucide-react"
 
-export const AirspaceKpiBar = ({ metrics }) => {
+export const AirspaceKpiBar = ({ metrics = {}, loading = false, isStale = false }) => {
   const kpis = [
     {
       id: "no-fly",
       label: "No-Fly Zones",
-      value: metrics.noFlyZonesCount ?? 14,
+      value: loading ? null : (typeof metrics.noFlyZonesCount === "number" ? metrics.noFlyZonesCount : "N/A"),
+      sublabel: metrics.noFlyMapplsCount > 0 ? "Mappls & Local" : "Verified Local",
       icon: Ban,
       iconBg: "bg-red-500",
       iconColor: "text-white",
@@ -15,7 +16,8 @@ export const AirspaceKpiBar = ({ metrics }) => {
     {
       id: "restricted",
       label: "Restricted Areas",
-      value: metrics.restrictedAreasCount ?? 9,
+      value: loading ? null : (typeof metrics.restrictedAreasCount === "number" ? metrics.restrictedAreasCount : "N/A"),
+      sublabel: metrics.restrictedMapplsCount > 0 ? "DGCA & Local" : "Verified Local",
       icon: AlertTriangle,
       iconBg: "bg-amber-500",
       iconColor: "text-white",
@@ -24,7 +26,8 @@ export const AirspaceKpiBar = ({ metrics }) => {
     {
       id: "safe-corridors",
       label: "Safe Corridors",
-      value: metrics.safeCorridorsCount ?? 11,
+      value: loading ? null : (typeof metrics.safeCorridorsCount === "number" ? metrics.safeCorridorsCount : "N/A"),
+      sublabel: metrics.safeCorridorsCount > 0 ? "Configured" : "None Defined",
       icon: Route,
       iconBg: "bg-emerald-600",
       iconColor: "text-white",
@@ -33,7 +36,8 @@ export const AirspaceKpiBar = ({ metrics }) => {
     {
       id: "permissions",
       label: "Permissions Valid Today",
-      value: metrics.permissionsValidTodayCount ?? 6,
+      value: loading ? null : (typeof metrics.permissionsValidTodayCount === "number" ? metrics.permissionsValidTodayCount : "N/A"),
+      sublabel: `${metrics.permissionsTotal || 0} Registered`,
       icon: ShieldCheck,
       iconBg: "bg-[#1B68D2]",
       iconColor: "text-white",
@@ -42,11 +46,12 @@ export const AirspaceKpiBar = ({ metrics }) => {
     {
       id: "advisories",
       label: "Advisory Active",
-      value: metrics.activeAdvisoriesCount ?? 1,
+      value: loading ? null : (typeof metrics.activeAdvisoriesCount === "number" ? metrics.activeAdvisoriesCount : "N/A"),
+      sublabel: metrics.activeAdvisoriesCount > 0 ? "Active Warning" : "None Active",
       icon: AlertCircle,
-      iconBg: "bg-orange-500",
+      iconBg: metrics.activeAdvisoriesCount > 0 ? "bg-orange-500" : "bg-slate-400",
       iconColor: "text-white",
-      boxBg: "bg-[#FFEDD5]",
+      boxBg: metrics.activeAdvisoriesCount > 0 ? "bg-[#FFEDD5]" : "bg-slate-100",
     },
   ]
 
@@ -57,7 +62,9 @@ export const AirspaceKpiBar = ({ metrics }) => {
         return (
           <div
             key={kpi.id}
-            className="bg-white rounded-2xl border border-[#CBD5E1] p-3.5 sm:p-4 shadow-xs flex items-center gap-3.5 hover:border-[#94A3B8] transition"
+            className={`bg-white rounded-2xl border ${
+              isStale ? "border-amber-300" : "border-[#CBD5E1]"
+            } p-3.5 sm:p-4 shadow-xs flex items-center gap-3.5 hover:border-[#94A3B8] transition`}
           >
             {/* Square/Rounded Icon Badge */}
             <div
@@ -68,8 +75,19 @@ export const AirspaceKpiBar = ({ metrics }) => {
 
             {/* Metric & Label */}
             <div className="min-w-0 flex-1">
-              <div className="text-2xl sm:text-[26px] font-black font-mono text-[#0F284E] leading-tight tracking-tight">
-                {kpi.value}
+              <div className="flex items-baseline justify-between gap-1">
+                <div className="text-2xl sm:text-[26px] font-black font-mono text-[#0F284E] leading-tight tracking-tight">
+                  {loading ? (
+                    <span className="inline-block w-8 h-6 bg-slate-200 animate-pulse rounded" />
+                  ) : (
+                    kpi.value
+                  )}
+                </div>
+                {kpi.sublabel && !loading && (
+                  <span className="text-[10px] font-semibold text-slate-400 truncate">
+                    {kpi.sublabel}
+                  </span>
+                )}
               </div>
               <div className="text-xs font-semibold text-[#334155] truncate mt-0.5">
                 {kpi.label}
